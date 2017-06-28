@@ -20,12 +20,12 @@
 
 ### 特性
 
-- p2p能力基于**WebRTC**,无须安装任何插件
+- P2P能力基于**WebRTC**,无须安装任何插件
 - **播放流畅,加载快速**(具体依赖于当前网络环境)
 - 多协议(HTTP、HTTPS、WebRTC)、多源
 - 自行研发的调度算法,在保证用户流畅视频体验的前提下最大化P2P率
 - 经过严格测试,稳定可靠
-- 支持chrome、firefox、opera等主流浏览器
+- 支持Chrome、Firefox、Opera等主流浏览器
 
 ### 打包
 
@@ -68,7 +68,7 @@ var PearPlayer = require('PearPlayer');
 
 ### 使用
 
-PearPlayer 是国内首个使用WebRTC的多源多协议流媒体播放器,采用开放的web标准(无须任何插件),而且简单易用!
+PearPlayer 是首个使用WebRTC的多源多协议流媒体播放器,采用开放的web标准(无须任何插件),而且简单易用!
 
 ##### 使用PearPlayer播放视频:
 
