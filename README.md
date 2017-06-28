@@ -44,13 +44,20 @@ npm run build
 npm run gulp
 ```
 
-### 谁在用我们的产品?
+### 导入
 
-**[Pear Limited](https://pear.hk)**
+##### Script标签 
 
-### Pear Player API文档
+PearPlayer采用Script标签([`pear-player.min.js`](dest/pear-player.min.js))将`PearPlayer`暴露给`window`
+给Html,然后通过 `require('PearPlayer')`来获取PearPlayer:
 
-**[阅读API文档](docs/api.md).**
+```html
+<script src="pear-player.min.js"></script>
+```
+
+```js
+var PearPlayer = require('PearPlayer');
+```
 
 ### 使用
 
@@ -154,18 +161,13 @@ function onBufferSources(bufferSources) {    //s: server   n: node  d: data chan
 }
 ```
 
-##### Script标签 
+### 谁在用我们的产品?
 
-PearPlayer采用Script标签([`pear-player.min.js`](dest/pear-player.min.js))将`PearPlayer`暴露给`window`
-给Html,然后通过 `require('PearPlayer')`来获取PearPlayer:
+**[Pear Limited](https://pear.hk)**
 
-```html
-<script src="pear-player.min.js"></script>
-```
+### Pear Player API文档
 
-```js
-var PearPlayer = require('PearPlayer');
-```
+**[阅读API文档](docs/api.md).**
 
 ### License
 
