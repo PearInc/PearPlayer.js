@@ -30,22 +30,22 @@
 ### 打包
 
 首先需要安装打包工具browserify:
-```js
+```bash
 npm install -g browserify
 ```
 
 安装依赖库
-```js
+```bash
 npm install
 ```
 
 然后通过build命令打包生成pear-player.js文件
-```js
+```bash
 npm run build
 ```
 
 或者通过gulp命令生成压缩过的pear-player.min.js文件
-```js
+```bash
 npm run gulp
 ```
 
