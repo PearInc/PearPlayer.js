@@ -31,20 +31,6 @@
 
 To install WebTorrent for use in node or the browser with `require('webtorrent')`, run:
 
-```bash
-npm install webtorrent
-```
-
-To install a `webtorrent`
-[command line program](https://github.com/webtorrent/webtorrent-cli), run:
-
-```bash
-npm install webtorrent-cli -g
-```
-
-To install a WebTorrent desktop appliation for Mac, Windows, or Linux, see
-[WebTorrent Desktop][webtorrent-desktop].
-
 首先需要安装打包工具browserify:
 ```js
 npm install -g browserify
