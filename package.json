@@ -30,7 +30,7 @@
     "gulp-uglify": "^1.4.1"
   },
   "scripts": {
-    "test": "browserify -r ./PlayerApp.js:PearPlayer > PearPlayer.js",
+    "test": "",
     "build": "browserify -r ./index.js:PearPlayer > pear-player.js",
     "gulp": "gulp"
   },
