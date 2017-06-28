@@ -29,8 +29,6 @@
 
 ### 打包
 
-To install WebTorrent for use in node or the browser with `require('webtorrent')`, run:
-
 首先需要安装打包工具browserify:
 ```js
 npm install -g browserify
