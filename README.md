@@ -9,23 +9,18 @@
 <h4 align="center">一个支持多协议,多源的混合p2p流媒体播放器</h4>
 <br>
 
-**WebTorrent** is a streaming torrent client for **node.js** and the **browser**. YEP,
-THAT'S RIGHT. THE BROWSER. It's written completely in JavaScript – the language of the web
-– so the same code works in both runtimes.
-
-In node.js, this module is a simple torrent client, using TCP and UDP to talk to
-other torrent clients.
-
-In the browser, WebTorrent uses **WebRTC** (data channels) for peer-to-peer transport.
-It can be used **without** browser plugins, extensions, or installations. It's Just
-JavaScript&trade;. Note: WebTorrent does **not** support UDP/TCP peers in browser.
+**PearPlayer(梨享播放器)** 是完全用Javascript写的开源框架,实现了融合HTTP、HTTPS、WebRTC的多协议、多源、低延迟、高带宽利用率的无插件Web端流媒体加速能力.基于H5的MSE技术(Media Source Extension)将来自多个源节点的Buffer分块喂给播放器,再加上精心设计的算法来达到最优的调度策略和处理各种异常情况,Pear Player能在保证用户流畅视频体验的前提下最大化P2P率.
 
 Simply include the
 [`webtorrent.min.js`](https://cdn.jsdelivr.net/webtorrent/latest/webtorrent.min.js) script
 on your page to start fetching files over WebRTC using the BitTorrent protocol, or
 `require('webtorrent')` with [browserify](http://browserify.org/). See [demo apps
 ](#webtorrent-in-production) and [code examples](#usage) below.
-
+Simply include the
+[`webtorrent.min.js`](https://cdn.jsdelivr.net/webtorrent/latest/webtorrent.min.js) script
+on your page to start fetching files over WebRTC using the BitTorrent protocol, or
+`require('webtorrent')` with [browserify](http://browserify.org/). See [demo apps
+](#webtorrent-in-production) and [code examples](#usage) below.
 To make BitTorrent work over WebRTC (which is the only P2P transport that works on the
 web) we made some protocol changes. Therefore, a browser-based WebTorrent client or **"web
 peer"** can only connect to other clients that support WebTorrent/WebRTC.
