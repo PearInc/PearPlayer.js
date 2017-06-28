@@ -12,7 +12,7 @@
 **PearPlayer(梨享播放器)** 是完全用Javascript写的开源框架,实现了融合HTTP、HTTPS、WebRTC的多协议、多源、低延迟、高带宽利用率的无插件Web端流媒体加速能力.基于H5的MSE技术(Media Source Extension)将来自多个源节点的Buffer分块喂给播放器,再加上精心设计的算法来达到最优的调度策略和处理各种异常情况,Pear Player能在保证用户流畅视频体验的前提下最大化P2P率.
 
 只需将
-**pear-player.min.js**通过script标签导入到Html就可以使用我们的播放器. 参考以下[代码示例](#usage).也可以查看test.html来了解使用方法.
+**pear-player.min.js**通过script标签导入到Html就可以使用我们的播放器. 参考以下[代码示例](#使用).也可以查看test.html来了解使用方法.
 
 由于信令部分以及WebRTC data channel部分我们使用了私有的协议,因此实现此部分可以参考我们的API文档.
 
