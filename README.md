@@ -34,6 +34,11 @@
 npm install -g browserify
 ```
 
+安装依赖库
+```js
+npm install
+```
+
 然后通过build命令打包生成pear-player.js文件
 ```js
 npm run build
