@@ -44,6 +44,8 @@ npm run build
 npm run gulp
 ```
 
+项目中已经包含打包好的js文件,因此也可以直接跳过这个步骤.
+
 ### 导入
 
 ##### Script标签 
