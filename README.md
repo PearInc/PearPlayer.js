@@ -16,7 +16,7 @@
 
 由于信令部分以及WebRTC data channel部分我们使用了私有的协议,因此实现此部分可以参考我们的API文档.
 
-<img src="fig/fogvdn_multisources.png" width="200"></img>
+![multisources](fig/fogvdn_multisources.png)
 
 ### 特性
 
