@@ -18,7 +18,7 @@
 
 <img src="fig/fogvdn_multisources.png" width="200"></img>
 
-### Features
+### 特性
 
 - p2p能力基于**WebRTC**,无须安装任何插件
 - **播放流畅,加载快速**(具体依赖于当前网络环境)
@@ -63,7 +63,8 @@ PearPlayer 是国内首个使用WebRTC的多源多协议流媒体播放器,采�
 var PearPlayer = require('PearPlayer');
 
     var xhr = new XMLHttpRequest();
-    xhr.open("POST", 'https://api.webrtc.win:6601/v1/customer/login');
+    //CP需要先登录来获取token
+    xhr.open("POST", 'https://api.webrtc.win:6601/v1/customer/login');
     var data = JSON.stringify({
         user:'admin',
         password:'123456'
@@ -143,15 +144,13 @@ function onDone() {
 
 function onException(exception) {
     var errCode = exception.errCode;
-    console.log('777777777777');
     switch (errCode) {
-        case 1:
-            console.log(exception.errMsg);
-            console.log('777777777777');
+        case 1:                   //当前浏览器不支持WebRTC
+        console.log(exception.errMsg);
             break
     }
 }
-function onBufferSources(bufferSources) {            //s: server   n: node  d: data channel  b: browser
+function onBufferSources(bufferSources) {    //s: server   n: node  d: data channel  b: browser
     console.log('Current Buffer Sources:' + bufferSources);
 }
 ```
