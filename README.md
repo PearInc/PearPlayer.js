@@ -27,7 +27,7 @@
 - 经过严格测试,稳定可靠
 - 支持chrome、firefox、opera等主流浏览器
 
-### 安装
+### 打包
 
 To install WebTorrent for use in node or the browser with `require('webtorrent')`, run:
 
@@ -44,6 +44,21 @@ npm install webtorrent-cli -g
 
 To install a WebTorrent desktop appliation for Mac, Windows, or Linux, see
 [WebTorrent Desktop][webtorrent-desktop].
+
+首先需要安装打包工具browserify:
+```js
+npm install -g browserify
+```
+
+然后通过build命令打包生成pear-player.js文件
+```js
+npm run build
+```
+
+或者通过gulp命令生成压缩过的pear-player.min.js文件
+```js
+npm run gulp
+```
 
 ### 谁在用我们的产品?
 
