@@ -34,7 +34,7 @@
 npm install -g browserify
 ```
 
-安装依赖库
+安装依赖库(使用cnpm可能会有问题)
 ```bash
 npm install
 ```
