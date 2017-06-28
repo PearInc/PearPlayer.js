@@ -48,7 +48,7 @@ npm run gulp
 
 ##### Script标签 
 
-PearPlayer采用Script标签([`pear-player.min.js`](dest/pear-player.min.js))将`PearPlayer`暴露给`window`
+PearPlayer采用Script标签([`pear-player.min.js`](dest/pear-player.min.js))将`PearPlayer`暴露
 给Html,然后通过 `require('PearPlayer')`来获取PearPlayer:
 
 ```html
