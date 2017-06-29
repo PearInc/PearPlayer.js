@@ -12,7 +12,7 @@ code, and load packages installed by [npm](https://npmjs.org/).
 ```bash
 npm install -g browserify
 ```
-
+Install dependencies:
 ```bash
 npm install
 ```
