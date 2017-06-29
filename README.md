@@ -80,8 +80,8 @@ var player = new PearPlayer('#pearvideo', {//第一个参数为video标签的id�
 + [Tencent X5/TBS](https://x5.tencent.com/tbs/)
 
 ### Pear Player 文档
-**[阅读get-started文档](docs/get-started.md)**
-**[阅读API文档](docs/api.md)**
+- **[阅读get-started文档](docs/get-started.md)**
+- **[阅读API文档](docs/api.md)**
 
 ### 致谢
 特别感谢以下项目，为我们提供了技术参考以及灵感来源。
