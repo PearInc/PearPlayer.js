@@ -6,25 +6,25 @@
   <br>
 </h1>
 
-<h4 align="center">一个支持多协议，多源的混合p2p流媒体播放器</h4>
+<h4 align="center">一个支持多协议，多源、混合P2P-CDN的流媒体播放器</h4>
 <br>
 
-**PearPlayer(梨享播放器)** 是完全用Javascript写的开源框架,实现了融合HTTP、HTTPS、WebRTC的多协议、多源、低延迟、高带宽利用率的无插件Web端流媒体加速能力.基于H5的MSE技术(Media Source Extension)将来自多个源节点的Buffer分块喂给播放器,再加上精心设计的算法来达到最优的调度策略和处理各种异常情况,Pear Player能在保证用户流畅视频体验的前提下最大化P2P率.
+**PearPlayer(梨享播放器)** 是完全用JavaScript写的开源框架，实现了融合HTTPS(HTTP2)、WebRTC的多协议、多源、低延迟、高带宽利用率的无插件Web端流媒体加速能力。基于H5的MSE技术(Media Source Extension)将来自多个源节点的Buffer分块喂给播放器，再加上精心设计的算法来达到最优的调度策略和处理各种异常情况，Pear Player能在保证用户流畅视频体验的前提下最大化P2P率。
 
 ![multisources](fig/fogvdn_multisources.png)
 
 只需将
-**pear-player.min.js**通过script标签导入到Html就可以使用我们的播放器. 参考以下[代码示例](#使用).也可以查看test.html来了解使用方法.
+**pear-player.min.js**通过script标签导入到Html就可以使用我们的播放器。 参考以下[代码示例](#使用)。也可以查看test.html来了解使用方法。
 
-由于信令部分以及WebRTC data channel部分我们使用了私有的协议,因此实现此部分可以参考我们的API文档.
+信令部分以及WebRTC部分我们使用了自己精心设计的协议，实现此部分可以参考我们的API文档。
 
 ### 特性
 
 - P2P能力基于**WebRTC**,无须安装任何插件
-- **播放流畅,加载快速**(具体依赖于当前网络环境)
+- **播放流畅，加载快速**(具体依赖于当前网络环境)
 - 多协议(HTTP、HTTPS、WebRTC)、多源
 - 自行研发的调度算法,在保证用户流畅视频体验的前提下最大化P2P率
-- 经过严格测试,稳定可靠
+- 经过严格测试，稳定可靠
 - 支持Chrome、Firefox、Opera等主流浏览器
 
 ### 打包
@@ -49,14 +49,14 @@ npm run build
 npm run gulp
 ```
 
-项目中已经包含打包好的js文件,因此也可以直接跳过这个步骤.
+项目中已经包含打包好的js文件,因此也可以直接跳过这个步骤。
 
 ### 导入
 
 ##### Script标签 
 
 PearPlayer采用Script标签([`pear-player.min.js`](dest/pear-player.min.js))将`PearPlayer`暴露
-给html,然后通过 `require('PearPlayer')`来获取PearPlayer:
+给HTML，然后通过 `require('PearPlayer')`来获取PearPlayer:
 
 ```html
 <script src="pear-player.min.js"></script>
@@ -68,9 +68,9 @@ var PearPlayer = require('PearPlayer');
 
 ### 使用
 
-PearPlayer 是首个使用WebRTC的多源多协议流媒体播放器,采用开放的web标准(无须任何插件),而且简单易用!
+PearPlayer是首个使用WebRTC的多源多协议流媒体播放器,采用开放的web标准(无须任何插件)，而且简单易用！
 
-##### 使用PearPlayer播放视频:
+##### 使用PearPlayer播放视频：
 
 ```js
 var PearPlayer = require('PearPlayer');
@@ -111,9 +111,9 @@ var PearPlayer = require('PearPlayer');
     xhr.send(data);
 ```
 
-完整的示例请参考 [test/test.html](test/test.html).
+完整的示例请参考 [test/test.html](test/test.html)。
 
-##### 监听PearPlayer事件:
+##### 监听PearPlayer事件：
 ```js
 var player = new PearPlayer('#pearvideo', {      //第一个参数为video标签的id或class
                     type: 'mp4',                //播放视频的类型,目前只能是mp4
@@ -168,13 +168,16 @@ function onBufferSources(bufferSources) {    //s: server   n: node  d: data chan
 }
 ```
 
-### 谁在用我们的产品?
+### 谁在用我们的产品？
 
 **[Pear Limited](https://pear.hk)**
+**[UCloud](https://www.ucloud.cn)**
+**[Tencent Cloud](https://qcloud.com)**
+**[Tencent X5/TBS](https://x5.tencent.com/tbs/**
 
 ### Pear Player API文档
 
-**[阅读API文档](docs/api.md).**
+**[阅读API文档](docs/api.md)**
 
 ### License
 
