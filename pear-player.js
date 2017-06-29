@@ -5514,27 +5514,28 @@ var BLOCK_LENGTH = 32 * 1024;
 
 inherits(PearPlayer, EventEmitter);
 
-function PearPlayer(selector, config) {
+function PearPlayer(selector,token, opts) {
     var self = this;
-    if (!(self instanceof PearPlayer)) return new PearPlayer(selector, config);
+    if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
     EventEmitter.call(self);
 
     self.video = document.querySelector(selector);
 
-    if (!(typeof selector === 'string')) throw new Error('video selector must be a string!');
-    if (!(config.type && config.type === 'mp4')) throw new Error('only mp4 is supported!');
-    if (!((config.src && typeof config.src === 'string') || self.video.src)) throw new Error('video src is not valid!');
-    if (!(config.token && typeof config.token === 'string')) throw new Error('token is not valid!');
+    if (typeof selector !== 'string') throw new Error('video selector must be a string!');
+    if (typeof token !== 'string') throw new Error('token must be a string!');
+    // if (!(opts.type && opts.type === 'mp4')) throw new Error('only mp4 is supported!');
+    if (!((opts.src && typeof opts.src === 'string') || self.video.src)) throw new Error('video src is not valid!');
+    // if (!(config.token && typeof config.token === 'string')) throw new Error('token is not valid!');
 
     self.selector = selector;
-    self.src = config.src || self.video.src;
+    self.src = opts.src || self.video.src;
     self.urlObj = url.parse(self.src);
-    self.token = config.token;
-    self.useDataChannel = (config.useDataChannel === false)? false : true;
-    self.useMonitor = (config.useMonitor === false)? false : true;
-    self.autoPlay = (config.autoplay === false)? false : true;
-    self.params = config.params || {};
-    self.dataChannels = config.dataChannels || 3;
+    self.token = token;
+    self.useDataChannel = (opts.useDataChannel === false)? false : true;
+    self.useMonitor = (opts.useMonitor === false)? false : true;
+    self.autoPlay = (opts.autoplay === false)? false : true;
+    self.params = opts.params || {};
+    self.dataChannels = opts.dataChannels || 3;
     self.peerId = getPeerId();
     self.isPlaying = false;
     self.fileLength = 0;
@@ -5546,10 +5547,10 @@ function PearPlayer(selector, config) {
 
     self.dispatcherConfig = {
 
-        chunkSize: config.chunkSize && (config.chunkSize%BLOCK_LENGTH === 0 ? config.chunkSize : Math.ceil(config.chunkSize/BLOCK_LENGTH)*BLOCK_LENGTH),   //每个chunk的大小,默认1M
-        interval: config.interval,     //滑动窗口的时间间隔,单位毫秒,默认10s,
-        slideInterval: config.slideInterval,
-        auto: config.auto,
+        chunkSize: opts.chunkSize && (opts.chunkSize%BLOCK_LENGTH === 0 ? opts.chunkSize : Math.ceil(opts.chunkSize/BLOCK_LENGTH)*BLOCK_LENGTH),   //每个chunk的大小,默认1M
+        interval: opts.interval,     //滑动窗口的时间间隔,单位毫秒,默认10s,
+        slideInterval: opts.slideInterval,
+        auto: opts.auto,
         useMonitor: self.useMonitor
     };
     console.log('self.dispatcherConfig:'+self.dispatcherConfig.chunkSize);

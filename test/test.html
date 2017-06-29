@@ -29,7 +29,6 @@
 </div>
 <script src="../pear-player.js"></script>
 <script>
-
     var xhr = new XMLHttpRequest();
     xhr.open("POST", 'https://api.webrtc.win:6601/v1/customer/login');
     var data = JSON.stringify({
@@ -43,9 +42,9 @@
             if (!!res.token){
                 console.log('token:' +res.token);
 
-                var player = new PearPlayer('#pearvideo', {      //第一个参数为video标签的id或class
-                    type: 'mp4',                //播放视频的类型,目前只能是mp4
-                    token: res.token,           //与信令服务器连接的token,必须
+                var player = new PearPlayer('#pearvideo', res.token, {      //第一个参数为video标签的id或class
+//                    type: 'mp4',                //播放视频的类型,目前只能是mp4
+//                    token: res.token,           //与信令服务器连接的token,必须
                     algorithm: 'firstaid',      //核心算法,默认firstaid
                     autoplay: true,            //是否自动播发视频,默认true
                     chunkSize: 1*1024*1024,        //每个chunk的大小,必须是32K的整数倍,默认1M
