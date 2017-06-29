@@ -170,10 +170,10 @@ function onBufferSources(bufferSources) {    //s: server   n: node  d: data chan
 
 ### 谁在用我们的产品？
 
-**[Pear Limited](https://pear.hk)**
-**[UCloud](https://www.ucloud.cn)**
-**[Tencent Cloud](https://qcloud.com)**
-**[Tencent X5/TBS](https://x5.tencent.com/tbs/**
++ [Pear Limited](https://pear.hk)
++ [UCloud](https://www.ucloud.cn)
++ [Tencent Cloud](https://qcloud.com)
++ [Tencent X5/TBS](https://x5.tencent.com/tbs/)
 
 ### Pear Player API文档
 
