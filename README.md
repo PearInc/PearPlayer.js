@@ -28,6 +28,27 @@
 
 ## 使用方法
 
+### 导入js文件并绑定video标签
+首先通过script标签导入pear-player.min.js：
+```html
+<script src="./dest/pear-player.min.js"></script>
+```
+假设用video标签播放（/tv/pear001.mp4）这个视频，HTML如下所示：
+```html
+<video  id="pearvideo" src="https://qq.webrtc.win/tv/pear001.mp4" controls>
+```
+只需要如下几行代码，即可将PearPlayer绑定到video标签：
+```html
+<script>
+var PearPlayer = require('PearPlayer');
+var player = new PearPlayer('#pearvideo', {//第一个参数为video标签的id或class
+    type: 'mp4',                           //播放视频的类型，目前只能是mp4
+    token: res.token,                      //与信令服务器连接的token,必须
+});
+</script>
+```
+恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！
+
 ### 获取token
 在使用PearPlayer之前，需要获取token，通过调用我们提供的API接口（/v1/customer/login）并传入用户名和密码，
 我们已经为访客提供了测试帐号（用户名：test　密码：123456），获取token的示例代码如下：
@@ -50,27 +71,6 @@ xhr.onload = function () {
 };
 xhr.send(data);
 ```
-
-### 导入js文件并绑定video标签
-首先通过script标签导入pear-player.min.js：
-```html
-<script src="./dest/pear-player.min.js"></script>
-```
-假设用video标签播放（/tv/pear001.mp4）这个视频，HTML如下所示：
-```html
-<video  id="pearvideo" src="https://qq.webrtc.win/tv/pear001.mp4" controls>
-```
-只需要如下几行代码，即可将PearPlayer绑定到video标签：
-```html
-<script>
-var PearPlayer = require('PearPlayer');
-var player = new PearPlayer('#pearvideo', {//第一个参数为video标签的id或class
-    type: 'mp4',                           //播放视频的类型，目前只能是mp4
-    token: res.token,                      //与信令服务器连接的token,必须
-});
-</script>
-```
-恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！
 
 ### 谁在用我们的产品？
 
