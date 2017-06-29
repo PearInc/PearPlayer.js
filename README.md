@@ -32,8 +32,6 @@
 在使用PearPlayer之前，需要获取token，通过调用我们提供的API接口（/v1/customer/login）并传入用户名和密码，
 我们已经为访客提供了测试帐号（用户名：test　密码：123456），获取token的示例代码如下：
 ```js
-var PearPlayer = require('PearPlayer');
-
 var xhr = new XMLHttpRequest();
 xhr.open("POST", 'https://api.webrtc.win:6601/v1/customer/login');
 var data = JSON.stringify({
