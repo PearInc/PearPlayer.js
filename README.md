@@ -63,7 +63,7 @@ xhr.send(data);
 <video  id="pearvideo" src="https://qq.webrtc.win/tv/pear001.mp4" controls>
 ```
 只需要如下几行代码，即可将PearPlayer绑定到video标签：
-```js
+```html
 <script>
 var PearPlayer = require('PearPlayer');
 var player = new PearPlayer('#pearvideo', {//第一个参数为video标签的id或class
