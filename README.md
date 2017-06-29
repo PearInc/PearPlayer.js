@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="fig/pearlimited-avatar.png" width="256"></img>
+  <img src="fig/pear.png" height="220"></img>
   <br>
   PearPlayer.js
   <br>
