@@ -27,6 +27,7 @@ var PearPlayer = require('PearPlayer');
 ### Hook the video and play
 
 ```js
+var PearPlayer = require('PearPlayer');
 var xhr = new XMLHttpRequest();
 //CP需要先登录来获取token
 xhr.open("POST", 'https://api.webrtc.win:6601/v1/customer/login');
