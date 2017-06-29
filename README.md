@@ -64,11 +64,13 @@ xhr.send(data);
 ```
 只需要如下几行代码，即可将PearPlayer绑定到video标签：
 ```js
+<script>
 var PearPlayer = require('PearPlayer');
 var player = new PearPlayer('#pearvideo', {//第一个参数为video标签的id或class
     type: 'mp4',                           //播放视频的类型，目前只能是mp4
     token: res.token,                      //与信令服务器连接的token,必须
 });
+</script>
 ```
 恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！
 
