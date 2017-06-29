@@ -1,5 +1,5 @@
 {
-  "name": "firstaid",
+  "name": "pearplayer",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -31,7 +31,7 @@
   },
   "scripts": {
     "test": "",
-    "build": "browserify -r ./index.js:PearPlayer > pear-player.js",
+    "build": "browserify index.js -s PearPlayer > pear-player.js",
     "gulp": "gulp"
   },
   "author": "Xie Ting Pear Limited",

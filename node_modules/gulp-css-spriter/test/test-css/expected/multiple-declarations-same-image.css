@@ -1,0 +1,20 @@
+.aenean {
+	width: 120px;
+	height: 100px;
+	background: url('spritesheet.png');
+	background-position: -0px -0px;
+}
+
+.aenean2 {
+	width: 120px;
+	height: 100px;
+	/* @meta {"spritesheet": {"include": false}} */
+	background: url('../test-images/aenean-purple.png');
+}
+
+.aenean3 {
+	width: 120px;
+	height: 100px;
+	background: url('spritesheet.png');
+	background-position: -0px -0px;
+}

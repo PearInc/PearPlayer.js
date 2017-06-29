@@ -1,0 +1,8 @@
+Blah blah description:1.2.3.0-1.2.3.255
+Blah blah different description:5.6.7.0-5.6.7.255
+  192.168.1.1-192.168.1.230 
+just an IP not a range with a description:192.168.1.240
+ 192.168.2.5 
+this one with description:194.168.1.1/8
+195.168.1.1/16
+  196.168.1.1/24   

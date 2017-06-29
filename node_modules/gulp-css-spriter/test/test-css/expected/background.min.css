@@ -1,0 +1,20 @@
+.aenean {
+	width: 120px;
+	height: 100px;
+	background: url(spritesheet.png);
+	background-position: -0px -0px;
+}
+
+.massa {
+	width: 120px;
+	height: 100px;
+	background: url(spritesheet.png) #ff0;
+	background-position: -120px -0px;
+}
+
+.loremdummy {
+	overflow: hidden;
+	width: 200px;
+	width: 400px;
+	background: #ccc;
+}

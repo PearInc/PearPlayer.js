@@ -1,4 +1,4 @@
-require=(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.PearPlayer = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 
 },{}],2:[function(require,module,exports){
 (function (global){
@@ -5492,6 +5492,368 @@ function hasOwnProperty(obj, prop) {
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"./support/isBuffer":20,"_process":12,"inherits":19}],22:[function(require,module,exports){
+/**
+ * Created by Tim on 17-6-6.
+ */
+
+module.exports = PearPlayer;
+
+var md5 = require('blueimp-md5');
+var Dispatcher = require('./lib/dispatcher');
+var HttpDownloader = require('./lib/http-downloader');
+var JanusDownloader = require('./lib/janus-downloader-bin');
+var getPeerId = require('./lib/peerid-generator');
+var url = require('url');
+var File = require('./lib/file');
+var nodeFilter = require('./lib/node-filter');
+var inherits = require('inherits');
+var EventEmitter = require('events').EventEmitter;
+var Set = require('./lib/set');
+
+var BLOCK_LENGTH = 32 * 1024;
+
+inherits(PearPlayer, EventEmitter);
+
+function PearPlayer(selector, config) {
+    var self = this;
+    if (!(self instanceof PearPlayer)) return new PearPlayer(selector, config);
+    EventEmitter.call(self);
+
+    self.video = document.querySelector(selector);
+
+    if (!(typeof selector === 'string')) throw new Error('video selector must be a string!');
+    if (!(config.type && config.type === 'mp4')) throw new Error('only mp4 is supported!');
+    if (!((config.src && typeof config.src === 'string') || self.video.src)) throw new Error('video src is not valid!');
+    if (!(config.token && typeof config.token === 'string')) throw new Error('token is not valid!');
+
+    self.selector = selector;
+    self.src = config.src || self.video.src;
+    self.urlObj = url.parse(self.src);
+    self.token = config.token;
+    self.useDataChannel = (config.useDataChannel === false)? false : true;
+    self.useMonitor = (config.useMonitor === false)? false : true;
+    self.autoPlay = (config.autoplay === false)? false : true;
+    self.params = config.params || {};
+    self.dataChannels = config.dataChannels || 3;
+    self.peerId = getPeerId();
+    self.isPlaying = false;
+    self.fileLength = 0;
+    self.nodes = [];
+    self.websocket = null;
+    self.dispatcher = null;
+    self.JDMap = {};                           //根据janus的peer_id来获取jd的map
+    self.nodeSet = new Set();                  //保存node的set
+
+    self.dispatcherConfig = {
+
+        chunkSize: config.chunkSize && (config.chunkSize%BLOCK_LENGTH === 0 ? config.chunkSize : Math.ceil(config.chunkSize/BLOCK_LENGTH)*BLOCK_LENGTH),   //每个chunk的大小,默认1M
+        interval: config.interval,     //滑动窗口的时间间隔,单位毫秒,默认10s,
+        slideInterval: config.slideInterval,
+        auto: config.auto,
+        useMonitor: self.useMonitor
+    };
+    console.log('self.dispatcherConfig:'+self.dispatcherConfig.chunkSize);
+
+    self._getNodes(self.token, function (nodes) {
+        // console.log('_getNodes:');
+        if (nodes) {
+            self._startPlaying(nodes);
+        } else {
+            self._fallBack();
+        }
+
+        if (!getBrowserRTC()) {
+            self.emit('exception', {errCode: 1, errMsg: 'This browser do not support WebRTC communication'});
+            alert('This browser do not support WebRTC communication');
+            self.useDataChannel = false;
+        }
+        if (self.useDataChannel) {
+            self._pearSignalHandshake();
+        }
+    });
+}
+
+PearPlayer.prototype._getNodes = function (token, cb) {
+    var self = this;
+
+    var postData = {
+        client_ip:'127.0.0.1',
+        host: self.urlObj.host,
+        uri: self.urlObj.path
+    };
+    postData = (function(obj){
+        var str = "?";
+
+        for(var prop in obj){
+            str += prop + "=" + obj[prop] + "&"
+        }
+        return str;
+    })(postData);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", 'https://api.webrtc.win:6601/v1/customer/nodes'+postData);
+    xhr.timeout = 2000;
+    xhr.setRequestHeader('X-Pear-Token', self.token);
+    xhr.ontimeout = function() {
+        // self._fallBack();
+        cb(null);
+    };
+    xhr.onload = function () {
+        if (this.status >= 200 && this.status < 300 || this.status == 304) {
+
+            console.log(this.response);
+            var res = JSON.parse(this.response);
+            // console.log(res.nodes);
+            if (!res.nodes){
+                cb(null);
+            } else {
+                var nodes = res.nodes;
+                var allNodes = [];
+                for (var i=0; i<nodes.length; ++i){
+                    var protocol = nodes[i].protocol;
+                    var host = nodes[i].host;
+                    var type = nodes[i].type;
+                    var path = self.urlObj.host + self.urlObj.path;
+                    var url = protocol+'://'+host+'/'+path;
+                    if (!self.nodeSet.has(host)) {
+                        allNodes.push({uri: url, type: type});
+                        self.nodeSet.add(host);
+                    }
+                }
+
+                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //test
+                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //test
+                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //test
+                nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+
+                    var length = nodes.length;
+                    console.log('nodes:'+JSON.stringify(nodes));
+
+                    if (length) {
+                        self.fileLength = fileLength;
+                        console.log('nodeFilter fileLength:'+fileLength);
+                        // self.nodes = nodes;
+                        if (length === 1) {
+                            // fallBack(nodes[0]);
+                            cb(nodes);
+                        } else {
+                            cb(nodes);
+                        }
+                    } else {
+                        // self._fallBack();
+                        cb(null);
+                    }
+                });
+            }
+        } else {
+            // self._fallBack();
+            cb(null);
+        }
+    };
+    xhr.send();
+};
+
+PearPlayer.prototype._fallBack = function (url) {
+
+    if (this.isPlaying) return;
+    if (url) {
+        this.video.src = url;
+    } else {
+        this.video.src = this.src;
+    }
+    if (this.autoPlay) {
+        this.video.play();
+    }
+    this.isPlaying = true;
+};
+
+PearPlayer.prototype._pearSignalHandshake = function () {
+    var self = this;
+    var dcCount = 0;                            //目前建立的data channel数量
+
+    var websocket = new WebSocket('wss://signal.webrtc.win:7601/wss');
+    self.websocket = websocket;
+    websocket.onopen = function() {
+        console.log('websocket connection opened!');
+
+        var hash = md5(self.urlObj.host + self.urlObj.path);
+        websocket.push(JSON.stringify({
+            "action": "get",
+            "peer_id": self.peerId,
+            "host": self.urlObj.host,
+            "uri": self.urlObj.path,
+            "md5": hash
+        }));
+        // console.log('peer_id:'+self.peerId);
+    };
+    websocket.push = websocket.send;
+    websocket.send = function(data) {
+        if (websocket.readyState != 1) {
+            console.warn('websocket connection is not opened yet.');
+            return setTimeout(function() {
+                websocket.send(data);
+            }, 1000);
+        }
+        // console.log("send to signal is " + data);
+        websocket.push(data);
+    };
+    websocket.onmessage = function(e) {
+        var message = JSON.parse(e.data);
+        console.log("[simpleRTC] websocket message is: " + JSON.stringify(message));
+        // message = message.nodes[1];
+        var nodes = message.nodes;
+        for (var i=0;i<nodes.length;++i) {
+            var node = nodes[i];
+            if (!node.errorcode) {
+                if (dcCount === self.dataChannels) break;
+                console.log('janus message:'+JSON.stringify(node))
+                self.JDMap[node.peer_id] = self.initJanus(node);
+                dcCount ++;
+            } else {
+                console.log('janus error message:'+JSON.stringify(message))
+            }
+        }
+    };
+};
+
+PearPlayer.prototype.initJanus = function (message) {
+    var self = this;
+
+    var janus_config = {
+        peer_id: self.peerId,
+        chunkSize: 32*1024,
+        host: self.urlObj.host,
+        uri: self.urlObj.path,
+        useMonitor: self.useMonitor
+    };
+
+    var jd = new JanusDownloader(janus_config);
+    jd.messageFromJanus(message)
+    jd.on('signal',function (message) {
+        console.log('[jd] signal:' + JSON.stringify(message));
+        self.websocket.send(JSON.stringify(message));
+    });
+    jd.on('connect',function () {
+
+        // if (!self.isPlaying) {
+        //
+        //     self._startPlaying(self.fileLength, self.nodes);
+        // }
+        self.dispatcher.addDataChannel(jd);
+        // if (self.websocket) {
+        //     self.websocket.close();
+        // }
+    });
+
+    return jd;
+};
+
+PearPlayer.prototype._startPlaying = function (nodes) {
+    var self = this;
+    console.log('start playing 6666666666!');
+    self.dispatcherConfig.initialDownloaders = [];
+    for (var i=0;i<nodes.length;++i) {
+        var node = nodes[i];
+        var hd = new HttpDownloader(node.uri, node.type);
+        self.dispatcherConfig.initialDownloaders.push(hd);
+    }
+    self.dispatcherConfig.fileSize = self.fileLength;
+    // self.dispatcherConfig.sortedURIs = nodes;
+    var fileConfig = {
+        length: self.fileLength,
+        offset: 0,
+        name: self.urlObj.path,
+        elem: self.selector
+    };
+
+    var d = new Dispatcher(self.dispatcherConfig);
+    self.dispatcher = d;
+
+    var file = new File(d, fileConfig);
+
+    file.renderTo(self.selector, {autoplay: self.autoPlay});
+
+    self.isPlaying = true;
+
+    //{errCode: 1, errMsg: 'This browser do not support WebRTC communication'}
+    d.on('ready', function (chunks) {
+
+        self.emit('begin', self.fileLength, chunks);
+    });
+    d.on('error', function () {
+        console.log('dispatcher error!');
+        // d.destroy();
+        // self._fallBack();
+        var hd = new HttpDownloader(self.src, 'server');
+        // d.addNodes([{uri: self.src, type: 'server'}]);
+        d.addNode(hd);
+    });
+    d.on('needmorenodes', function () {
+        console.log('request more nodes');
+        self._getNodes(self.token, function (nodes) {
+            console.log('_getNodes:'+JSON.stringify(nodes));
+            if (nodes) {
+                // d.addNodes(nodes);
+                for (var i=0;i<nodes.length;++i) {
+                    var node = nodes[i];
+                    var hd = new HttpDownloader(node.uri, node.type);
+                    d.addNode(hd);
+                }
+            } else {
+
+            }
+        });
+
+    });
+    d.on('done', function () {
+
+        self.emit('done');
+    });
+    d.on('downloaded', function (downloaded) {
+
+        self.emit('progress', downloaded);
+    });
+    d.on('fograte', function (fogRate) {
+
+        self.emit('fograte', fogRate);
+    });
+
+    d.on('bitfieldchange', function (bitfield) {
+
+        self.emit('bitfieldchange', bitfield, d.chunks);
+    });
+    d.on('fogspeed', function (speed) {
+
+        self.emit('fogspeed', speed);
+    });
+    d.on('cloudspeed', function (speed) {
+
+        self.emit('cloudspeed', speed);
+    });
+    d.on('buffersources', function (bufferSources) {       //s: server   n: node  d: data channel  b: browser
+
+        self.emit('buffersources', bufferSources);
+    });
+
+};
+
+function getBrowserRTC () {
+    if (typeof window === 'undefined') return null;
+    var wrtc = {
+        RTCPeerConnection: window.RTCPeerConnection || window.mozRTCPeerConnection ||
+        window.webkitRTCPeerConnection,
+    };
+    if (!wrtc.RTCPeerConnection) return null;
+    return wrtc
+}
+
+
+
+/**
+ * Created by snow on 17-6-28.
+ */
+
+},{"./lib/dispatcher":23,"./lib/file":25,"./lib/http-downloader":26,"./lib/janus-downloader-bin":27,"./lib/node-filter":28,"./lib/peerid-generator":29,"./lib/set":30,"blueimp-md5":36,"events":7,"inherits":54,"url":17}],23:[function(require,module,exports){
 (function (process){
 
 /*
@@ -6070,7 +6432,7 @@ Array.prototype.getMeanSpeed = function (typeArr) {              //根据传输�
 
 
 }).call(this,require('_process'))
-},{"_process":12,"bitfield":34,"events":7,"fs-chunk-store":44,"immediate-chunk-store":51,"inherits":53}],23:[function(require,module,exports){
+},{"_process":12,"bitfield":35,"events":7,"fs-chunk-store":45,"immediate-chunk-store":52,"inherits":54}],24:[function(require,module,exports){
 module.exports = FileStream;
 
 var inherits = require('inherits');
@@ -6178,7 +6540,7 @@ FileStream.prototype._destroy = function (err, onclose) {
 };
 
 function noop () {}
-},{"inherits":53,"readable-stream":82}],24:[function(require,module,exports){
+},{"inherits":54,"readable-stream":83}],25:[function(require,module,exports){
 (function (process){
 
 module.exports = File;
@@ -6261,7 +6623,7 @@ File.prototype._destroy = function () {
 }
 
 }).call(this,require('_process'))
-},{"./file-stream":23,"_process":12,"events":7,"inherits":53,"readable-stream":82,"render-media":83}],25:[function(require,module,exports){
+},{"./file-stream":24,"_process":12,"events":7,"inherits":54,"readable-stream":83,"render-media":84}],26:[function(require,module,exports){
 
 module.exports = HttpDownloader;
 
@@ -6389,7 +6751,7 @@ HttpDownloader.prototype._handleChunk = function (range,data) {
 
 
 
-},{"buffer/":38,"events":7,"inherits":53}],26:[function(require,module,exports){
+},{"buffer/":39,"events":7,"inherits":54}],27:[function(require,module,exports){
 
 /*
  config:{
@@ -6612,7 +6974,7 @@ JanusDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
     });
 };
 
-},{"./simple-RTC":30,"buffer/":38,"events":7,"inherits":53}],27:[function(require,module,exports){
+},{"./simple-RTC":31,"buffer/":39,"events":7,"inherits":54}],28:[function(require,module,exports){
 /**
  * 过滤掉不能下载的节点
  */
@@ -6680,7 +7042,7 @@ function NodeFilter(nodesArray, cb) {
 //     }
 //     return n;
 // };
-},{}],28:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 module.exports = peerId;
 
 function peerId() {
@@ -6709,7 +7071,7 @@ function peerId() {
 
 // console.log(peerId());
 
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 /**
  * Created by snow on 17-6-22.
  */
@@ -6795,7 +7157,7 @@ Set.prototype = {
     }
 }
 
-},{}],30:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 /**
  * Created by snow on 17-6-19.
  */
@@ -7051,7 +7413,7 @@ function getBrowserRTC () {
 
 
 
-},{"events":7,"inherits":53}],31:[function(require,module,exports){
+},{"events":7,"inherits":54}],32:[function(require,module,exports){
 'use strict';
 module.exports = balanced;
 function balanced(a, b, str) {
@@ -7112,7 +7474,7 @@ function range(a, b, str) {
   return result;
 }
 
-},{}],32:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 'use strict'
 
 exports.byteLength = byteLength
@@ -7228,7 +7590,7 @@ function fromByteArray (uint8) {
   return parts.join('')
 }
 
-},{}],33:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 module.exports = function(haystack, needle, comparator, low, high) {
   var mid, cmp;
 
@@ -7273,7 +7635,7 @@ module.exports = function(haystack, needle, comparator, low, high) {
   return ~low;
 }
 
-},{}],34:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 (function (Buffer){
 var Container = typeof Buffer !== "undefined" ? Buffer //in node, use buffers
 		: typeof Int8Array !== "undefined" ? Int8Array //in newer browsers, use webgl int8arrays
@@ -7338,7 +7700,7 @@ BitField.prototype._grow = function(length) {
 if(typeof module !== "undefined") module.exports = BitField;
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5}],35:[function(require,module,exports){
+},{"buffer":5}],36:[function(require,module,exports){
 /*
  * JavaScript MD5
  * https://github.com/blueimp/JavaScript-MD5
@@ -7621,7 +7983,7 @@ if(typeof module !== "undefined") module.exports = BitField;
   }
 }(this))
 
-},{}],36:[function(require,module,exports){
+},{}],37:[function(require,module,exports){
 var concatMap = require('concat-map');
 var balanced = require('balanced-match');
 
@@ -7824,7 +8186,7 @@ function expand(str, isTop) {
 }
 
 
-},{"balanced-match":31,"concat-map":39}],37:[function(require,module,exports){
+},{"balanced-match":32,"concat-map":40}],38:[function(require,module,exports){
 (function (Buffer){
 function allocUnsafe (size) {
   if (typeof size !== 'number') {
@@ -7845,7 +8207,7 @@ function allocUnsafe (size) {
 module.exports = allocUnsafe
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5}],38:[function(require,module,exports){
+},{"buffer":5}],39:[function(require,module,exports){
 /*!
  * The buffer module from node.js, for the browser.
  *
@@ -9553,7 +9915,7 @@ function numberIsNaN (obj) {
   return obj !== obj // eslint-disable-line no-self-compare
 }
 
-},{"base64-js":32,"ieee754":50}],39:[function(require,module,exports){
+},{"base64-js":33,"ieee754":51}],40:[function(require,module,exports){
 module.exports = function (xs, fn) {
     var res = [];
     for (var i = 0; i < xs.length; i++) {
@@ -9568,7 +9930,7 @@ var isArray = Array.isArray || function (xs) {
     return Object.prototype.toString.call(xs) === '[object Array]';
 };
 
-},{}],40:[function(require,module,exports){
+},{}],41:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -9679,7 +10041,7 @@ function objectToString(o) {
 }
 
 }).call(this,{"isBuffer":require("../../../../../../.nvm/versions/node/v6.10.0/lib/node_modules/browserify/node_modules/is-buffer/index.js")})
-},{"../../../../../../.nvm/versions/node/v6.10.0/lib/node_modules/browserify/node_modules/is-buffer/index.js":9}],41:[function(require,module,exports){
+},{"../../../../../../.nvm/versions/node/v6.10.0/lib/node_modules/browserify/node_modules/is-buffer/index.js":9}],42:[function(require,module,exports){
 (function (process){
 /**
  * This is the web browser implementation of `debug()`.
@@ -9868,7 +10230,7 @@ function localstorage() {
 }
 
 }).call(this,require('_process'))
-},{"./debug":42,"_process":12}],42:[function(require,module,exports){
+},{"./debug":43,"_process":12}],43:[function(require,module,exports){
 
 /**
  * This is the common logic for both the Node.js and web browser
@@ -10072,7 +10434,7 @@ function coerce(val) {
   return val;
 }
 
-},{"ms":65}],43:[function(require,module,exports){
+},{"ms":66}],44:[function(require,module,exports){
 var once = require('once');
 
 var noop = function() {};
@@ -10157,7 +10519,7 @@ var eos = function(stream, opts, callback) {
 
 module.exports = eos;
 
-},{"once":67}],44:[function(require,module,exports){
+},{"once":68}],45:[function(require,module,exports){
 (function (process,Buffer){
 module.exports = Storage
 
@@ -10401,7 +10763,7 @@ function nextTick (cb, err, val) {
 function noop () {}
 
 }).call(this,require('_process'),require("buffer").Buffer)
-},{"_process":12,"buffer":5,"fs":1,"mkdirp":58,"os":10,"path":11,"random-access-file":71,"randombytes":72,"rimraf":85,"run-parallel":86,"thunky":91}],45:[function(require,module,exports){
+},{"_process":12,"buffer":5,"fs":1,"mkdirp":59,"os":10,"path":11,"random-access-file":72,"randombytes":73,"rimraf":86,"run-parallel":87,"thunky":92}],46:[function(require,module,exports){
 (function (process){
 module.exports = realpath
 realpath.realpath = realpath
@@ -10471,7 +10833,7 @@ function unmonkeypatch () {
 }
 
 }).call(this,require('_process'))
-},{"./old.js":46,"_process":12,"fs":1}],46:[function(require,module,exports){
+},{"./old.js":47,"_process":12,"fs":1}],47:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -10778,7 +11140,7 @@ exports.realpath = function realpath(p, cache, cb) {
 };
 
 }).call(this,require('_process'))
-},{"_process":12,"fs":1,"path":11}],47:[function(require,module,exports){
+},{"_process":12,"fs":1,"path":11}],48:[function(require,module,exports){
 (function (process){
 exports.alphasort = alphasort
 exports.alphasorti = alphasorti
@@ -11022,7 +11384,7 @@ function childrenIgnored (self, path) {
 }
 
 }).call(this,require('_process'))
-},{"_process":12,"minimatch":57,"path":11,"path-is-absolute":68}],48:[function(require,module,exports){
+},{"_process":12,"minimatch":58,"path":11,"path-is-absolute":69}],49:[function(require,module,exports){
 (function (process){
 // Approach:
 //
@@ -11816,7 +12178,7 @@ Glob.prototype._stat2 = function (f, abs, er, stat, cb) {
 }
 
 }).call(this,require('_process'))
-},{"./common.js":47,"./sync.js":49,"_process":12,"assert":2,"events":7,"fs":1,"fs.realpath":45,"inflight":52,"inherits":53,"minimatch":57,"once":67,"path":11,"path-is-absolute":68,"util":21}],49:[function(require,module,exports){
+},{"./common.js":48,"./sync.js":50,"_process":12,"assert":2,"events":7,"fs":1,"fs.realpath":46,"inflight":53,"inherits":54,"minimatch":58,"once":68,"path":11,"path-is-absolute":69,"util":21}],50:[function(require,module,exports){
 (function (process){
 module.exports = globSync
 globSync.GlobSync = GlobSync
@@ -12306,9 +12668,9 @@ GlobSync.prototype._makeAbs = function (f) {
 }
 
 }).call(this,require('_process'))
-},{"./common.js":47,"./glob.js":48,"_process":12,"assert":2,"fs":1,"fs.realpath":45,"minimatch":57,"path":11,"path-is-absolute":68,"util":21}],50:[function(require,module,exports){
+},{"./common.js":48,"./glob.js":49,"_process":12,"assert":2,"fs":1,"fs.realpath":46,"minimatch":58,"path":11,"path-is-absolute":69,"util":21}],51:[function(require,module,exports){
 arguments[4][8][0].apply(exports,arguments)
-},{"dup":8}],51:[function(require,module,exports){
+},{"dup":8}],52:[function(require,module,exports){
 (function (process){
 module.exports = ImmediateStore
 
@@ -12361,7 +12723,7 @@ function nextTick (cb, err, val) {
 }
 
 }).call(this,require('_process'))
-},{"_process":12}],52:[function(require,module,exports){
+},{"_process":12}],53:[function(require,module,exports){
 (function (process){
 var wrappy = require('wrappy')
 var reqs = Object.create(null)
@@ -12419,9 +12781,9 @@ function slice (args) {
 }
 
 }).call(this,require('_process'))
-},{"_process":12,"once":67,"wrappy":97}],53:[function(require,module,exports){
+},{"_process":12,"once":68,"wrappy":98}],54:[function(require,module,exports){
 arguments[4][19][0].apply(exports,arguments)
-},{"dup":19}],54:[function(require,module,exports){
+},{"dup":19}],55:[function(require,module,exports){
 /* (c) 2016 Ari Porad (@ariporad) <http://ariporad.com>. License: ariporad.mit-license.org */
 
 // Partially from http://stackoverflow.com/a/94049/1928484, and from another SO answer, which told me that the highest
@@ -12436,14 +12798,14 @@ module.exports = function isAscii(str) {
   return true;
 };
 
-},{}],55:[function(require,module,exports){
+},{}],56:[function(require,module,exports){
 var toString = {}.toString;
 
 module.exports = Array.isArray || function (arr) {
   return toString.call(arr) == '[object Array]';
 };
 
-},{}],56:[function(require,module,exports){
+},{}],57:[function(require,module,exports){
 module.exports = MediaElementWrapper
 
 var inherits = require('inherits')
@@ -12690,7 +13052,7 @@ MediaSourceStream.prototype._getBufferDuration = function () {
   return bufferedTime
 }
 
-},{"inherits":53,"readable-stream":82,"to-arraybuffer":92}],57:[function(require,module,exports){
+},{"inherits":54,"readable-stream":83,"to-arraybuffer":93}],58:[function(require,module,exports){
 module.exports = minimatch
 minimatch.Minimatch = Minimatch
 
@@ -13615,7 +13977,7 @@ function regExpEscape (s) {
   return s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
 }
 
-},{"brace-expansion":36,"path":11}],58:[function(require,module,exports){
+},{"brace-expansion":37,"path":11}],59:[function(require,module,exports){
 (function (process){
 var path = require('path');
 var fs = require('fs');
@@ -13717,7 +14079,7 @@ mkdirP.sync = function sync (p, opts, made) {
 };
 
 }).call(this,require('_process'))
-},{"_process":12,"fs":1,"path":11}],59:[function(require,module,exports){
+},{"_process":12,"fs":1,"path":11}],60:[function(require,module,exports){
 (function (Buffer){
 // This is an intentionally recursive require. I don't like it either.
 var Box = require('./index')
@@ -14650,7 +15012,7 @@ function readString (buf, offset, length) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./descriptor":60,"./index":61,"buffer":5}],60:[function(require,module,exports){
+},{"./descriptor":61,"./index":62,"buffer":5}],61:[function(require,module,exports){
 (function (Buffer){
 var tagToName = {
   0x03: 'ESDescriptor',
@@ -14726,7 +15088,7 @@ exports.DecoderConfigDescriptor.decode = function (buf, start, end) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5}],61:[function(require,module,exports){
+},{"buffer":5}],62:[function(require,module,exports){
 (function (Buffer){
 // var assert = require('assert')
 var uint64be = require('uint64be')
@@ -14955,7 +15317,7 @@ Box.encodingLength = function (obj) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./boxes":59,"buffer":5,"uint64be":93}],62:[function(require,module,exports){
+},{"./boxes":60,"buffer":5,"uint64be":94}],63:[function(require,module,exports){
 (function (Buffer){
 var stream = require('readable-stream')
 var inherits = require('inherits')
@@ -15144,7 +15506,7 @@ MediaData.prototype.destroy = function (err) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5,"inherits":53,"mp4-box-encoding":61,"next-event":66,"readable-stream":82}],63:[function(require,module,exports){
+},{"buffer":5,"inherits":54,"mp4-box-encoding":62,"next-event":67,"readable-stream":83}],64:[function(require,module,exports){
 (function (process,Buffer){
 var stream = require('readable-stream')
 var inherits = require('inherits')
@@ -15278,11 +15640,11 @@ MediaData.prototype.destroy = function (err) {
 }
 
 }).call(this,require('_process'),require("buffer").Buffer)
-},{"_process":12,"buffer":5,"inherits":53,"mp4-box-encoding":61,"readable-stream":82}],64:[function(require,module,exports){
+},{"_process":12,"buffer":5,"inherits":54,"mp4-box-encoding":62,"readable-stream":83}],65:[function(require,module,exports){
 exports.decode = require('./decode')
 exports.encode = require('./encode')
 
-},{"./decode":62,"./encode":63}],65:[function(require,module,exports){
+},{"./decode":63,"./encode":64}],66:[function(require,module,exports){
 /**
  * Helpers.
  */
@@ -15436,7 +15798,7 @@ function plural(ms, n, name) {
   return Math.ceil(ms / n) + ' ' + name + 's';
 }
 
-},{}],66:[function(require,module,exports){
+},{}],67:[function(require,module,exports){
 module.exports = nextEvent
 
 function nextEvent (emitter, name) {
@@ -15453,7 +15815,7 @@ function nextEvent (emitter, name) {
   }
 }
 
-},{}],67:[function(require,module,exports){
+},{}],68:[function(require,module,exports){
 var wrappy = require('wrappy')
 module.exports = wrappy(once)
 module.exports.strict = wrappy(onceStrict)
@@ -15497,7 +15859,7 @@ function onceStrict (fn) {
   return f
 }
 
-},{"wrappy":97}],68:[function(require,module,exports){
+},{"wrappy":98}],69:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -15521,7 +15883,7 @@ module.exports.posix = posix;
 module.exports.win32 = win32;
 
 }).call(this,require('_process'))
-},{"_process":12}],69:[function(require,module,exports){
+},{"_process":12}],70:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -15568,7 +15930,7 @@ function nextTick(fn, arg1, arg2, arg3) {
 }
 
 }).call(this,require('_process'))
-},{"_process":12}],70:[function(require,module,exports){
+},{"_process":12}],71:[function(require,module,exports){
 var once = require('once')
 var eos = require('end-of-stream')
 var fs = require('fs') // we only need fs to get the ReadStream and WriteStream prototypes
@@ -15650,7 +16012,7 @@ var pump = function () {
 
 module.exports = pump
 
-},{"end-of-stream":43,"fs":4,"once":67}],71:[function(require,module,exports){
+},{"end-of-stream":44,"fs":4,"once":68}],72:[function(require,module,exports){
 var thunky = require('thunky')
 var fs = require('fs')
 var path = require('path')
@@ -15977,7 +16339,7 @@ function mode (self) {
   return c.O_RDONLY
 }
 
-},{"buffer-alloc-unsafe":37,"constants":6,"debug":41,"events":7,"fs":1,"inherits":53,"mkdirp":58,"path":11,"thunky":91}],72:[function(require,module,exports){
+},{"buffer-alloc-unsafe":38,"constants":6,"debug":42,"events":7,"fs":1,"inherits":54,"mkdirp":59,"path":11,"thunky":92}],73:[function(require,module,exports){
 (function (process,global){
 'use strict'
 
@@ -16019,7 +16381,7 @@ function randomBytes (size, cb) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"_process":12,"safe-buffer":87}],73:[function(require,module,exports){
+},{"_process":12,"safe-buffer":88}],74:[function(require,module,exports){
 /*
 Instance of writable stream.
 
@@ -16146,7 +16508,7 @@ RangeSliceStream.prototype.destroy = function (err) {
 	if (err) self.emit('error', err)
 }
 
-},{"inherits":53,"readable-stream":82}],74:[function(require,module,exports){
+},{"inherits":54,"readable-stream":83}],75:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -16271,7 +16633,7 @@ function forEach(xs, f) {
     f(xs[i], i);
   }
 }
-},{"./_stream_readable":76,"./_stream_writable":78,"core-util-is":40,"inherits":53,"process-nextick-args":69}],75:[function(require,module,exports){
+},{"./_stream_readable":77,"./_stream_writable":79,"core-util-is":41,"inherits":54,"process-nextick-args":70}],76:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -16319,7 +16681,7 @@ function PassThrough(options) {
 PassThrough.prototype._transform = function (chunk, encoding, cb) {
   cb(null, chunk);
 };
-},{"./_stream_transform":77,"core-util-is":40,"inherits":53}],76:[function(require,module,exports){
+},{"./_stream_transform":78,"core-util-is":41,"inherits":54}],77:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -17328,7 +17690,7 @@ function indexOf(xs, x) {
   return -1;
 }
 }).call(this,require('_process'))
-},{"./_stream_duplex":74,"./internal/streams/BufferList":79,"./internal/streams/destroy":80,"./internal/streams/stream":81,"_process":12,"core-util-is":40,"events":7,"inherits":53,"isarray":55,"process-nextick-args":69,"safe-buffer":87,"string_decoder/":90,"util":4}],77:[function(require,module,exports){
+},{"./_stream_duplex":75,"./internal/streams/BufferList":80,"./internal/streams/destroy":81,"./internal/streams/stream":82,"_process":12,"core-util-is":41,"events":7,"inherits":54,"isarray":56,"process-nextick-args":70,"safe-buffer":88,"string_decoder/":91,"util":4}],78:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -17543,7 +17905,7 @@ function done(stream, er, data) {
 
   return stream.push(null);
 }
-},{"./_stream_duplex":74,"core-util-is":40,"inherits":53}],78:[function(require,module,exports){
+},{"./_stream_duplex":75,"core-util-is":41,"inherits":54}],79:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -18210,7 +18572,7 @@ Writable.prototype._destroy = function (err, cb) {
 };
 
 }).call(this,require('_process'))
-},{"./_stream_duplex":74,"./internal/streams/destroy":80,"./internal/streams/stream":81,"_process":12,"core-util-is":40,"inherits":53,"process-nextick-args":69,"safe-buffer":87,"util-deprecate":94}],79:[function(require,module,exports){
+},{"./_stream_duplex":75,"./internal/streams/destroy":81,"./internal/streams/stream":82,"_process":12,"core-util-is":41,"inherits":54,"process-nextick-args":70,"safe-buffer":88,"util-deprecate":95}],80:[function(require,module,exports){
 'use strict';
 
 /*<replacement>*/
@@ -18285,7 +18647,7 @@ module.exports = function () {
 
   return BufferList;
 }();
-},{"safe-buffer":87}],80:[function(require,module,exports){
+},{"safe-buffer":88}],81:[function(require,module,exports){
 'use strict';
 
 /*<replacement>*/
@@ -18358,10 +18720,10 @@ module.exports = {
   destroy: destroy,
   undestroy: undestroy
 };
-},{"process-nextick-args":69}],81:[function(require,module,exports){
+},{"process-nextick-args":70}],82:[function(require,module,exports){
 module.exports = require('events').EventEmitter;
 
-},{"events":7}],82:[function(require,module,exports){
+},{"events":7}],83:[function(require,module,exports){
 exports = module.exports = require('./lib/_stream_readable.js');
 exports.Stream = exports;
 exports.Readable = exports;
@@ -18370,7 +18732,7 @@ exports.Duplex = require('./lib/_stream_duplex.js');
 exports.Transform = require('./lib/_stream_transform.js');
 exports.PassThrough = require('./lib/_stream_passthrough.js');
 
-},{"./lib/_stream_duplex.js":74,"./lib/_stream_passthrough.js":75,"./lib/_stream_readable.js":76,"./lib/_stream_transform.js":77,"./lib/_stream_writable.js":78}],83:[function(require,module,exports){
+},{"./lib/_stream_duplex.js":75,"./lib/_stream_passthrough.js":76,"./lib/_stream_readable.js":77,"./lib/_stream_transform.js":78,"./lib/_stream_writable.js":79}],84:[function(require,module,exports){
 exports.render = render
 exports.append = append
 exports.mime = require('./lib/mime.json')
@@ -18722,7 +19084,7 @@ function parseOpts (opts) {
   if (opts.maxBlobLength == null) opts.maxBlobLength = MAX_BLOB_LENGTH
 }
 
-},{"./lib/mime.json":84,"debug":41,"is-ascii":54,"mediasource":56,"path":11,"stream-to-blob-url":88,"videostream":96}],84:[function(require,module,exports){
+},{"./lib/mime.json":85,"debug":42,"is-ascii":55,"mediasource":57,"path":11,"stream-to-blob-url":89,"videostream":97}],85:[function(require,module,exports){
 module.exports={
   ".3gp": "video/3gpp",
   ".aac": "audio/aac",
@@ -18805,7 +19167,7 @@ module.exports={
   ".zip": "application/zip"
 }
 
-},{}],85:[function(require,module,exports){
+},{}],86:[function(require,module,exports){
 (function (process){
 module.exports = rimraf
 rimraf.sync = rimrafSync
@@ -19172,7 +19534,7 @@ function rmkidsSync (p, options) {
 }
 
 }).call(this,require('_process'))
-},{"_process":12,"assert":2,"fs":1,"glob":48,"path":11}],86:[function(require,module,exports){
+},{"_process":12,"assert":2,"fs":1,"glob":49,"path":11}],87:[function(require,module,exports){
 (function (process){
 module.exports = function (tasks, cb) {
   var results, pending, keys
@@ -19222,7 +19584,7 @@ module.exports = function (tasks, cb) {
 }
 
 }).call(this,require('_process'))
-},{"_process":12}],87:[function(require,module,exports){
+},{"_process":12}],88:[function(require,module,exports){
 /* eslint-disable node/no-deprecated-api */
 var buffer = require('buffer')
 var Buffer = buffer.Buffer
@@ -19286,7 +19648,7 @@ SafeBuffer.allocUnsafeSlow = function (size) {
   return buffer.SlowBuffer(size)
 }
 
-},{"buffer":5}],88:[function(require,module,exports){
+},{"buffer":5}],89:[function(require,module,exports){
 /* global URL */
 
 var getBlob = require('stream-to-blob')
@@ -19300,7 +19662,7 @@ module.exports = function getBlobURL (stream, mimeType, cb) {
   })
 }
 
-},{"stream-to-blob":89}],89:[function(require,module,exports){
+},{"stream-to-blob":90}],90:[function(require,module,exports){
 /* global Blob */
 
 var once = require('once')
@@ -19322,7 +19684,7 @@ module.exports = function getBlob (stream, mimeType, cb) {
     .on('error', cb)
 }
 
-},{"once":67}],90:[function(require,module,exports){
+},{"once":68}],91:[function(require,module,exports){
 'use strict';
 
 var Buffer = require('safe-buffer').Buffer;
@@ -19595,7 +19957,7 @@ function simpleWrite(buf) {
 function simpleEnd(buf) {
   return buf && buf.length ? this.write(buf) : '';
 }
-},{"safe-buffer":87}],91:[function(require,module,exports){
+},{"safe-buffer":88}],92:[function(require,module,exports){
 (function (process){
 'use strict'
 
@@ -19654,7 +20016,7 @@ function nextTickArgs (fn, a, b) {
 }
 
 }).call(this,require('_process'))
-},{"_process":12}],92:[function(require,module,exports){
+},{"_process":12}],93:[function(require,module,exports){
 var Buffer = require('buffer').Buffer
 
 module.exports = function (buf) {
@@ -19683,7 +20045,7 @@ module.exports = function (buf) {
 	}
 }
 
-},{"buffer":5}],93:[function(require,module,exports){
+},{"buffer":5}],94:[function(require,module,exports){
 (function (Buffer){
 var UINT_32_MAX = 0xffffffff
 
@@ -19719,7 +20081,7 @@ exports.encode.bytes = 8
 exports.decode.bytes = 8
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5}],94:[function(require,module,exports){
+},{"buffer":5}],95:[function(require,module,exports){
 (function (global){
 
 /**
@@ -19790,7 +20152,7 @@ function config (name) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],95:[function(require,module,exports){
+},{}],96:[function(require,module,exports){
 (function (Buffer){
 var bs = require('binary-search')
 var EventEmitter = require('events').EventEmitter
@@ -20265,7 +20627,7 @@ MP4Remuxer.prototype._generateMoof = function (track, firstSample, lastSample) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"binary-search":33,"buffer":5,"events":7,"inherits":53,"mp4-box-encoding":61,"mp4-stream":64,"range-slice-stream":73}],96:[function(require,module,exports){
+},{"binary-search":34,"buffer":5,"events":7,"inherits":54,"mp4-box-encoding":62,"mp4-stream":65,"range-slice-stream":74}],97:[function(require,module,exports){
 var MediaElementWrapper = require('mediasource')
 var pump = require('pump')
 
@@ -20390,7 +20752,7 @@ VideoStream.prototype.destroy = function () {
 	self._elem.src = ''
 }
 
-},{"./mp4-remuxer":95,"mediasource":56,"pump":70}],97:[function(require,module,exports){
+},{"./mp4-remuxer":96,"mediasource":57,"pump":71}],98:[function(require,module,exports){
 // Returns a wrapper function that returns a wrapped callback
 // The wrapper function should do some stuff, and return a
 // presumably different callback function.
@@ -20425,366 +20787,5 @@ function wrappy (fn, cb) {
   }
 }
 
-},{}],"PearPlayer":[function(require,module,exports){
-/**
- * Created by Tim on 17-6-6.
- */
-
-module.exports = PearPlayer;
-
-var md5 = require('blueimp-md5');
-var Dispatcher = require('./lib/dispatcher');
-var HttpDownloader = require('./lib/http-downloader');
-var JanusDownloader = require('./lib/janus-downloader-bin');
-var getPeerId = require('./lib/peerid-generator');
-var url = require('url');
-var File = require('./lib/file');
-var nodeFilter = require('./lib/node-filter');
-var inherits = require('inherits');
-var EventEmitter = require('events').EventEmitter;
-var Set = require('./lib/set');
-
-var BLOCK_LENGTH = 32 * 1024;
-
-inherits(PearPlayer, EventEmitter);
-
-function PearPlayer(selector, config) {
-    var self = this;
-    if (!(self instanceof PearPlayer)) return new PearPlayer(selector, config);
-    EventEmitter.call(self);
-
-    self.video = document.querySelector(selector);
-
-    if (!(typeof selector === 'string')) throw new Error('video selector must be a string!');
-    if (!(config.type && config.type === 'mp4')) throw new Error('only mp4 is supported!');
-    if (!((config.src && typeof config.src === 'string') || self.video.src)) throw new Error('video src is not valid!');
-    if (!(config.token && typeof config.token === 'string')) throw new Error('token is not valid!');
-
-    self.selector = selector;
-    self.src = config.src || self.video.src;
-    self.urlObj = url.parse(self.src);
-    self.token = config.token;
-    self.useDataChannel = (config.useDataChannel === false)? false : true;
-    self.useMonitor = (config.useMonitor === false)? false : true;
-    self.autoPlay = (config.autoplay === false)? false : true;
-    self.params = config.params || {};
-    self.dataChannels = config.dataChannels || 3;
-    self.peerId = getPeerId();
-    self.isPlaying = false;
-    self.fileLength = 0;
-    self.nodes = [];
-    self.websocket = null;
-    self.dispatcher = null;
-    self.JDMap = {};                           //根据janus的peer_id来获取jd的map
-    self.nodeSet = new Set();                  //保存node的set
-
-    self.dispatcherConfig = {
-
-        chunkSize: config.chunkSize && (config.chunkSize%BLOCK_LENGTH === 0 ? config.chunkSize : Math.ceil(config.chunkSize/BLOCK_LENGTH)*BLOCK_LENGTH),   //每个chunk的大小,默认1M
-        interval: config.interval,     //滑动窗口的时间间隔,单位毫秒,默认10s,
-        slideInterval: config.slideInterval,
-        auto: config.auto,
-        useMonitor: self.useMonitor
-    };
-    console.log('self.dispatcherConfig:'+self.dispatcherConfig.chunkSize);
-
-    self._getNodes(self.token, function (nodes) {
-        // console.log('_getNodes:');
-        if (nodes) {
-            self._startPlaying(nodes);
-        } else {
-            self._fallBack();
-        }
-
-        if (!getBrowserRTC()) {
-            self.emit('exception', {errCode: 1, errMsg: 'This browser do not support WebRTC communication'});
-            alert('This browser do not support WebRTC communication');
-            self.useDataChannel = false;
-        }
-        if (self.useDataChannel) {
-            self._pearSignalHandshake();
-        }
-    });
-}
-
-PearPlayer.prototype._getNodes = function (token, cb) {
-    var self = this;
-
-    var postData = {
-        client_ip:'127.0.0.1',
-        host: self.urlObj.host,
-        uri: self.urlObj.path
-    };
-    postData = (function(obj){
-        var str = "?";
-
-        for(var prop in obj){
-            str += prop + "=" + obj[prop] + "&"
-        }
-        return str;
-    })(postData);
-
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", 'https://api.webrtc.win:6601/v1/customer/nodes'+postData);
-    xhr.timeout = 2000;
-    xhr.setRequestHeader('X-Pear-Token', self.token);
-    xhr.ontimeout = function() {
-        // self._fallBack();
-        cb(null);
-    };
-    xhr.onload = function () {
-        if (this.status >= 200 && this.status < 300 || this.status == 304) {
-
-            console.log(this.response);
-            var res = JSON.parse(this.response);
-            // console.log(res.nodes);
-            if (!res.nodes){
-                cb(null);
-            } else {
-                var nodes = res.nodes;
-                var allNodes = [];
-                for (var i=0; i<nodes.length; ++i){
-                    var protocol = nodes[i].protocol;
-                    var host = nodes[i].host;
-                    var type = nodes[i].type;
-                    var path = self.urlObj.host + self.urlObj.path;
-                    var url = protocol+'://'+host+'/'+path;
-                    if (!self.nodeSet.has(host)) {
-                        allNodes.push({uri: url, type: type});
-                        self.nodeSet.add(host);
-                    }
-                }
-
-                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //test
-                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //test
-                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //test
-                nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
-
-                    var length = nodes.length;
-                    console.log('nodes:'+JSON.stringify(nodes));
-
-                    if (length) {
-                        self.fileLength = fileLength;
-                        console.log('nodeFilter fileLength:'+fileLength);
-                        // self.nodes = nodes;
-                        if (length === 1) {
-                            // fallBack(nodes[0]);
-                            cb(nodes);
-                        } else {
-                            cb(nodes);
-                        }
-                    } else {
-                        // self._fallBack();
-                        cb(null);
-                    }
-                });
-            }
-        } else {
-            // self._fallBack();
-            cb(null);
-        }
-    };
-    xhr.send();
-};
-
-PearPlayer.prototype._fallBack = function (url) {
-
-    if (this.isPlaying) return;
-    if (url) {
-        this.video.src = url;
-    } else {
-        this.video.src = this.src;
-    }
-    if (this.autoPlay) {
-        this.video.play();
-    }
-    this.isPlaying = true;
-};
-
-PearPlayer.prototype._pearSignalHandshake = function () {
-    var self = this;
-    var dcCount = 0;                            //目前建立的data channel数量
-
-    var websocket = new WebSocket('wss://signal.webrtc.win:7601/wss');
-    self.websocket = websocket;
-    websocket.onopen = function() {
-        console.log('websocket connection opened!');
-
-        var hash = md5(self.urlObj.host + self.urlObj.path);
-        websocket.push(JSON.stringify({
-            "action": "get",
-            "peer_id": self.peerId,
-            "host": self.urlObj.host,
-            "uri": self.urlObj.path,
-            "md5": hash
-        }));
-        // console.log('peer_id:'+self.peerId);
-    };
-    websocket.push = websocket.send;
-    websocket.send = function(data) {
-        if (websocket.readyState != 1) {
-            console.warn('websocket connection is not opened yet.');
-            return setTimeout(function() {
-                websocket.send(data);
-            }, 1000);
-        }
-        // console.log("send to signal is " + data);
-        websocket.push(data);
-    };
-    websocket.onmessage = function(e) {
-        var message = JSON.parse(e.data);
-        console.log("[simpleRTC] websocket message is: " + JSON.stringify(message));
-        // message = message.nodes[1];
-        var nodes = message.nodes;
-        for (var i=0;i<nodes.length;++i) {
-            var node = nodes[i];
-            if (!node.errorcode) {
-                if (dcCount === self.dataChannels) break;
-                console.log('janus message:'+JSON.stringify(node))
-                self.JDMap[node.peer_id] = self.initJanus(node);
-                dcCount ++;
-            } else {
-                console.log('janus error message:'+JSON.stringify(message))
-            }
-        }
-    };
-};
-
-PearPlayer.prototype.initJanus = function (message) {
-    var self = this;
-
-    var janus_config = {
-        peer_id: self.peerId,
-        chunkSize: 32*1024,
-        host: self.urlObj.host,
-        uri: self.urlObj.path,
-        useMonitor: self.useMonitor
-    };
-
-    var jd = new JanusDownloader(janus_config);
-    jd.messageFromJanus(message)
-    jd.on('signal',function (message) {
-        console.log('[jd] signal:' + JSON.stringify(message));
-        self.websocket.send(JSON.stringify(message));
-    });
-    jd.on('connect',function () {
-
-        // if (!self.isPlaying) {
-        //
-        //     self._startPlaying(self.fileLength, self.nodes);
-        // }
-        self.dispatcher.addDataChannel(jd);
-        // if (self.websocket) {
-        //     self.websocket.close();
-        // }
-    });
-
-    return jd;
-};
-
-PearPlayer.prototype._startPlaying = function (nodes) {
-    var self = this;
-    console.log('start playing 6666666666!');
-    self.dispatcherConfig.initialDownloaders = [];
-    for (var i=0;i<nodes.length;++i) {
-        var node = nodes[i];
-        var hd = new HttpDownloader(node.uri, node.type);
-        self.dispatcherConfig.initialDownloaders.push(hd);
-    }
-    self.dispatcherConfig.fileSize = self.fileLength;
-    // self.dispatcherConfig.sortedURIs = nodes;
-    var fileConfig = {
-        length: self.fileLength,
-        offset: 0,
-        name: self.urlObj.path,
-        elem: self.selector
-    };
-
-    var d = new Dispatcher(self.dispatcherConfig);
-    self.dispatcher = d;
-
-    var file = new File(d, fileConfig);
-
-    file.renderTo(self.selector, {autoplay: self.autoPlay});
-
-    self.isPlaying = true;
-
-    //{errCode: 1, errMsg: 'This browser do not support WebRTC communication'}
-    d.on('ready', function (chunks) {
-
-        self.emit('begin', self.fileLength, chunks);
-    });
-    d.on('error', function () {
-        console.log('dispatcher error!');
-        // d.destroy();
-        // self._fallBack();
-        var hd = new HttpDownloader(self.src, 'server');
-        // d.addNodes([{uri: self.src, type: 'server'}]);
-        d.addNode(hd);
-    });
-    d.on('needmorenodes', function () {
-        console.log('request more nodes');
-        self._getNodes(self.token, function (nodes) {
-            console.log('_getNodes:'+JSON.stringify(nodes));
-            if (nodes) {
-                // d.addNodes(nodes);
-                for (var i=0;i<nodes.length;++i) {
-                    var node = nodes[i];
-                    var hd = new HttpDownloader(node.uri, node.type);
-                    d.addNode(hd);
-                }
-            } else {
-
-            }
-        });
-
-    });
-    d.on('done', function () {
-
-        self.emit('done');
-    });
-    d.on('downloaded', function (downloaded) {
-
-        self.emit('progress', downloaded);
-    });
-    d.on('fograte', function (fogRate) {
-
-        self.emit('fograte', fogRate);
-    });
-
-    d.on('bitfieldchange', function (bitfield) {
-
-        self.emit('bitfieldchange', bitfield, d.chunks);
-    });
-    d.on('fogspeed', function (speed) {
-
-        self.emit('fogspeed', speed);
-    });
-    d.on('cloudspeed', function (speed) {
-
-        self.emit('cloudspeed', speed);
-    });
-    d.on('buffersources', function (bufferSources) {       //s: server   n: node  d: data channel  b: browser
-
-        self.emit('buffersources', bufferSources);
-    });
-
-};
-
-function getBrowserRTC () {
-    if (typeof window === 'undefined') return null;
-    var wrtc = {
-        RTCPeerConnection: window.RTCPeerConnection || window.mozRTCPeerConnection ||
-        window.webkitRTCPeerConnection,
-    };
-    if (!wrtc.RTCPeerConnection) return null;
-    return wrtc
-}
-
-
-
-/**
- * Created by snow on 17-6-28.
- */
-
-},{"./lib/dispatcher":22,"./lib/file":24,"./lib/http-downloader":25,"./lib/janus-downloader-bin":26,"./lib/node-filter":27,"./lib/peerid-generator":28,"./lib/set":29,"blueimp-md5":35,"events":7,"inherits":53,"url":17}]},{},[]);
+},{}]},{},[22])(22)
+});

@@ -1,0 +1,15 @@
+.hello-with-hex
+{
+	width: 300px;
+	height: 80px;
+
+	background: url('../test-images/transparent-hex.png'), url('../test-images/hello-orange.png');
+}
+
+.massa-with-hex
+{
+	width: 64px;
+	height: 64px;
+	
+	background-image: url('../test-images/transparent-hex.png'), url('../test-images/massa-red.png');
+}

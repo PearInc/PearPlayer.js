@@ -1,0 +1,8 @@
+language: node_js
+node_js:
+  - 'node'
+sudo: false
+env:
+  global:
+  - secure: LWgzkRPcPrWwgLSkwGZpmfMBcwBWBl411hzcgLZmHEXR/NnWa2g/12v2WVmYP5THmKGwgTQFHmB1gDpCbnw5dhZKc4GiGSYZHij789rR1WCxDnmc3+SpiFdhUiLqeQNyjMKGLHnq7T4gE+OwZ0GfBAJo1MoRZvJeMC9tt2ZJ0sY=
+  - secure: GjIZLLHn/C4SWo9V8aEx8bSx4metCZvwDEp6pQCqMqHUJE0UtwOH9S71P4Qva/4hUGOfddESPNE2bnymebJCJG6rFbkW6NWmR0DBWCyJsDRSfLIdYSAp3J1mU4hlfpxMjmMkcZ5iyMuOZ1W28jgjjJJc5rWgmx6jJmWpm7VgtiE=
