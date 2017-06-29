@@ -23,7 +23,7 @@ var gulp = require('gulp'),
 var APP_VERSION = 'v.1.0';
 // 1. 清除旧部署文件；
 gulp.task('clean', function(cb){
-    del(['dest/*']);
+    del(['dist/*']);
     cb();
 });
 
@@ -41,7 +41,7 @@ gulp.task('uglifyjs', function(){
     gulp.src('./pear-player.js')
         .pipe(uglify())
         .pipe(rename({suffix:'.min'}))
-        .pipe( gulp.dest('./dest/') );
+        .pipe( gulp.dest('./dist/') );
 
 });
 
