@@ -178,6 +178,12 @@ function onBufferSources(bufferSources) {    //s: server   n: node  d: data chan
 
 **[阅读API文档](docs/api.md)**
 
+### 致谢
+特别感谢以下项目，为我们提供了技术参考以及灵感来源。
+
+- [WebTorrent](https://github.com/webtorrent/webtorrent)
+- [Peer5](https://www.peer5.com/#)
+
 ### License
 
 MIT. Copyright (c) [Pear Limited](https://pear.hk) and [Xie Ting](t@pear.hk).
