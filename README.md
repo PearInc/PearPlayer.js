@@ -29,7 +29,7 @@
 ## 使用方法
 
 ### 获取token
-在使用PearPlayer之前，需要获取token，通过调用我们提供的API接口（https://api.webrtc.win:6601/v1/customer/login）并传入用户名和密码，
+在使用PearPlayer之前，需要获取token，通过调用我们提供的API接口（/v1/customer/login）并传入用户名和密码，
 我们已经为访客提供了测试帐号（用户名：test　密码：123456），获取token的示例代码如下：
 ```js
 var PearPlayer = require('PearPlayer');
@@ -58,7 +58,7 @@ xhr.send(data);
 ```html
 <script src="./dest/pear-player.min.js"></script>
 ```
-假设用video标签播放（https://qq.webrtc.win/tv/pear001.mp4）这个视频，HTML如下所示：
+假设用video标签播放（/tv/pear001.mp4）这个视频，HTML如下所示：
 ```html
 <video  id="pearvideo" src="https://qq.webrtc.win/tv/pear001.mp4" controls>
 ```
