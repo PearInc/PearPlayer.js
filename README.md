@@ -92,4 +92,4 @@ xhr.send(data);
 
 ### License
 
-MIT. Copyright (c) [Pear Limited](https://pear.hk) and [Xie Ting](t@pear.hk).
+MIT. Copyright (c) [Pear Limited](https://pear.hk) and [Xie Ting](https://github.com/snowinszu).
