@@ -13,7 +13,7 @@
 
 ![multisources](fig/fogvdn_multisources.png)
 
-只需将`pear-player.min.js`通过`<script>`标签导入到HTML就可以使用我们的播放器。 参考以下[代码示例](#使用)。也可以查看[`/test/test.html`](/test/test.html)来了解使用方法。
+只需将`pear-player.min.js`通过`<script>`标签导入到HTML就可以使用。 参考以下[代码示例](#使用)，也可以查看[`/test/test.html`](/test/test.html)来了解使用方法。
 
 信令部分以及WebRTC部分我们使用了自己精心设计的协议，实现此部分可以参考我们的API文档。
 
@@ -88,19 +88,19 @@ var PearPlayer = require('PearPlayer');
             if (!!res.token){
                 console.log('token:' +res.token);
 
-                var player = new PearPlayer('#pearvideo', {      //第一个参数为video标签的id或class
-                    type: 'mp4',                //播放视频的类型,目前只能是mp4
-                    src: 'https://qq.webrtc.win/tv/pear001.mp4',  //视频播放的src
-                    token: res.token,           //与信令服务器连接的token,必须
-                    algorithm: 'firstaid',      //核心算法,默认firstaid
-                    autoplay: true,            //是否自动播发视频,默认true
-                    chunkSize: 1*1024*1024,        //每个chunk的大小,必须是32K的整数倍,默认1M
-                    interval: 5000,             //滑动窗口的时间间隔,单位毫秒,默认10s
-                    auto: false,                //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,如果是fmp4建议设为true,默认false
-                    slideInterval: 10,          //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
-                    useDataChannel: true,       //是否开启data channel,默认true
-                    dataChannels: 1,            //创建data channel的最大数量,默认3
-                    useMonitor: true             //是否开启monitor,会稍微影响性能,默认true
+                var player = new PearPlayer('#pearvideo', {//第一个参数为video标签的id或class
+                    type: 'mp4',                           //播放视频的类型，目前只能是mp4
+                    src: 'https://example.com/v1.mp4',     //视频播放的src
+                    token: res.token,                      //与信令服务器连接的token,必须
+                    algorithm: 'firstaid',                 //核心算法,默认firstaid
+                    autoplay: true,                        //是否自动播发视频，默认true
+                    chunkSize: 1*1024*1024,                //每个chunk的大小，必须是32K的整数倍,默认1M
+                    interval: 5000,                        //滑动窗口的时间间隔,单位毫秒，默认10s
+                    auto: false,                           //true为连续下载buffer，false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer，如果是fmp4建议设为true，默认false
+                    slideInterval: 10,                    //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
+                    useDataChannel: true,                 //是否开启Datachannel,默认true
+                    dataChannels: 1,                      //创建DataChannel的最大数量,默认3
+                    useMonitor: true                      //是否开启monitor，会稍微影响性能，默认true
                 });
             }
         } else {
@@ -115,9 +115,9 @@ var PearPlayer = require('PearPlayer');
 ##### 监听PearPlayer事件：
 ```js
 var player = new PearPlayer('#pearvideo', {      //第一个参数为video标签的id或class
-                    type: 'mp4',                //播放视频的类型,目前只能是mp4
+                    type: 'mp4',                 //播放视频的类型,目前只能是mp4
                     src: 'https://qq.webrtc.win/tv/pear001.mp4',  //视频播放的src
-                    token: res.token,           //与信令服务器连接的token,必须
+                    token: res.token,            //与信令服务器连接的token,必须
                     useMonitor: true             //是否开启monitor,会稍微影响性能,默认true
                 });
 
