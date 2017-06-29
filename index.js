@@ -33,7 +33,7 @@ function PearPlayer(selector, config) {
     if (!(config.token && typeof config.token === 'string')) throw new Error('token is not valid!');
 
     self.selector = selector;
-    self.src = config.src || video.src;
+    self.src = config.src || self.video.src;
     self.urlObj = url.parse(self.src);
     self.token = config.token;
     self.useDataChannel = (config.useDataChannel === false)? false : true;

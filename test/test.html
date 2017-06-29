@@ -24,7 +24,7 @@
 </head>
 <body>
 <div id="main">
-    <video  id="pearvideo" loop="true" controls>
+    <video id="pearvideo" src="https://qq.webrtc.win/tv/pear001.mp4" controls>
     </video>
 </div>
 <script src="../pear-player.js"></script>
@@ -46,8 +46,6 @@
 
                 var player = new PearPlayer('#pearvideo', {      //第一个参数为video标签的id或class
                     type: 'mp4',                //播放视频的类型,目前只能是mp4
-//                    src: 'https://qq.webrtc.win/tv/pear001.mp4',  //视频播放的src
-                    src: 'https://qq.webrtc.win/tv/pear001.mp4',  //视频播放的src
                     token: res.token,           //与信令服务器连接的token,必须
                     algorithm: 'firstaid',      //核心算法,默认firstaid
                     autoplay: true,            //是否自动播发视频,默认true
@@ -68,8 +66,7 @@
                 player.on('fograte', onWebRTCRate);
                 player.on('buffersources', onBufferSources);               //s: server   n: node  d: data channel  b: browser
                 player.on('done', onDone);
-//
-//                player.setURL('https://qq.webrtc.win/tv/pear001.mp4');
+
             }
         } else {
             alert('请求出错!');
