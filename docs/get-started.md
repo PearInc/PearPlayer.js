@@ -32,7 +32,7 @@ var xhr = new XMLHttpRequest();
 //CP需要先登录来获取token
 xhr.open("POST", 'https://api.webrtc.win:6601/v1/customer/login');
 var data = JSON.stringify({
-    user:'admin',
+    user:'test',
     password:'123456'
 });
 xhr.onload = function () {
@@ -42,10 +42,8 @@ xhr.onload = function () {
         if (!!res.token){
             console.log('token:' +res.token);
 
-            var player = new PearPlayer('#pearvideo', {//第一个参数为video标签的id或class
+            var player = new PearPlayer('#pearvideo', res.token, {//第一个参数为video标签的id或class
                 type: 'mp4',                           //播放视频的类型，目前只能是mp4
-                src: 'https://example.com/v1.mp4',     //视频播放的src
-                token: res.token,                      //与信令服务器连接的token,必须
                 algorithm: 'firstaid',                 //核心算法,默认firstaid
                 autoplay: true,                        //是否自动播发视频，默认true
                 chunkSize: 1*1024*1024,                //每个chunk的大小，必须是32K的整数倍,默认1M
@@ -129,29 +127,12 @@ function onBufferSources(bufferSources) {    //s: server   n: node  d: data chan
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Client</title>
+    <title>Pear Player</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        /*.start{*/
-        /*background: greenyellow; width: 50px; height: 25px; line-height: 25px; text-align: center;*/
-        /*}*/
-
-        body{
-            display: flex;
-            flex-direction: column;
-            align-items: center; /*定义body的元素垂直居中*/
-            justify-content: center; /*定义body的里的元素水平居中*/
-            width: 100%;
-            height: 100%;
-        }
-        #pearvideo{
-            margin: 0 auto;
-        }
-    </style>
 </head>
 <body>
 <div id="main">
-    <video  id="pearvideo" loop="true" controls>
+    <video id="pearvideo" src="https://qq.webrtc.win/tv/pear001.mp4" controls>
     </video>
 </div>
 <script src="../pear-player.js"></script>
@@ -159,7 +140,7 @@ function onBufferSources(bufferSources) {    //s: server   n: node  d: data chan
     var xhr = new XMLHttpRequest();
     xhr.open("POST", 'https://api.webrtc.win:6601/v1/customer/login');
     var data = JSON.stringify({
-        user:'admin',
+        user:'test',
         password:'123456'
     });
     xhr.onload = function () {
@@ -168,11 +149,8 @@ function onBufferSources(bufferSources) {    //s: server   n: node  d: data chan
             var res = JSON.parse(this.response);
             if (!!res.token){
                 console.log('token:' +res.token);
-
-                var player = new PearPlayer('#pearvideo', {      //第一个参数为video标签的id或class
-                    type: 'mp4',                //播放视频的类型,目前只能是mp4
-                    src: 'https://qq.webrtc.win/tv/pear001.mp4',  //视频播放的src
-                    token: res.token,           //与信令服务器连接的token,必须
+                //第一个参数为video标签的id或class
+                var player = new PearPlayer('#pearvideo', res.token, {
                     algorithm: 'firstaid',      //核心算法,默认firstaid
                     autoplay: true,            //是否自动播发视频,默认true
                     chunkSize: 1*1024*1024,        //每个chunk的大小,必须是32K的整数倍,默认1M
@@ -184,14 +162,14 @@ function onBufferSources(bufferSources) {    //s: server   n: node  d: data chan
                     useMonitor: true             //是否开启monitor,会稍微影响性能,默认true
                 });
 
-                player.on('exception', onException);
-                player.on('begin', onBegin);
-                player.on('progress', onProgress);
-                player.on('cloudspeed', onCloudSpeed);
-                player.on('fogspeed', onFogSpeed);
-                player.on('fograte', onWebRTCRate);
-                player.on('buffersources', onBufferSources);               //s: server  n: node  d: data channel  b: browser
-                player.on('done', onDone);
+                player.on('exception', onException);               //播放器出现异常时的回调函数
+                player.on('begin', onBegin);　　　　　　　　　　　　　 //开始下载时触发
+                player.on('progress', onProgress);                 //回调目前的下载进度
+                player.on('cloudspeed', onCloudSpeed);             //来自server的HTTP的平均下载速度
+                player.on('fogspeed', onFogSpeed);                 //来自fog的节点（包括HTTP和WebRTC）的平均下载速度
+                player.on('fograte', onWebRTCRate);　　　　　　　　　 //fog节点的下载比率（下载的字节数除以总的字节数）
+                player.on('buffersources', onBufferSources);       //buffer map，记录每个buffer的下载源类型，其中s: server   n: node  d: data channel  b: browser
+                player.on('done', onDone);　　　　　　　　           //结束下载时触发
 
             }
         } else {

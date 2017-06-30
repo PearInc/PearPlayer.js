@@ -1,0 +1,16 @@
+.meta-include-false
+{
+	width: 150px;
+	height: 100px;
+	/* @meta {"spritesheet": {"include": false}} */
+	background: url('../test-images/no-spritesheet.png');
+}
+
+.meta-include-true
+{
+	width: 64px;
+	height: 64px;
+
+	/* @meta {"spritesheet": {"include": true}} */
+	background-image: url('../test-images/vitae-yellow.png');
+}
