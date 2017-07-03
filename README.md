@@ -9,7 +9,7 @@
 <h4 align="center">一个支持多协议，多源、混合P2P-CDN的流媒体播放器</h4>
 <br>
 
-**PearPlayer（梨享播放器）** 是完全用JavaScript写的开源HTML5流媒体播放框架，实现了融合HTTP（包含HTTPS、HTTP2）、WebRTC的多协议、多源、低延迟、高带宽利用率的无插件Web端流媒体加速能力。基于H5的MSE技术(Media Source Extension)将来自多个源节点的Buffer分块喂给播放器，再加上精心设计的算法来达到最优的调度策略和处理各种异常情况，Pear Player能在保证用户流畅视频体验的前提下最大化P2P率。
+**PearPlayer（梨享播放器）** 是完全用JavaScript写的开源HTML5流媒体播放框架，实现了融合HTTP（包含HTTPS、HTTP2）、WebRTC的多协议、多源、低延迟、高带宽利用率的无插件Web端流媒体加速能力。基于H5的MSE技术(Media Source Extension)将来自多个源节点的Buffer分块喂给播放器，再加上精心设计的算法来达到最优的调度策略及对各种异常情况的处理，Pear Player能在保证用户流畅视频体验的前提下最大化P2P率。
 
 ![multisources](fig/fogvdn_multisources.png)
 
@@ -20,11 +20,12 @@
 ### 特性
 
 - P2P能力基于**WebRTC**，无须安装任何插件
-- **播放流畅，加载快速**(具体依赖于当前网络环境)
+- **播放流畅，加载快速**（具体情况也依赖于当前网络环境）
 - 多协议(HTTP、HTTPS、WebRTC)、多源
 - 自行研发的调度算法，在保证用户流畅视频体验的前提下最大化P2P率
 - 经过严格测试，稳定可靠
 - 支持Chrome、Firefox、Opera等主流浏览器
+- 可选接入低成本、高可用性的Pear [FogVDN](https://github.com/PearInc/FogVDN)
 
 ## 使用方法
 
