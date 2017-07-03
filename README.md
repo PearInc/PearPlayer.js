@@ -94,5 +94,5 @@ xhr.send(data);
 
 MIT. Copyright (c) [Pear Limited](https://pear.hk) and [Xie Ting](https://github.com/snowinszu).
 
-#### 商务合作
+### 商务合作
 CP/CDN接入、OEM与其他商务合作请联系：E-mail: service@pear.hk；QQ群：373594967
