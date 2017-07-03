@@ -5555,6 +5555,13 @@ function PearPlayer(selector,token, opts) {
     };
     console.log('self.dispatcherConfig:'+self.dispatcherConfig.chunkSize);
 
+    self._start();
+
+}
+
+PearPlayer.prototype._start = function () {
+    var self = this;
+
     self._getNodes(self.token, function (nodes) {
         // console.log('_getNodes:');
         if (nodes) {
@@ -5572,7 +5579,7 @@ function PearPlayer(selector,token, opts) {
             self._pearSignalHandshake();
         }
     });
-}
+};
 
 PearPlayer.prototype._getNodes = function (token, cb) {
     var self = this;
@@ -6170,6 +6177,7 @@ Dispatcher.prototype._fillWindow = function () {
 
     var count = 0;
     var index = self._windowOffset;
+    console.log('_fillWindow index:'+index);
     while (count !== self._windowLength){
 
         if (index >= self.chunks){

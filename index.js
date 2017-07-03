@@ -61,6 +61,13 @@ function PearPlayer(selector,token, opts) {
     };
     console.log('self.dispatcherConfig:'+self.dispatcherConfig.chunkSize);
 
+    self._start();
+
+}
+
+PearPlayer.prototype._start = function () {
+    var self = this;
+
     self._getNodes(self.token, function (nodes) {
         // console.log('_getNodes:');
         if (nodes) {
@@ -78,7 +85,7 @@ function PearPlayer(selector,token, opts) {
             self._pearSignalHandshake();
         }
     });
-}
+};
 
 PearPlayer.prototype._getNodes = function (token, cb) {
     var self = this;
