@@ -34,6 +34,10 @@
 ```html
 <script src="./dest/pear-player.min.js"></script>
 ```
+或者使用CDN：
+```html
+<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest/dist/pear-player.min.js"></script>
+```
 假设用video标签播放（/tv/pear001.mp4）这个视频，HTML如下所示：
 ```html
 <video id="pearvideo" src="https://qq.webrtc.win/tv/pear001.mp4" controls>
