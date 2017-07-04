@@ -5575,6 +5575,9 @@ PearPlayer.prototype._start = function () {
             alert('This browser do not support WebRTC communication');
             self.useDataChannel = false;
         }
+        if (!window.WebSocket) {
+            self.useDataChannel = false;
+        }
         if (self.useDataChannel) {
             self._pearSignalHandshake();
         }
@@ -5715,8 +5718,12 @@ PearPlayer.prototype._pearSignalHandshake = function () {
             if (!node.errorcode) {
                 if (dcCount === self.dataChannels) break;
                 console.log('janus message:'+JSON.stringify(node))
-                self.JDMap[node.peer_id] = self.initJanus(node);
-                dcCount ++;
+                if (!self.JDMap[node.peer_id]) {
+                    self.JDMap[node.peer_id] = self.initJanus(node);
+                    dcCount ++;
+                } else {
+                    console.log('datachannel 重复');
+                }
             } else {
                 console.log('janus error message:'+JSON.stringify(message))
             }
@@ -5758,7 +5765,7 @@ PearPlayer.prototype.initJanus = function (message) {
 
 PearPlayer.prototype._startPlaying = function (nodes) {
     var self = this;
-    console.log('start playing 6666666666!');
+    console.log('start playing');
     self.dispatcherConfig.initialDownloaders = [];
     for (var i=0;i<nodes.length;++i) {
         var node = nodes[i];
@@ -5812,6 +5819,20 @@ PearPlayer.prototype._startPlaying = function (nodes) {
             }
         });
 
+    });
+    d.on('needmoredatachannels', function () {
+        console.log('request more datachannels');
+        if (self.websocket && self.websocket.readyState === WebSocket.OPEN) {
+
+            var hash = md5(self.urlObj.host + self.urlObj.path);
+            self.websocket.push(JSON.stringify({
+                "action": "get",
+                "peer_id": self.peerId,
+                "host": self.urlObj.host,
+                "uri": self.urlObj.path,
+                "md5": hash
+            }));
+        }
     });
     d.on('done', function () {
 
@@ -6004,6 +6025,7 @@ Dispatcher.prototype._init = function () {
         for (var j=0;j<self.downloaders.length;++j) {
             console.log('downloaders type:' + self.downloaders[j].type + ' mean speed:' +self.downloaders[j].meanSpeed);
         }
+
     });
 
     self.ready = true;
@@ -6307,7 +6329,8 @@ Dispatcher.prototype._setupJanus = function (jd) {
     jd.on('error', function () {
         console.log('jd error');
         self.downloaders.removeObj(jd);
-        self.requestMoreNodes();                  //节点不够,重新请求
+        // self.requestMoreNodes();                  //节点不够,重新请求
+        self.requestMoreDataChannels();
     });
 };
 
@@ -6315,6 +6338,11 @@ Dispatcher.prototype.addDataChannel = function (dc) {          //TODO:让每个�
 
     this.downloaders.push(dc);
     this._setupJanus(dc);
+    console.log('addDataChannel now:'+this.downloaders.length);
+    for (var i=0;i<this.downloaders.length;++i) {
+        console.log('666');
+        console.log('downloader type:'+this.downloaders[i].type);
+    }
 };
 
 Dispatcher.prototype.addNode = function (node) {     //node是httpdownloader对象
@@ -6327,18 +6355,20 @@ Dispatcher.prototype.addNode = function (node) {     //node是httpdownloader对�
 
 Dispatcher.prototype.requestMoreNodes = function () {
 
-    if (this.downloaders.length <= 3) {
-        if (this.downloaders.length > 0) {            //节点不够,重新请求
-            this.emit('needmorenodes');
-        } else {
-            this.emit('error');
-        }
+    if (this.downloaders.length > 0) {            //节点不够,重新请求
+        this.emit('needmorenodes');
+    } else {
+        this.emit('error');
     }
 };
 
 Dispatcher.prototype.requestMoreDataChannels = function () {
 
-
+    if (this.downloaders.length > 0) {            //节点不够,重新请求
+        this.emit('needmoredatachannels');
+    } else {
+        this.emit('error');
+    }
 };
 
 Dispatcher.prototype.destroy = function () {
@@ -6598,7 +6628,7 @@ function File (dispatcher, file){
 File.prototype.createReadStream = function (opts) {
     var self = this;
 
-    console.log('createReadStream start:' + opts.start?opts.start:0);
+    // console.log('createReadStream start:' + opts.start?opts.start:0);
     if (this.length === 0) {
         var empty = new stream.PassThrough();
         process.nextTick(function () {
@@ -6704,7 +6734,7 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
     self._xhr = xhr;
     xhr.open("GET", self.uri);
     xhr.responseType = "arraybuffer";
-    xhr.timeout = 3000;
+    // xhr.timeout = 3000;
     self.startTime=(new Date()).getTime();
     // console.log('get_file_index: start:'+begin+' end:'+end);
     var range = "bytes="+begin+"-"+end;
@@ -6736,14 +6766,14 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
 
         self.emit('error');
     };
-    xhr.ontimeout = function (_) {
-        console.log('HttpDownloader ' + self.uri + ' timeout');
-        // self.emit('error');
-        self.weight -= 0.2;
-        if (self.weight < 0.1) {
-            self.emit('error');
-        }
-    };
+    // xhr.ontimeout = function (_) {
+    //     console.log('HttpDownloader ' + self.uri + ' timeout');
+    //     // self.emit('error');
+    //     self.weight -= 0.2;
+    //     if (self.weight < 0.1) {
+    //         self.emit('error');
+    //     }
+    // };
     xhr.send();
 };
 
@@ -6880,7 +6910,7 @@ JanusDownloader.prototype._receive = function (chunk) {
         self.chunkStore = [];
     } else if (headerInfo.done) {
 
-        console.log('self.chunkStore done');
+        // console.log('self.chunkStore done');
         var finalArray = [], length = self.chunkStore.length;
         self.downloading = false;
         self.end = headerInfo.end;

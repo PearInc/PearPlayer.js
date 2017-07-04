@@ -81,6 +81,9 @@ PearPlayer.prototype._start = function () {
             alert('This browser do not support WebRTC communication');
             self.useDataChannel = false;
         }
+        if (!window.WebSocket) {
+            self.useDataChannel = false;
+        }
         if (self.useDataChannel) {
             self._pearSignalHandshake();
         }
@@ -221,8 +224,12 @@ PearPlayer.prototype._pearSignalHandshake = function () {
             if (!node.errorcode) {
                 if (dcCount === self.dataChannels) break;
                 console.log('janus message:'+JSON.stringify(node))
-                self.JDMap[node.peer_id] = self.initJanus(node);
-                dcCount ++;
+                if (!self.JDMap[node.peer_id]) {
+                    self.JDMap[node.peer_id] = self.initJanus(node);
+                    dcCount ++;
+                } else {
+                    console.log('datachannel 重复');
+                }
             } else {
                 console.log('janus error message:'+JSON.stringify(message))
             }
@@ -264,7 +271,7 @@ PearPlayer.prototype.initJanus = function (message) {
 
 PearPlayer.prototype._startPlaying = function (nodes) {
     var self = this;
-    console.log('start playing 6666666666!');
+    console.log('start playing');
     self.dispatcherConfig.initialDownloaders = [];
     for (var i=0;i<nodes.length;++i) {
         var node = nodes[i];
@@ -318,6 +325,20 @@ PearPlayer.prototype._startPlaying = function (nodes) {
             }
         });
 
+    });
+    d.on('needmoredatachannels', function () {
+        console.log('request more datachannels');
+        if (self.websocket && self.websocket.readyState === WebSocket.OPEN) {
+
+            var hash = md5(self.urlObj.host + self.urlObj.path);
+            self.websocket.push(JSON.stringify({
+                "action": "get",
+                "peer_id": self.peerId,
+                "host": self.urlObj.host,
+                "uri": self.urlObj.path,
+                "md5": hash
+            }));
+        }
     });
     d.on('done', function () {
 
