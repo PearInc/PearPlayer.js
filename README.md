@@ -13,7 +13,7 @@
 
 ![multisources](fig/fogvdn_multisources.png)
 
-只需将`pear-player.min.js`通过`<script>`标签导入到HTML就可以使用。 参考以下[代码示例](#使用方法)，也可以查看[`/test/test.html`](/test/test.html)来了解使用方法。
+只需将`pear-player.min.js`通过`<script>`标签导入到HTML就可以使用。 参考以下[代码示例](#使用方法)，也可以查看[`/examples/test.html`](/examples/test.html)来了解使用方法。
 
 信令部分以及WebRTC部分我们使用了自己精心设计的协议，实现此部分可以参考我们的API文档。
 
@@ -79,7 +79,7 @@ xhr.send(data);
 ```
 
 ### 支持video.js：
-本播放器现已支持video.js，示例代码请移步[videojs.html](test/videojs.html)
+本播放器现已支持video.js，示例代码请移步[videojs.html](examples/videojs/videojs.html)
 
 ### 谁在用我们的产品？
 

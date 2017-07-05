@@ -62,7 +62,7 @@ xhr.onload = function () {
 xhr.send(data);
 ```
 
-There is a complete example in [test/test.html](test/test.html)。
+There is a complete example in [examples/test.html](examples/test.html)。
 
 ### Listen to PearPlayer events
 

@@ -212,7 +212,7 @@ assert.fail = fail;
 // by !!guard.
 // assert.ok(guard, message_opt);
 // This statement is equivalent to assert.equal(true, !!guard,
-// message_opt);. To test strictly for the value true, use
+// message_opt);. To examples strictly for the value true, use
 // assert.strictEqual(true, guard, message_opt);.
 
 function ok(value, message) {
@@ -349,13 +349,13 @@ function objEquiv(a, b, strict, actualVisitedObjects) {
   //the same set of keys (although not necessarily the same order),
   ka.sort();
   kb.sort();
-  //~~~cheap key test
+  //~~~cheap key examples
   for (i = ka.length - 1; i >= 0; i--) {
     if (ka[i] !== kb[i])
       return false;
   }
   //equivalent values for every corresponding key, and
-  //~~~possibly expensive deep test
+  //~~~possibly expensive deep examples
   for (i = ka.length - 1; i >= 0; i--) {
     key = ka[i];
     if (!_deepEqual(a[key], b[key], strict, actualVisitedObjects))
@@ -812,7 +812,7 @@ function fromString (string, encoding) {
   var actual = buf.write(string, encoding)
 
   if (actual !== length) {
-    // Writing a hex string, for example, that contains invalid characters will
+    // Writing a hex string, for examples, that contains invalid characters will
     // cause everything after the first invalid character to be ignored. (e.g.
     // 'abxxcd' will be treated as 'ab')
     buf = buf.slice(0, actual)
@@ -3223,7 +3223,7 @@ var substr = 'ab'.substr(-1) === 'b'
 // shim for using process in browser
 var process = module.exports = {};
 
-// cached from whatever global is present so that test runners that stub it
+// cached from whatever global is present so that examples runners that stub it
 // don't break things.  But we need to wrap it in a try catch in case it is
 // wrapped in strict mode code which doesn't define any globals.  It's inside a
 // function because try/catches deoptimize in certain engines.
@@ -4307,7 +4307,7 @@ Url.prototype.parse = function(url, parseQueryString, slashesDenoteHost) {
     // http://a@b?@c => user:a host:c path:/?@c
 
     // v0.12 TODO(isaacs): This is not quite how Chrome does things.
-    // Review our test case against browsers more comprehensively.
+    // Review our examples case against browsers more comprehensively.
 
     // find the first instance of any hostEndingChars
     var hostEnd = -1;
@@ -4381,7 +4381,7 @@ Url.prototype.parse = function(url, parseQueryString, slashesDenoteHost) {
               newpart += part[j];
             }
           }
-          // we test again with ASCII char only
+          // we examples again with ASCII char only
           if (!newpart.match(hostnamePartPattern)) {
             var validParts = hostparts.slice(0, i);
             var notHost = hostparts.slice(i + 1);
@@ -5633,9 +5633,9 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                     }
                 }
 
-                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //test
-                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //test
-                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //test
+                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
+                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
+                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
                 nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
 
                     var length = nodes.length;
@@ -8451,7 +8451,7 @@ function fromString (string, encoding) {
   var actual = buf.write(string, encoding)
 
   if (actual !== length) {
-    // Writing a hex string, for example, that contains invalid characters will
+    // Writing a hex string, for examples, that contains invalid characters will
     // cause everything after the first invalid character to be ignored. (e.g.
     // 'abxxcd' will be treated as 'ab')
     buf = buf.slice(0, actual)
@@ -11292,7 +11292,7 @@ function setopts (self, pattern, options) {
     self.root = self.root.replace(/\\/g, "/")
 
   // TODO: is an absolute `cwd` supposed to be resolved against `root`?
-  // e.g. { cwd: '/test', root: __dirname } === path.join(__dirname, '/test')
+  // e.g. { cwd: '/examples', root: __dirname } === path.join(__dirname, '/examples')
   self.cwdAbs = isAbsolute(self.cwd) ? self.cwd : makeAbs(self, self.cwd)
   if (process.platform === "win32")
     self.cwdAbs = self.cwdAbs.replace(/\\/g, "/")
@@ -11866,7 +11866,7 @@ Glob.prototype._processReaddir2 = function (prefix, read, abs, remain, index, in
     return cb()
   }
 
-  // now test all matched entries as stand-ins for that part
+  // now examples all matched entries as stand-ins for that part
   // of the pattern.
   remain.shift()
   for (var i = 0; i < len; i ++) {
@@ -12068,7 +12068,7 @@ Glob.prototype._processGlobStar2 = function (prefix, read, abs, remain, index, i
   if (!entries)
     return cb()
 
-  // test without the globstar, and with every child both below
+  // examples without the globstar, and with every child both below
   // and replacing the globstar.
   var remainWithoutGlobStar = remain.slice(1)
   var gspref = prefix ? [ prefix ] : []
@@ -12420,7 +12420,7 @@ GlobSync.prototype._processReaddir = function (prefix, read, abs, remain, index,
     return
   }
 
-  // now test all matched entries as stand-ins for that part
+  // now examples all matched entries as stand-ins for that part
   // of the pattern.
   remain.shift()
   for (var i = 0; i < len; i ++) {
@@ -12580,7 +12580,7 @@ GlobSync.prototype._processGlobStar = function (prefix, read, abs, remain, index
   if (!entries)
     return
 
-  // test without the globstar, and with every child both below
+  // examples without the globstar, and with every child both below
   // and replacing the globstar.
   var remainWithoutGlobStar = remain.slice(1)
   var gspref = prefix ? [ prefix ] : []
@@ -13812,7 +13812,7 @@ function match (f, partial) {
     f = f.split(path.sep).join('/')
   }
 
-  // treat the test path as a set of pathparts.
+  // treat the examples path as a set of pathparts.
   f = f.split(slashSplit)
   this.debug(this.pattern, 'split', f)
 
@@ -13851,7 +13851,7 @@ function match (f, partial) {
   return this.negate
 }
 
-// set partial to true to test if, for example,
+// set partial to true to examples if, for examples,
 // "/a/b" matches the start of "/*/b/*/d"
 // Partial means, if you run out of file before you run
 // out of pattern, then that's fine, as long as all
@@ -14133,7 +14133,7 @@ var TIME_OFFSET = 2082844800000
 
 /*
 TODO:
-test these
+examples these
 add new box versions
 */
 
@@ -17760,10 +17760,10 @@ function indexOf(xs, x) {
 // something with the data.  Sometimes it's called a "filter",
 // but that's not a great name for it, since that implies a thing where
 // some bits pass through, and others are simply ignored.  (That would
-// be a valid example of a transform, of course.)
+// be a valid examples of a transform, of course.)
 //
 // While the output is causally related to the input, it's not a
-// necessarily symmetric or synchronous transformation.  For example,
+// necessarily symmetric or synchronous transformation.  For examples,
 // a zlib stream might take multiple plain-text writes(), and then
 // emit a single compressed chunk some time in the future.
 //
@@ -17785,7 +17785,7 @@ function indexOf(xs, x) {
 // This way, back-pressure is actually determined by the reading side,
 // since _read has to be called to start processing a new chunk.  However,
 // a pathological inflate type of transform can cause excessive buffering
-// here.  For example, imagine a stream where every byte of input is
+// here.  For examples, imagine a stream where every byte of input is
 // interpreted as an integer from 0-255, and then results in that many
 // bytes of output.  Writing the 4 bytes {ff,ff,ff,ff} would result in
 // 1kb of data being output.  In this case, you could write a very small
