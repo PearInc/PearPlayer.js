@@ -79,7 +79,7 @@ xhr.send(data);
 ```
 
 ###　支持video.js：
-本播放器现已支持video.js，示例代码请移步**[videojs.html](test/videojs.html)**
+本播放器现已支持video.js，示例代码请移步[videojs.html](test/videojs.html)
 
 ### 谁在用我们的产品？
 
