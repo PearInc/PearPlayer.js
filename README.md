@@ -32,7 +32,7 @@
 ### 导入js文件并绑定video标签
 首先通过script标签导入pear-player.min.js：
 ```html
-<script src="./dist/pear-player.min.js"></script>
+<script src="./dest/pear-player.min.js"></script>
 ```
 或者使用CDN：
 ```html
@@ -68,8 +68,8 @@ var data = JSON.stringify({
 xhr.onload = function () {
     if (this.status >= 200 && this.status < 300) {
         var res = JSON.parse(this.response);
-        if (!!res.token){  
-            console.log('token:' +res.token);    
+        if (!!res.token){
+            console.log('token:' +res.token);
         }
     } else {
         alert('请求出错!');
@@ -77,6 +77,9 @@ xhr.onload = function () {
 };
 xhr.send(data);
 ```
+
+###支持video.js：
+本播放器现已支持video.js，示例代码请移步**[videojs.html](test/videojs.html)**
 
 ### 谁在用我们的产品？
 

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<link href="//vjs.zencdn.net/5.19/video-js.min.css" rel="stylesheet">
+<script src="//vjs.zencdn.net/5.19/video.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest/dist/pear-player.min.js"></script>
+<head>
+    <meta charset="UTF-8">
+    <title>Client</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<div id="main">
+    <video
+            id="my-player"
+            class="video-js vjs-big-play-centered"
+            controls
+            preload="auto"
+            poster="//vjs.zencdn.net/v/oceans.png"
+            src="https://qq.webrtc.win/tv/pear001.mp4"
+            data-setup='{}'>
+        <!--<source src="https://qq.webrtc.win/tv/pear001.mp4" type="video/mp4"></source>-->
+        <p class="vjs-no-js">
+            To view this video please enable JavaScript, and consider upgrading to a
+            web browser that
+            <a href="http://videojs.com/html5-video-support/" target="_blank">
+                supports HTML5 video
+            </a>
+        </p>
+    </video>
+</div>
+<script>
+
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", 'https://api.webrtc.win:6601/v1/customer/login');
+    var data = JSON.stringify({
+        user:'test',
+        password:'123456'
+    });
+    xhr.onload = function () {
+        if (this.status >= 200 && this.status < 300) {
+
+            var res = JSON.parse(this.response);
+            if (!!res.token){
+                console.log('token:' +res.token);
+
+                var player = new PearPlayer('video', res.token);
+
+            }
+        } else {
+            alert('请求出错!');
+        }
+    };
+    xhr.send(data);
+</script>
+</body>
+
+</html>

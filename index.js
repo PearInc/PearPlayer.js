@@ -7,7 +7,7 @@ module.exports = PearPlayer;
 var md5 = require('blueimp-md5');
 var Dispatcher = require('./lib/dispatcher');
 var HttpDownloader = require('./lib/http-downloader');
-var JanusDownloader = require('./lib/janus-downloader-bin');
+var JanusDownloader = require('./lib/webrtc-downloader-bin');
 var getPeerId = require('./lib/peerid-generator');
 var url = require('url');
 var File = require('./lib/file');
@@ -25,6 +25,7 @@ function PearPlayer(selector,token, opts) {
     if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
     EventEmitter.call(self);
 
+    opts = opts || {};
     self.video = document.querySelector(selector);
 
     if (typeof selector !== 'string') throw new Error('video selector must be a string!');
