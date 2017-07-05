@@ -212,7 +212,7 @@ assert.fail = fail;
 // by !!guard.
 // assert.ok(guard, message_opt);
 // This statement is equivalent to assert.equal(true, !!guard,
-// message_opt);. To examples strictly for the value true, use
+// message_opt);. To test strictly for the value true, use
 // assert.strictEqual(true, guard, message_opt);.
 
 function ok(value, message) {
@@ -349,13 +349,13 @@ function objEquiv(a, b, strict, actualVisitedObjects) {
   //the same set of keys (although not necessarily the same order),
   ka.sort();
   kb.sort();
-  //~~~cheap key examples
+  //~~~cheap key test
   for (i = ka.length - 1; i >= 0; i--) {
     if (ka[i] !== kb[i])
       return false;
   }
   //equivalent values for every corresponding key, and
-  //~~~possibly expensive deep examples
+  //~~~possibly expensive deep test
   for (i = ka.length - 1; i >= 0; i--) {
     key = ka[i];
     if (!_deepEqual(a[key], b[key], strict, actualVisitedObjects))
@@ -812,7 +812,7 @@ function fromString (string, encoding) {
   var actual = buf.write(string, encoding)
 
   if (actual !== length) {
-    // Writing a hex string, for examples, that contains invalid characters will
+    // Writing a hex string, for example, that contains invalid characters will
     // cause everything after the first invalid character to be ignored. (e.g.
     // 'abxxcd' will be treated as 'ab')
     buf = buf.slice(0, actual)
@@ -3223,7 +3223,7 @@ var substr = 'ab'.substr(-1) === 'b'
 // shim for using process in browser
 var process = module.exports = {};
 
-// cached from whatever global is present so that examples runners that stub it
+// cached from whatever global is present so that test runners that stub it
 // don't break things.  But we need to wrap it in a try catch in case it is
 // wrapped in strict mode code which doesn't define any globals.  It's inside a
 // function because try/catches deoptimize in certain engines.
@@ -4307,7 +4307,7 @@ Url.prototype.parse = function(url, parseQueryString, slashesDenoteHost) {
     // http://a@b?@c => user:a host:c path:/?@c
 
     // v0.12 TODO(isaacs): This is not quite how Chrome does things.
-    // Review our examples case against browsers more comprehensively.
+    // Review our test case against browsers more comprehensively.
 
     // find the first instance of any hostEndingChars
     var hostEnd = -1;
@@ -4381,7 +4381,7 @@ Url.prototype.parse = function(url, parseQueryString, slashesDenoteHost) {
               newpart += part[j];
             }
           }
-          // we examples again with ASCII char only
+          // we test again with ASCII char only
           if (!newpart.match(hostnamePartPattern)) {
             var validParts = hostparts.slice(0, i);
             var notHost = hostparts.slice(i + 1);
@@ -5501,7 +5501,7 @@ module.exports = PearPlayer;
 var md5 = require('blueimp-md5');
 var Dispatcher = require('./lib/dispatcher');
 var HttpDownloader = require('./lib/http-downloader');
-var JanusDownloader = require('./lib/webrtc-downloader-bin');
+var RTCDownloader = require('./lib/webrtc-downloader-bin');
 var getPeerId = require('./lib/peerid-generator');
 var url = require('url');
 var File = require('./lib/file');
@@ -5743,7 +5743,7 @@ PearPlayer.prototype.initJanus = function (message) {
         useMonitor: self.useMonitor
     };
 
-    var jd = new JanusDownloader(janus_config);
+    var jd = new RTCDownloader(janus_config);
     jd.messageFromJanus(message)
     jd.on('signal',function (message) {
         console.log('[jd] signal:' + JSON.stringify(message));
@@ -6261,7 +6261,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
                 if (hd.type === 'node' || hd.type === 'browser') {
                     self.fogDownloaded += end - start + 1;
                     self.emit('fograte', self.fogDownloaded/self.downloaded);
-                    self.emit('fogspeed', self.downloaders.getMeanSpeed(['node','browser','janus']));
+                    self.emit('fogspeed', self.downloaders.getMeanSpeed(['node','browser','datachannel']));
                     hd.type === 'node' ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
                 } else {
                     self.emit('cloudspeed', self.downloaders.getMeanSpeed(['server']));
@@ -6312,7 +6312,7 @@ Dispatcher.prototype._setupJanus = function (jd) {
                 console.log('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
                 self.emit('downloaded', self.downloaded/self.fileSize);
                 self.emit('fograte', self.fogDownloaded/self.downloaded);
-                self.emit('fogspeed', self.downloaders.getMeanSpeed(['node','browser','janus']));
+                self.emit('fogspeed', self.downloaders.getMeanSpeed(['node','browser','datachannel']));
                 self.bufferSources[index] = 'd';
                 self.emit('buffersources', self.bufferSources);
             }
@@ -6320,7 +6320,7 @@ Dispatcher.prototype._setupJanus = function (jd) {
             console.log('重复下载');
             jd.redundance ++;
             for (var k=0;k<self.downloaders.length;++k) {
-                if (self.downloaders[k].type === 'janus') {
+                if (self.downloaders[k].type === 'datachannel') {
                     self.downloaders[k].clearQueue();                //如果janus下载跟不上http,则清空下载队列
                 }
 
@@ -7247,21 +7247,21 @@ function getBrowserRTC () {
  }
  */
 
-module.exports = JanusDownloader;
+module.exports = RTCDownloader;
 
 var Buffer = require('buffer/').Buffer;
 var SimpleRTC = require('./simple-RTC');
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
 
-inherits(JanusDownloader, EventEmitter);
+inherits(RTCDownloader, EventEmitter);
 
-function JanusDownloader(config) {
+function RTCDownloader(config) {
     EventEmitter.call(this);
 
     var self = this;
 
-    self.type = 'janus';
+    self.type = 'datachannel';
     self.peer_id = config.peer_id;
     self.chunkSize = config.chunkSize || 1*1024*1024;
     self.uri = config.uri;
@@ -7288,7 +7288,7 @@ function JanusDownloader(config) {
 
 };
 
-JanusDownloader.prototype.messageFromJanus = function (message) {          //由服务器传来的janus的offer、peer_id、offer_id等信息
+RTCDownloader.prototype.messageFromJanus = function (message) {          //由服务器传来的janus的offer、peer_id、offer_id等信息
     var self = this;
 
     self.message = message;
@@ -7297,7 +7297,7 @@ JanusDownloader.prototype.messageFromJanus = function (message) {          //由
     self.simpleRTC.signal(message.sdp);
 };
 
-JanusDownloader.prototype.select = function (start,end) {
+RTCDownloader.prototype.select = function (start, end) {
     var self = this;
     console.log('pear_webrtc'+self.janus_id+'select:'+start+'-'+end);
     console.log('pear_webrtc ' + this.peer_id + ' queue:' + this.queue.length + ' weight:' + this.weight);
@@ -7317,7 +7317,7 @@ JanusDownloader.prototype.select = function (start,end) {
     }
 };
 
-JanusDownloader.prototype.startDownloading = function (start,end) {
+RTCDownloader.prototype.startDownloading = function (start, end) {
     var self = this;
 
     self.downloading = true;
@@ -7335,7 +7335,7 @@ JanusDownloader.prototype.startDownloading = function (start,end) {
     self.simpleRTC.send(JSON.stringify(str));
 };
 
-JanusDownloader.prototype._receive = function (chunk) {
+RTCDownloader.prototype._receive = function (chunk) {
     var self = this;
     // console.log('[simpleRTC] chunk type:'+typeof chunk);
 
@@ -7385,12 +7385,12 @@ JanusDownloader.prototype._receive = function (chunk) {
             self.startDownloading(pair[0], pair[1]);
         }
     } else {
-
+        console.log('RTC error msg:'+JSON.stringify(headerInfo));
         self.emit('error');
     }
 };
 
-JanusDownloader.prototype.close = function () {
+RTCDownloader.prototype.close = function () {
     var self = this;
 
     if (self.simpleRTC){
@@ -7398,7 +7398,7 @@ JanusDownloader.prototype.close = function () {
     }
 };
 
-JanusDownloader.prototype.clearQueue = function () {              //清空下载队列
+RTCDownloader.prototype.clearQueue = function () {              //清空下载队列
 
     this.downloading = false;
     if (this.queue.length > 0) {
@@ -7406,14 +7406,14 @@ JanusDownloader.prototype.clearQueue = function () {              //清空下载
     }
 };
 
-JanusDownloader.prototype._getHeaderInfo = function (uint8arr) {
+RTCDownloader.prototype._getHeaderInfo = function (uint8arr) {
 
     var sub = uint8arr.subarray(0, 256);
     var headerString =  String.fromCharCode.apply(String, sub);
     return JSON.parse(headerString.split('}')[0]+'}');
 };
 
-JanusDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
+RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
     var self = this;
 
     simpleRTC.on('data', function (data) {
@@ -8451,7 +8451,7 @@ function fromString (string, encoding) {
   var actual = buf.write(string, encoding)
 
   if (actual !== length) {
-    // Writing a hex string, for examples, that contains invalid characters will
+    // Writing a hex string, for example, that contains invalid characters will
     // cause everything after the first invalid character to be ignored. (e.g.
     // 'abxxcd' will be treated as 'ab')
     buf = buf.slice(0, actual)
@@ -11292,7 +11292,7 @@ function setopts (self, pattern, options) {
     self.root = self.root.replace(/\\/g, "/")
 
   // TODO: is an absolute `cwd` supposed to be resolved against `root`?
-  // e.g. { cwd: '/examples', root: __dirname } === path.join(__dirname, '/examples')
+  // e.g. { cwd: '/test', root: __dirname } === path.join(__dirname, '/test')
   self.cwdAbs = isAbsolute(self.cwd) ? self.cwd : makeAbs(self, self.cwd)
   if (process.platform === "win32")
     self.cwdAbs = self.cwdAbs.replace(/\\/g, "/")
@@ -11866,7 +11866,7 @@ Glob.prototype._processReaddir2 = function (prefix, read, abs, remain, index, in
     return cb()
   }
 
-  // now examples all matched entries as stand-ins for that part
+  // now test all matched entries as stand-ins for that part
   // of the pattern.
   remain.shift()
   for (var i = 0; i < len; i ++) {
@@ -12068,7 +12068,7 @@ Glob.prototype._processGlobStar2 = function (prefix, read, abs, remain, index, i
   if (!entries)
     return cb()
 
-  // examples without the globstar, and with every child both below
+  // test without the globstar, and with every child both below
   // and replacing the globstar.
   var remainWithoutGlobStar = remain.slice(1)
   var gspref = prefix ? [ prefix ] : []
@@ -12420,7 +12420,7 @@ GlobSync.prototype._processReaddir = function (prefix, read, abs, remain, index,
     return
   }
 
-  // now examples all matched entries as stand-ins for that part
+  // now test all matched entries as stand-ins for that part
   // of the pattern.
   remain.shift()
   for (var i = 0; i < len; i ++) {
@@ -12580,7 +12580,7 @@ GlobSync.prototype._processGlobStar = function (prefix, read, abs, remain, index
   if (!entries)
     return
 
-  // examples without the globstar, and with every child both below
+  // test without the globstar, and with every child both below
   // and replacing the globstar.
   var remainWithoutGlobStar = remain.slice(1)
   var gspref = prefix ? [ prefix ] : []
@@ -13812,7 +13812,7 @@ function match (f, partial) {
     f = f.split(path.sep).join('/')
   }
 
-  // treat the examples path as a set of pathparts.
+  // treat the test path as a set of pathparts.
   f = f.split(slashSplit)
   this.debug(this.pattern, 'split', f)
 
@@ -13851,7 +13851,7 @@ function match (f, partial) {
   return this.negate
 }
 
-// set partial to true to examples if, for examples,
+// set partial to true to test if, for example,
 // "/a/b" matches the start of "/*/b/*/d"
 // Partial means, if you run out of file before you run
 // out of pattern, then that's fine, as long as all
@@ -14133,7 +14133,7 @@ var TIME_OFFSET = 2082844800000
 
 /*
 TODO:
-examples these
+test these
 add new box versions
 */
 
@@ -17760,10 +17760,10 @@ function indexOf(xs, x) {
 // something with the data.  Sometimes it's called a "filter",
 // but that's not a great name for it, since that implies a thing where
 // some bits pass through, and others are simply ignored.  (That would
-// be a valid examples of a transform, of course.)
+// be a valid example of a transform, of course.)
 //
 // While the output is causally related to the input, it's not a
-// necessarily symmetric or synchronous transformation.  For examples,
+// necessarily symmetric or synchronous transformation.  For example,
 // a zlib stream might take multiple plain-text writes(), and then
 // emit a single compressed chunk some time in the future.
 //
@@ -17785,7 +17785,7 @@ function indexOf(xs, x) {
 // This way, back-pressure is actually determined by the reading side,
 // since _read has to be called to start processing a new chunk.  However,
 // a pathological inflate type of transform can cause excessive buffering
-// here.  For examples, imagine a stream where every byte of input is
+// here.  For example, imagine a stream where every byte of input is
 // interpreted as an integer from 0-255, and then results in that many
 // bytes of output.  Writing the 4 bytes {ff,ff,ff,ff} would result in
 // 1kb of data being output.  In this case, you could write a very small

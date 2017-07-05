@@ -7,7 +7,7 @@ module.exports = PearPlayer;
 var md5 = require('blueimp-md5');
 var Dispatcher = require('./lib/dispatcher');
 var HttpDownloader = require('./lib/http-downloader');
-var JanusDownloader = require('./lib/webrtc-downloader-bin');
+var RTCDownloader = require('./lib/webrtc-downloader-bin');
 var getPeerId = require('./lib/peerid-generator');
 var url = require('url');
 var File = require('./lib/file');
@@ -249,7 +249,7 @@ PearPlayer.prototype.initJanus = function (message) {
         useMonitor: self.useMonitor
     };
 
-    var jd = new JanusDownloader(janus_config);
+    var jd = new RTCDownloader(janus_config);
     jd.messageFromJanus(message)
     jd.on('signal',function (message) {
         console.log('[jd] signal:' + JSON.stringify(message));
