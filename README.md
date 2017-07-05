@@ -32,7 +32,7 @@
 ### 导入js文件并绑定video标签
 首先通过script标签导入pear-player.min.js：
 ```html
-<script src="./dest/pear-player.min.js"></script>
+<script src="./dist/pear-player.min.js"></script>
 ```
 或者使用CDN：
 ```html
