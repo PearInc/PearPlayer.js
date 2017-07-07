@@ -70,7 +70,8 @@ PearPlayer.prototype._start = function () {
     var self = this;
 
     self._getNodes(self.token, function (nodes) {
-        // console.log('_getNodes:');
+        console.log('_getNodes:'+JSON.stringify(nodes));
+        // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
         if (nodes) {
             self._startPlaying(nodes);
         } else {
@@ -133,9 +134,9 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                     var type = nodes[i].type;
                     var path = self.urlObj.host + self.urlObj.path;
                     var url = protocol+'://'+host+'/'+path;
-                    if (!self.nodeSet.has(host)) {
+                    if (!self.nodeSet.has(url)) {
                         allNodes.push({uri: url, type: type});
-                        self.nodeSet.add(host);
+                        self.nodeSet.add(url);
                     }
                 }
 
@@ -298,7 +299,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     self.isPlaying = true;
 
     //{errCode: 1, errMsg: 'This browser do not support WebRTC communication'}
-    d.on('ready', function (chunks) {
+    d.once('ready', function (chunks) {
 
         self.emit('begin', self.fileLength, chunks);
     });
@@ -306,9 +307,9 @@ PearPlayer.prototype._startPlaying = function (nodes) {
         console.log('dispatcher error!');
         // d.destroy();
         // self._fallBack();
-        var hd = new HttpDownloader(self.src, 'server');
-        // d.addNodes([{uri: self.src, type: 'server'}]);
-        d.addNode(hd);
+        // var hd = new HttpDownloader(self.src, 'server');
+        // // d.addNodes([{uri: self.src, type: 'server'}]);
+        // d.addNode(hd);
     });
     d.on('needmorenodes', function () {
         console.log('request more nodes');
@@ -327,6 +328,18 @@ PearPlayer.prototype._startPlaying = function (nodes) {
         });
 
     });
+    d.on('needsource', function () {
+
+        if (!self.nodeSet.has(self.src)) {
+            var hd = new HttpDownloader(self.src, 'server');
+            d.addNode(hd);
+            console.log('dispatcher add source:'+self.src);
+            self.nodeSet.add(self.src);
+        }
+
+
+    });
+
     d.on('needmoredatachannels', function () {
         console.log('request more datachannels');
         if (self.websocket && self.websocket.readyState === WebSocket.OPEN) {
@@ -341,7 +354,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
             }));
         }
     });
-    d.on('done', function () {
+    d.once('done', function () {
 
         self.emit('done');
     });

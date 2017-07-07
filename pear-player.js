@@ -5564,7 +5564,8 @@ PearPlayer.prototype._start = function () {
     var self = this;
 
     self._getNodes(self.token, function (nodes) {
-        // console.log('_getNodes:');
+        console.log('_getNodes:'+JSON.stringify(nodes));
+        // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
         if (nodes) {
             self._startPlaying(nodes);
         } else {
@@ -5627,9 +5628,9 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                     var type = nodes[i].type;
                     var path = self.urlObj.host + self.urlObj.path;
                     var url = protocol+'://'+host+'/'+path;
-                    if (!self.nodeSet.has(host)) {
+                    if (!self.nodeSet.has(url)) {
                         allNodes.push({uri: url, type: type});
-                        self.nodeSet.add(host);
+                        self.nodeSet.add(url);
                     }
                 }
 
@@ -5792,7 +5793,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     self.isPlaying = true;
 
     //{errCode: 1, errMsg: 'This browser do not support WebRTC communication'}
-    d.on('ready', function (chunks) {
+    d.once('ready', function (chunks) {
 
         self.emit('begin', self.fileLength, chunks);
     });
@@ -5800,9 +5801,9 @@ PearPlayer.prototype._startPlaying = function (nodes) {
         console.log('dispatcher error!');
         // d.destroy();
         // self._fallBack();
-        var hd = new HttpDownloader(self.src, 'server');
-        // d.addNodes([{uri: self.src, type: 'server'}]);
-        d.addNode(hd);
+        // var hd = new HttpDownloader(self.src, 'server');
+        // // d.addNodes([{uri: self.src, type: 'server'}]);
+        // d.addNode(hd);
     });
     d.on('needmorenodes', function () {
         console.log('request more nodes');
@@ -5821,6 +5822,18 @@ PearPlayer.prototype._startPlaying = function (nodes) {
         });
 
     });
+    d.on('needsource', function () {
+
+        if (!self.nodeSet.has(self.src)) {
+            var hd = new HttpDownloader(self.src, 'server');
+            d.addNode(hd);
+            console.log('dispatcher add source:'+self.src);
+            self.nodeSet.add(self.src);
+        }
+
+
+    });
+
     d.on('needmoredatachannels', function () {
         console.log('request more datachannels');
         if (self.websocket && self.websocket.readyState === WebSocket.OPEN) {
@@ -5835,7 +5848,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
             }));
         }
     });
-    d.on('done', function () {
+    d.once('done', function () {
 
         self.emit('done');
     });
@@ -5948,10 +5961,12 @@ function Dispatcher(config) {
     self._colddown = 5;                        //窗口滑动的冷却时间
     self.bufferSources = new Array(self.chunks);    //记录每个buffer下载的方式
     self.slide = null;
+    self.bufferingCount = 0;                   //视频卡的次数
 
     //firstaid参数自适应
     self._windowLength = 5;
     self.downloaders = [];
+    self.bitrate = 0;                         //码率
 };
 
 Dispatcher.prototype._init = function () {
@@ -5986,9 +6001,10 @@ Dispatcher.prototype._init = function () {
     self.video = document.querySelector(self.elem);
     self.video.addEventListener('loadedmetadata', function () {
 
-        console.log('loadedmetadata duration:' + self.video.duration);
-        self._windowLength = Math.ceil(self.fileSize/self.video.duration * 10 /self.pieceLength);       //根据码率和时间间隔来计算窗口长度
-        console.log('self._windowLength:' + self._windowLength);
+        console.info('loadedmetadata duration:' + self.video.duration);
+        self.bitrate = Math.ceil(self.fileSize/self.video.duration);
+        self._windowLength = Math.ceil(self.bitrate * 10 / self.pieceLength);       //根据码率和时间间隔来计算窗口长度
+        console.info('self._windowLength:' + self._windowLength);
         if (self._windowLength < 3) {
             self._windowLength = 3;
         } else if (self._windowLength > 10) {
@@ -5996,7 +6012,7 @@ Dispatcher.prototype._init = function () {
         }
     });
     self.video.addEventListener('seeked',function () {
-        console.log('video seeked');
+        console.info('video seeked');
 
         var currentTime = Math.floor(self.video.currentTime);
         for (var index=0;index<self.video.buffered.length;++index) {
@@ -6020,11 +6036,22 @@ Dispatcher.prototype._init = function () {
     });
     self.video.addEventListener('waiting', function () {
 
-        console.log('waiting for buffer');
+        console.info('waiting for buffer');
         // self.requestMoreNodes();
         self.sortDownloaders();                              //根据平均速度和类型算出的权重从大到小排列
         for (var j=0;j<self.downloaders.length;++j) {
             console.log('downloaders type:' + self.downloaders[j].type + ' mean speed:' +self.downloaders[j].meanSpeed);
+        }
+        if (self.downloaders.length === 1) {               //如果只有一个downloader,则改为串行下载
+            self.downloaders[0].isAsync = false;
+        }
+        self.bufferingCount ++;
+        console.info('bufferingCount:' + self.bufferingCount);
+        if (self.bufferingCount >= 10) {
+            self.startFrom(0, false);
+            self.autoSlide();
+            self.slide = noop;
+            self.bufferingCount = Number.MIN_VALUE;
         }
 
     });
@@ -6074,9 +6101,8 @@ Dispatcher.prototype.deStartFrom = function (start, priority) {
 Dispatcher.prototype._slide = function () {
     var self = this;
 
-    console.log('[dispatcher] slide window downloader length:'+self.downloaders.length);
-    // console.log(new Date());
     if (self.done) return;
+    console.log('[dispatcher] slide window downloader length:'+self.downloaders.length);
     self._fillWindow();
 };
 
@@ -6200,14 +6226,16 @@ Dispatcher.prototype._fillWindow = function () {
 
     var count = 0;
     var index = self._windowOffset;
-    console.log('_fillWindow index:'+index);
+
     while (count !== self._windowLength){
 
         if (index >= self.chunks){
 
             break;
         }
+
         if (!self.bitfield.get(index)) {
+
             var pair = self._calRange(index);
             var node = self._getNodes(count);    //prefetch
             console.log('node type:'+node.type);
@@ -6231,14 +6259,14 @@ Dispatcher.prototype._setupHttp = function (hd) {
         // console.log('httpDownloader ondone');
 
     });
-    hd.on('error',function (error) {
+    hd.on('error', function (error) {
 
-        console.log('hd error!');
+        console.warn('hd error!');
 
-        if (self.downloaders.length >= 3) {
+        if (self.downloaders.length > 2) {
             self.downloaders.removeObj(hd);
         }
-        self.requestMoreNodes();                  //节点不够,重新请求
+        self.checkoutDownloaders();
     });
     hd.on('data',function (buffer, start, end, speed) {
 
@@ -6330,14 +6358,26 @@ Dispatcher.prototype._setupJanus = function (jd) {
     });
 
     jd.on('error', function () {
-        console.log('jd error');
-        if (self.downloaders.length >= 3) {
+        console.warn('jd error');
+
+        if (self.downloaders.length > 2) {
             self.downloaders.removeObj(jd);
         }
-        // self.requestMoreNodes();                  //节点不够,重新请求
-        self.requestMoreDataChannels();
+        self.checkoutDownloaders();
+
     });
 };
+
+Dispatcher.prototype.checkoutDownloaders = function () {
+
+    if (this.downloaders.length <= 3) {
+        this.requestMoreNodes();
+        this.requestMoreDataChannels();
+        if (this.downloaders.length <= 2 && this._windowLength / this.downloaders.length >= 2) {
+            this.emit('needsource');
+        }
+    }
+}
 
 Dispatcher.prototype.addDataChannel = function (dc) {          //TODO:让每个新加入的节点都有至少一次下载机会
 
@@ -6392,7 +6432,7 @@ Dispatcher.prototype.destroy = function () {
 
     self.store = null;
     // self.video = null;
-    console.log('Dispatcher destroyed');
+    console.info('Dispatcher destroyed');
 };
 
 Dispatcher.prototype._throttle = function (method, context) {
@@ -6427,7 +6467,7 @@ Dispatcher.prototype._shouldFetchNextSegment = function() {
     try {
         return (this.video.buffered.end(this._bufferedPos) - this.video.currentTime) < this._slideInterval;
     } catch (e) {
-        console.log('_shouldFetchNextSegment exception');
+        console.warn('_shouldFetchNextSegment exception');
         return true;
     }
 };
@@ -6504,7 +6544,6 @@ function FileStream (file, opts) {
         : file.length - 1;
 
     var pieceLength = file._dispatcher.pieceLength;
-
     this._startPiece = (start + file.offset) / pieceLength | 0;                 //start和end的单位应该是byte
     this._endPiece = (end + file.offset) / pieceLength | 0;
 
@@ -6632,8 +6671,8 @@ function File (dispatcher, file){
 
 File.prototype.createReadStream = function (opts) {
     var self = this;
-
-    // console.log('createReadStream start:' + opts.start?opts.start:0);
+    opts = opts || {};
+    console.log('createReadStream start:' +  opts.start?opts.start:0);
     if (this.length === 0) {
         var empty = new stream.PassThrough();
         process.nextTick(function () {
@@ -6677,9 +6716,9 @@ var inherits = require('inherits');
 
 inherits(HttpDownloader, EventEmitter);
 
-function HttpDownloader(uri, type) {
+function HttpDownloader(uri, type, opts) {
     EventEmitter.call(this);
-
+    opts = opts || {};
     this.uri = uri;
     this.type = type;               //server node  browser
     this.downloading = false;       //是否正在下载
@@ -6691,22 +6730,26 @@ function HttpDownloader(uri, type) {
     this.counter = 0;               //记录下载的次数
     this.weight = type === 'server' ? 0.7 : 1.0;           //下载排序时的权重系数
     this.redundance = 0;            //记录重复下载的次数
+    this.isAsync = opts.isAsync || false;                  //默认并行下载
 };
 
 HttpDownloader.prototype.select = function (start, end) {
 
     // if (end < start) throw new Error('end must larger than start');
     // this.emit('start',start,end);
-    console.log('HttpDownloader ' + this.uri + ' select:' + start + '-' +end);
-    console.log('HttpDownloader ' + this.uri + ' queue:' + this.queue.length + ' weight:' + this.weight);
-    if (this.downloading){
-        this.queue.push([start,end]);
-    } else {
+    console.log('HttpDownloader ' + this.uri + ' select:' + start + '-' +end + ' weight:' + this.weight);
+    if (this.isAsync) {                               //并行
         this._getChunk(start, end);
+    } else {　　　　　　　　　　　　　　　　　　　　　　　　 //串行
+        if (this.downloading){
+            this.queue.push([start,end]);
+        } else {
+            this._getChunk(start, end);
+        }
     }
-    if (this.redundance >= 3) {
-        this.weight -= 0.1;
-        this.redundance --;
+    if (this.redundance >= 1) {
+        this.weight -= 0.2;
+        this.redundance  = 0;
         if (this.weight < 0.1) {
             this.emit('error');
         }
@@ -6755,9 +6798,11 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
             // console.log('http speed:' + self.speed + 'KB/s');
             self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
             console.log('http '+self.uri+' meanSpeed:' + self.meanSpeed + 'KB/s');
-            if (self.queue.length > 0){             //如果下载队列不为空
-                var pair = self.queue.shift();
-                self._getChunk(pair[0], pair[1]);
+            if (!self.isAsync) {
+                if (self.queue.length > 0){             //如果下载队列不为空
+                    var pair = self.queue.shift();
+                    self._getChunk(pair[0], pair[1]);
+                }
             }
             var range = this.getResponseHeader("Content-Range").split(" ",2)[1].split('/',1)[0];
             // console.log('xhr.onload range:'+range);
