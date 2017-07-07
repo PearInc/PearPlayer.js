@@ -26,6 +26,7 @@
 - 经过严格测试，稳定可靠
 - 支持Chrome、Firefox、Opera等主流浏览器
 - 可选接入低成本、高可用性的Pear [FogVDN](https://github.com/PearInc/FogVDN)
+- 像使用HTML5 <video>标签一样简单，并容易与video.js等流行播放框架集成
 
 ## 使用方法
 
