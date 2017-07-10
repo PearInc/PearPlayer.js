@@ -99,6 +99,10 @@ xhr.send(data);
 - [WebTorrent](https://github.com/webtorrent/webtorrent)
 - [Peer5](https://www.peer5.com/#)
 
+### 媒体报道
+
+- June 2017 (腾讯web前端大会) - [基于WebRTC的P2P-CDN流媒体加速](http://www.itdks.com/dakashuo/new/dakalive/detail/2577)
+
 ### License
 
 MIT. Copyright (c) [Pear Limited](https://pear.hk) and [Xie Ting](https://github.com/snowinszu).
