@@ -78,11 +78,11 @@ var PearPlayer = require('PearPlayer');
 ## `player.on('buffersources', function (bufferSources) {})`
 
 每下载一个buffer都会触发该事件，bufferSources是一个bitmap，每个元素代表该buffer是从哪个源下载的，有以下几种取值：
-null: 该处的buffer还未下载
-s: server，从服务器端下载（HTTP协议）
-n: node，从节点下载（HTTP协议）
-d: data channel，从节点下载（WebRTC协议）
-b: browser，从其它浏览器下载（WebRTC协议）
+null: 该处的buffer还未下载<br/>
+s: server，从服务器端下载（HTTP协议）<br/>
+n: node，从节点下载（HTTP协议）<br/>
+d: data channel，从节点下载（WebRTC协议）<br/>
+b: browser，从其它浏览器下载（WebRTC协议）<br/>
 
 ## `player.on('exception', onException)`
 
