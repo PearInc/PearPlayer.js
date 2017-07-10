@@ -49,7 +49,7 @@ function PearPlayer(selector,token, opts) {
     self.nodes = [];
     self.websocket = null;
     self.dispatcher = null;
-    self.JDMap = {};                           //根据janus的peer_id来获取jd的map
+    self.JDMap = {};                           //根据dc的peer_id来获取jd的map
     self.nodeSet = new Set();                  //保存node的set
 
     self.dispatcherConfig = {
@@ -225,24 +225,24 @@ PearPlayer.prototype._pearSignalHandshake = function () {
             var node = nodes[i];
             if (!node.errorcode) {
                 if (dcCount === self.dataChannels) break;
-                console.log('janus message:'+JSON.stringify(node))
+                console.log('dc message:'+JSON.stringify(node))
                 if (!self.JDMap[node.peer_id]) {
-                    self.JDMap[node.peer_id] = self.initJanus(node);
+                    self.JDMap[node.peer_id] = self.initDC(node);
                     dcCount ++;
                 } else {
                     console.log('datachannel 重复');
                 }
             } else {
-                console.log('janus error message:'+JSON.stringify(message))
+                console.log('dc error message:'+JSON.stringify(message))
             }
         }
     };
 };
 
-PearPlayer.prototype.initJanus = function (message) {
+PearPlayer.prototype.initDC = function (message) {
     var self = this;
 
-    var janus_config = {
+    var dc_config = {
         peer_id: self.peerId,
         chunkSize: 32*1024,
         host: self.urlObj.host,
@@ -250,8 +250,8 @@ PearPlayer.prototype.initJanus = function (message) {
         useMonitor: self.useMonitor
     };
 
-    var jd = new RTCDownloader(janus_config);
-    jd.messageFromJanus(message)
+    var jd = new RTCDownloader(dc_config);
+    jd.messageFromDC(message)
     jd.on('signal',function (message) {
         console.log('[jd] signal:' + JSON.stringify(message));
         self.websocket.send(JSON.stringify(message));
@@ -292,17 +292,18 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     var d = new Dispatcher(self.dispatcherConfig);
     self.dispatcher = d;
 
+    //{errCode: 1, errMsg: 'This browser do not support WebRTC communication'}
+    d.once('ready', function (chunks) {
+
+        self.emit('begin', self.fileLength, chunks);
+    });
+
     var file = new File(d, fileConfig);
 
     file.renderTo(self.selector, {autoplay: self.autoPlay});
 
     self.isPlaying = true;
 
-    //{errCode: 1, errMsg: 'This browser do not support WebRTC communication'}
-    d.once('ready', function (chunks) {
-
-        self.emit('begin', self.fileLength, chunks);
-    });
     d.on('error', function () {
         console.log('dispatcher error!');
         // d.destroy();
