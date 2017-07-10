@@ -15,7 +15,8 @@
 
 只需将`pear-player.min.js`通过`<script>`标签导入到HTML就可以使用。 参考以下[代码示例](#使用方法)，也可以查看[`/examples/test.html`](/examples/test.html)来了解使用方法。
 
-信令部分以及WebRTC部分我们使用了自己精心设计的协议，实现此部分可以参考我们的API文档。
+信令部分以及WebRTC部分我们使用了自己精心设计的协议，实现此部分可以参考我们的API文档。<br/>
+demo演示地址：[https://qq.webrtc.win/watch](https://qq.webrtc.win/watch/)
 
 ### 特性
 
