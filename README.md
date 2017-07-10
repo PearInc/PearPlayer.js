@@ -102,6 +102,7 @@ xhr.send(data);
 ### 媒体报道
 
 - June 2017 (腾讯Web前端大会) - [基于WebRTC的P2P-CDN流媒体加速](http://www.itdks.com/dakashuo/new/dakalive/detail/2577)
+- July 2017 (oschina开源中国) - 即将报道
 
 ### License
 
