@@ -106,7 +106,7 @@ xhr.send(data);
 
 ### License
 
-MIT. Copyright (c) [Pear Limited](https://pear.hk) and [谢庭](https://github.com/snowinszu).
+MIT. Copyright (c) [Pear Limited](https://pear.hk) and [谢 庭](https://github.com/snowinszu).
 
 ### 商务合作
 CP/CDN接入、OEM与其他商务合作请联系：E-mail: service@pear.hk；QQ群：373594967
