@@ -20,10 +20,10 @@
 ### 特性
 
 - P2P能力基于**WebRTC**，无须安装任何插件
-- **播放流畅，加载快速**
+- **播放流畅，加载快速**，严格测试，稳定可靠
 - 多协议(HTTP、HTTPS、WebRTC)、多源
 - 自行研发的调度算法，在保证用户流畅视频体验的前提下最大化P2P率
-- 经过严格测试，稳定可靠
+- 默认无需填参数（内部根据视频码率等作自适应），高级使用模式可自行调整算法和参数
 - 支持Chrome、Firefox、Opera等主流浏览器
 - 可选接入低成本、高可用性的Pear [FogVDN](https://github.com/PearInc/FogVDN)
 - 像使用HTML5 `<video>`标签一样简单，并容易与[video.js](https://github.com/videojs/video.js)等流行播放框架集成
