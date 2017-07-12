@@ -27,6 +27,7 @@ demo演示地址：[https://qq.webrtc.win/watch](https://qq.webrtc.win/watch/)
 - 默认无需填参数（内部根据视频码率等作自适应），高级使用模式可自行调整算法和参数
 - 支持Chrome、Firefox、Opera等主流浏览器，不久将支持腾讯微信、X5/TBS、Safari
 - 可选接入低成本、高可用性的Pear [FogVDN](https://github.com/PearInc/FogVDN)
+- 协议默认通过TLS/DTLS全加密，无DPI特征；并可通过Pear Fog组件的动态端口映射进一步消除统计学特征
 - 像使用HTML5 `<video>`标签一样简单，并容易与[video.js](https://github.com/videojs/video.js)等流行播放框架集成
 
 ## 使用方法
@@ -95,7 +96,7 @@ xhr.send(data);
 - **[阅读API文档](docs/api.md)**
 
 ### 致谢
-特别感谢以下项目，为我们提供了技术参考以及灵感来源。
+特别感谢以下项目，为我们提供了部分灵感来源以及API设计参考：
 
 - [WebTorrent](https://github.com/webtorrent/webtorrent)
 - [Peer5](https://www.peer5.com/#)
