@@ -104,7 +104,7 @@ xhr.send(data);
 ### 媒体报道
 
 - June 2017 (腾讯Web前端大会) - [基于WebRTC的P2P-CDN流媒体加速](http://www.itdks.com/dakashuo/new/dakalive/detail/2577)
-- July 2017 (oschina开源中国) - [PearPlayer.js —— 混合P2P-CDN的流媒体播放器
+- July 2017 (OSChina开源中国) - [PearPlayer.js —— 混合P2P-CDN的流媒体播放器
 ](https://www.oschina.net/p/PearPlayerjs)
 
 ### License
