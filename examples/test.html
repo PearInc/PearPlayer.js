@@ -35,7 +35,7 @@
                     auto: false,                //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,如果是fmp4建议设为true,默认false
                     slideInterval: 15,          //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
                     useDataChannel: true,       //是否开启data channel,默认true
-                    dataChannels: 4,            //创建data channel的最大数量,默认3
+                    dataChannels: 2,            //创建data channel的最大数量,默认2
                     useMonitor: true             //是否开启monitor,会稍微影响性能,默认true
                 });
 
@@ -47,7 +47,7 @@
                 player.on('fograte', onWebRTCRate);　　　　　　　　　 //fog节点的下载比率（下载的字节数除以总的字节数）
                 player.on('buffersources', onBufferSources);       //buffer map，记录每个buffer的下载源类型，其中s: server   n: node  d: data channel  b: browser
                 player.on('done', onDone);　　　　　　　　           //结束下载时触发
-
+                player.on('traffic', onTraffic);                  //节点流量统计
             }
         } else {
             alert('请求出错!');
@@ -92,6 +92,10 @@
     function onBufferSources(bufferSources) {            //s: server   n: node  d: data channel  b: browser
         console.log('Current Buffer Sources:' + bufferSources);
     }
+    function onTraffic(mac, downloaded, type) {
+        console.log('type:'+type+' mac:'+mac+' downloaded:'+downloaded/1024/1024+'MB');
+    }
+
 </script>
 </body>
 

@@ -42,7 +42,7 @@ function PearPlayer(selector,token, opts) {
     self.useMonitor = (opts.useMonitor === false)? false : true;
     self.autoPlay = (opts.autoplay === false)? false : true;
     self.params = opts.params || {};
-    self.dataChannels = opts.dataChannels || 3;
+    self.dataChannels = opts.dataChannels || 2;
     self.peerId = getPeerId();
     self.isPlaying = false;
     self.fileLength = 0;
@@ -68,26 +68,24 @@ function PearPlayer(selector,token, opts) {
 
 PearPlayer.prototype._start = function () {
     var self = this;
-
+    if (!getBrowserRTC()) {
+        self.emit('exception', {errCode: 1, errMsg: 'This browser do not support WebRTC communication'});
+        alert('This browser do not support WebRTC communication');
+        self.useDataChannel = false;
+    }
+    if (!window.WebSocket) {
+        self.useDataChannel = false;
+    }
     self._getNodes(self.token, function (nodes) {
         console.log('_getNodes:'+JSON.stringify(nodes));
         // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
         if (nodes) {
             self._startPlaying(nodes);
+            if (self.useDataChannel) {
+                self._pearSignalHandshake();
+            }
         } else {
             self._fallBack();
-        }
-
-        if (!getBrowserRTC()) {
-            self.emit('exception', {errCode: 1, errMsg: 'This browser do not support WebRTC communication'});
-            alert('This browser do not support WebRTC communication');
-            self.useDataChannel = false;
-        }
-        if (!window.WebSocket) {
-            self.useDataChannel = false;
-        }
-        if (self.useDataChannel) {
-            self._pearSignalHandshake();
         }
     });
 };
@@ -384,7 +382,10 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
         self.emit('buffersources', bufferSources);
     });
+    d.on('traffic', function (mac, downloaded, type) {
 
+        self.emit('traffic', mac, downloaded, type);
+    });
 };
 
 function getBrowserRTC () {

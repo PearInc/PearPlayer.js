@@ -43,7 +43,7 @@ function PearPlayer(selector,token, opts) {
     self.useMonitor = (opts.useMonitor === false)? false : true;
     self.autoPlay = (opts.autoplay === false)? false : true;
     self.params = opts.params || {};
-    self.dataChannels = opts.dataChannels || 3;
+    self.dataChannels = opts.dataChannels || 2;
     self.peerId = getPeerId();
     self.isPlaying = false;
     self.fileLength = 0;
@@ -69,26 +69,24 @@ function PearPlayer(selector,token, opts) {
 
 PearPlayer.prototype._start = function () {
     var self = this;
-
+    if (!getBrowserRTC()) {
+        self.emit('exception', {errCode: 1, errMsg: 'This browser do not support WebRTC communication'});
+        alert('This browser do not support WebRTC communication');
+        self.useDataChannel = false;
+    }
+    if (!window.WebSocket) {
+        self.useDataChannel = false;
+    }
     self._getNodes(self.token, function (nodes) {
         console.log('_getNodes:'+JSON.stringify(nodes));
         // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
         if (nodes) {
             self._startPlaying(nodes);
+            if (self.useDataChannel) {
+                self._pearSignalHandshake();
+            }
         } else {
             self._fallBack();
-        }
-
-        if (!getBrowserRTC()) {
-            self.emit('exception', {errCode: 1, errMsg: 'This browser do not support WebRTC communication'});
-            alert('This browser do not support WebRTC communication');
-            self.useDataChannel = false;
-        }
-        if (!window.WebSocket) {
-            self.useDataChannel = false;
-        }
-        if (self.useDataChannel) {
-            self._pearSignalHandshake();
         }
     });
 };
@@ -385,7 +383,10 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
         self.emit('buffersources', bufferSources);
     });
+    d.on('traffic', function (mac, downloaded, type) {
 
+        self.emit('traffic', mac, downloaded, type);
+    });
 };
 
 function getBrowserRTC () {
@@ -798,6 +799,8 @@ Dispatcher.prototype._setupHttp = function (hd) {
             if (self.useMonitor) {
                 self.downloaded += end - start + 1;
                 self.emit('downloaded', self.downloaded/self.fileSize);
+                hd.downloaded += end - start + 1;
+                self.emit('traffic', hd.mac, hd.downloaded, 'http');
                 console.log('ondata hd.type:' + hd.type +' index:' + index);
                 if (hd.type === 'node' || hd.type === 'browser') {
                     self.fogDownloaded += end - start + 1;
@@ -856,6 +859,8 @@ Dispatcher.prototype._setupDC = function (jd) {
                 self.emit('fogspeed', self.downloaders.getMeanSpeed(['node','browser','datachannel']));
                 self.bufferSources[index] = 'd';
                 self.emit('buffersources', self.bufferSources);
+                jd.downloaded += end - start + 1;
+                self.emit('traffic', jd.mac, jd.downloaded, 'datachannel');
             }
         } else {
             console.log('重复下载');
@@ -1168,7 +1173,7 @@ function File (dispatcher, file){
 
     this._startPiece = start / this._dispatcher.pieceLength | 0;
     this._endPiece = end / this._dispatcher.pieceLength | 0;
-    console.log('file _startPiece'+this._startPiece+' _endPiece:'+this._endPiece);
+    // console.log('file _startPiece'+this._startPiece+' _endPiece:'+this._endPiece);
 
     if (this.length === 0) {
         this.done = true;
@@ -1183,7 +1188,7 @@ function File (dispatcher, file){
 File.prototype.createReadStream = function (opts) {
     var self = this;
     opts = opts || {};
-    console.log('createReadStream start:' +  opts.start?opts.start:0);
+    // console.log('createReadStream start:' +  opts.start?opts.start:0);
     if (this.length === 0) {
         var empty = new stream.PassThrough();
         process.nextTick(function () {
@@ -1242,6 +1247,21 @@ function HttpDownloader(uri, type, opts) {
     this.weight = type === 'server' ? 0.7 : 1.0;           //下载排序时的权重系数
     this.redundance = 0;            //记录重复下载的次数
     this.isAsync = opts.isAsync || false;                  //默认并行下载
+    //节点流量统计
+    var rawMac = this.uri.split('.')[0].split('//')[1];
+    var count = 0;
+    this.downloaded = 0;
+    this.mac = '';
+    for (var i=0;i<rawMac.length;++i) {
+        count ++;
+        this.mac = this.mac + rawMac[i];
+        if (count === 2) {
+            this.mac = this.mac + ':';
+            count = 0;
+        }
+    }
+    this.mac = this.mac.substring(0, this.mac.length-1);
+    console.log('HttpDownloader mac:'+this.mac);
 };
 
 HttpDownloader.prototype.select = function (start, end) {
@@ -1841,6 +1861,8 @@ function RTCDownloader(config) {
     self._setupSimpleRTC(self.simpleRTC);
 
     self.dc_id = '';                             //对等端的id
+    self.downloaded = 0;
+    self.mac = '';
 
 };
 
@@ -1896,14 +1918,14 @@ RTCDownloader.prototype._receive = function (chunk) {
     // console.log('[simpleRTC] chunk type:'+typeof chunk);
 
     var uint8 = new Uint8Array(chunk);
-    console.log('uint8.length:'+uint8.length);
+    // console.log('uint8.length:'+uint8.length);
     // if (!uint8) {
     //     self.emit('error');
     //     return;
     // }
 
     var headerInfo = self._getHeaderInfo(uint8);
-    console.log('headerInfo:'+JSON.stringify(headerInfo));
+    // console.log('headerInfo:'+JSON.stringify(headerInfo));
     if (headerInfo) {
 
         if (headerInfo.value){
@@ -1977,7 +1999,7 @@ RTCDownloader.prototype._getHeaderInfo = function (uint8arr) {
 
     var sub = uint8arr.subarray(0, 256);
     var headerString =  String.fromCharCode.apply(String, sub);
-    console.log('headerString:'+headerString)
+    // console.log('headerString:'+headerString)
     return JSON.parse(headerString.split('}')[0]+'}');
 };
 
@@ -2001,7 +2023,8 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
             "to_peer_id":self.message.peer_id,
             "offer_id":self.message.offer_id
         };
-
+        self.mac = self.message.peer_id;
+        // console.log('webrtc mac:'+self.mac);
         if (data.type == 'answer'){
             message.action = 'answer';
             message.sdps = data;
