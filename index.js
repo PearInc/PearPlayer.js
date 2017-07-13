@@ -39,7 +39,7 @@ function PearPlayer(selector,token, opts) {
     self.urlObj = url.parse(self.src);
     self.token = token;
     self.useDataChannel = (opts.useDataChannel === false)? false : true;
-    self.useMonitor = (opts.useMonitor === false)? false : true;
+    self.useMonitor = (opts.useMonitor === true)? true : false;
     self.autoPlay = (opts.autoplay === false)? false : true;
     self.params = opts.params || {};
     self.dataChannels = opts.dataChannels || 2;

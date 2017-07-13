@@ -70,15 +70,12 @@ There is a complete example in [examples/test.html](examples/test.html)。
 var player = new PearPlayer('#pearvideo', token, {      //第一个参数为video标签的id或class
                     type: 'mp4',                 //播放视频的类型,目前只能是mp4
                     src: 'https://qq.webrtc.win/tv/pear001.mp4',  //视频播放的src
-                    useMonitor: true             //是否开启monitor,会稍微影响性能,默认true
+                    useMonitor: true             //是否开启monitor,会稍微影响性能,默认false
                 });
 
 player.on('exception', onException);
 player.on('begin', onBegin);
 player.on('progress', onProgress);
-player.on('cloudspeed', onCloudSpeed);
-player.on('fogspeed', onFogSpeed);
-player.on('fograte', onWebRTCRate);
 player.on('buffersources', onBufferSources);               //s: server   n: node  d: data channel  b: browser
 player.on('done', onDone);
                 
@@ -88,18 +85,6 @@ function onBegin(fileLength, chunks) {
 
 function onProgress(downloaded) {
     console.log('Progress: ' + (downloaded * 100).toFixed(1) + '%');
-}
-
-function onCloudSpeed(speed) {
-    console.log('Cloud download speed: ' + speed + 'KBps');
-}
-
-function onFogSpeed(speed) {
-    console.log('Fog download speed: ' + speed + 'KBps');
-}
-
-function onWebRTCRate(p2pRate) {
-    console.log('Fog Rate: ' + (p2pRate * 100).toFixed(1) + '%');
 }
 
 function onDone() {

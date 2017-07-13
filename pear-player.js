@@ -40,7 +40,7 @@ function PearPlayer(selector,token, opts) {
     self.urlObj = url.parse(self.src);
     self.token = token;
     self.useDataChannel = (opts.useDataChannel === false)? false : true;
-    self.useMonitor = (opts.useMonitor === false)? false : true;
+    self.useMonitor = (opts.useMonitor === true)? true : false;
     self.autoPlay = (opts.autoplay === false)? false : true;
     self.params = opts.params || {};
     self.dataChannels = opts.dataChannels || 2;
@@ -443,7 +443,7 @@ function Dispatcher(config) {
     self.pieceLength = config.chunkSize || 1*1024*1024;
     self.interval = config.interval || 10000;
     self._slideInterval = config.slideInterval || 20;
-    self.auto = config.auto || false;
+    self.auto = config.auto || true;
     self.useMonitor = config.useMonitor || false;
     self.downloaded = 0;
     self.fogDownloaded = 0;                         //通过data channel下载的字节数
@@ -1790,7 +1790,21 @@ SimpleRTC.prototype.close = function () {
 
     if (this.peerConnection){
         this.peerConnection.close();
+        clearInterval(this.timer);
     }
+};
+
+SimpleRTC.prototype.startHeartbeat = function () {
+    var self = this;
+    var heartbeat = {
+        action: 'ping'
+    };
+
+    this.timer = setInterval(function () {
+        console.log(JSON.stringify(heartbeat));
+        self.send(JSON.stringify(heartbeat));
+
+    }, 30*1000);
 };
 
 
@@ -1925,7 +1939,7 @@ RTCDownloader.prototype._receive = function (chunk) {
     // }
 
     var headerInfo = self._getHeaderInfo(uint8);
-    // console.log('headerInfo:'+JSON.stringify(headerInfo));
+    console.log('headerInfo:'+JSON.stringify(headerInfo));
     if (headerInfo) {
 
         if (headerInfo.value){
@@ -1965,10 +1979,12 @@ RTCDownloader.prototype._receive = function (chunk) {
             }
 
             self.emit('data',Buffer.concat(finalArray), self.start, self.end, self.speed);
-            if (self.queue.length>0){             //如果下载队列不为空
+            if (self.queue.length>0) {             //如果下载队列不为空
                 var pair = self.queue.shift();
                 self.startDownloading(pair[0], pair[1]);
             }
+        } else if (headerInfo.action) {
+             //心跳信息
         } else {
             console.log('RTC error msg:'+JSON.stringify(headerInfo));
             self.emit('error');
@@ -2039,7 +2055,7 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
     simpleRTC.on('connect', function (state) {
         console.log('[datachannel] '+self.dc_id+' CONNECT');
         // simpleRTC.send('[simpleRTC] PEER CONNECTED!');
-
+        simpleRTC.startHeartbeat();                          //开始周期性发送心跳信息
         if (!self.connectFlag){
             self.emit('connect',state);
             self.connectFlag = true;
