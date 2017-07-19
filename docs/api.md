@@ -43,10 +43,10 @@ var PearPlayer = require('PearPlayer');
   algorithm: 'firstaid',      //核心算法,默认firstaid
   autoplay: true,             //是否自动播放视频,默认true
   interval: 5000,             //滑动窗口的时间间隔,单位毫秒,默认10s
-  auto: false,                //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,默认true
+  auto: false,                //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,默认false
   slideInterval: 15,          //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
   useDataChannel: true,       //是否开启data channel,默认true
-  dataChannels: 4,            //创建data channel的最大数量,默认3
+  dataChannels: 4,            //创建data channel的最大数量,默认2
   useMonitor: true            //是否开启monitor,会稍微影响性能,默认false，只有开启useMonitor才能监听事件
 }
 ```

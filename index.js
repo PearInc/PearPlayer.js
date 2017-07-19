@@ -60,7 +60,7 @@ function PearPlayer(selector,token, opts) {
         auto: opts.auto,
         useMonitor: self.useMonitor
     };
-    console.log('self.dispatcherConfig:'+self.dispatcherConfig.chunkSize);
+    // console.log('self.dispatcherConfig:'+self.dispatcherConfig.chunkSize);
 
     self._start();
 
@@ -126,18 +126,21 @@ PearPlayer.prototype._getNodes = function (token, cb) {
             } else {
                 var nodes = res.nodes;
                 var allNodes = [];
+                var isHTTP = location.protocol === 'http:' ? true : false;
                 for (var i=0; i<nodes.length; ++i){
                     var protocol = nodes[i].protocol;
-                    var host = nodes[i].host;
-                    var type = nodes[i].type;
-                    var path = self.urlObj.host + self.urlObj.path;
-                    var url = protocol+'://'+host+'/'+path;
-                    if (!self.nodeSet.has(url)) {
-                        allNodes.push({uri: url, type: type});
-                        self.nodeSet.add(url);
+                    if (isHTTP || protocol !== 'http') {
+                        var host = nodes[i].host;
+                        var type = nodes[i].type;
+                        var path = self.urlObj.host + self.urlObj.path;
+                        var url = protocol+'://'+host+'/'+path;
+                        if (!self.nodeSet.has(url)) {
+                            allNodes.push({uri: url, type: type});
+                            self.nodeSet.add(url);
+                        }
                     }
                 }
-
+                console.log('allNodes:'+JSON.stringify(allNodes));
                 // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
                 // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
                 // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
@@ -150,8 +153,13 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                         self.fileLength = fileLength;
                         console.log('nodeFilter fileLength:'+fileLength);
                         // self.nodes = nodes;
-                        if (length === 1) {
+                        if (length <= 2) {
                             // fallBack(nodes[0]);
+                            nodes.push({uri: self.src, type: 'server'});
+                            cb(nodes);
+                            // self._fallBack();           //test
+                        } else if (nodes.length >= 20){
+                            nodes = nodes.slice(0, 20);
                             cb(nodes);
                         } else {
                             cb(nodes);
@@ -171,6 +179,7 @@ PearPlayer.prototype._getNodes = function (token, cb) {
 };
 
 PearPlayer.prototype._fallBack = function (url) {
+    var self = this;
 
     if (this.isPlaying) return;
     if (url) {
@@ -181,6 +190,25 @@ PearPlayer.prototype._fallBack = function (url) {
     if (this.autoPlay) {
         this.video.play();
     }
+
+    // nodeFilter([{uri: this.src, type: 'server'}], function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+    //
+    //     var length = nodes.length;
+    //     console.log('nodes:'+JSON.stringify(nodes));
+    //
+    //     if (length) {
+    //         self.fileLength = fileLength;
+    //         console.log('nodeFilter fileLength:'+fileLength);
+    //         self._startPlaying(nodes);
+    //         if (self.useDataChannel) {
+    //             self._pearSignalHandshake();
+    //         }
+    //     } else {
+    //         // self._fallBack();
+    //         self.emit('exception', {errCode: 2, errMsg: 'Access video source fail'});
+    //     }
+    // });
+
     this.isPlaying = true;
 };
 

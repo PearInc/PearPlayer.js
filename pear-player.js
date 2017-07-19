@@ -61,7 +61,7 @@ function PearPlayer(selector,token, opts) {
         auto: opts.auto,
         useMonitor: self.useMonitor
     };
-    console.log('self.dispatcherConfig:'+self.dispatcherConfig.chunkSize);
+    // console.log('self.dispatcherConfig:'+self.dispatcherConfig.chunkSize);
 
     self._start();
 
@@ -127,18 +127,21 @@ PearPlayer.prototype._getNodes = function (token, cb) {
             } else {
                 var nodes = res.nodes;
                 var allNodes = [];
+                var isHTTP = location.protocol === 'http:' ? true : false;
                 for (var i=0; i<nodes.length; ++i){
                     var protocol = nodes[i].protocol;
-                    var host = nodes[i].host;
-                    var type = nodes[i].type;
-                    var path = self.urlObj.host + self.urlObj.path;
-                    var url = protocol+'://'+host+'/'+path;
-                    if (!self.nodeSet.has(url)) {
-                        allNodes.push({uri: url, type: type});
-                        self.nodeSet.add(url);
+                    if (isHTTP || protocol !== 'http') {
+                        var host = nodes[i].host;
+                        var type = nodes[i].type;
+                        var path = self.urlObj.host + self.urlObj.path;
+                        var url = protocol+'://'+host+'/'+path;
+                        if (!self.nodeSet.has(url)) {
+                            allNodes.push({uri: url, type: type});
+                            self.nodeSet.add(url);
+                        }
                     }
                 }
-
+                console.log('allNodes:'+JSON.stringify(allNodes));
                 // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
                 // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
                 // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
@@ -151,8 +154,13 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                         self.fileLength = fileLength;
                         console.log('nodeFilter fileLength:'+fileLength);
                         // self.nodes = nodes;
-                        if (length === 1) {
+                        if (length <= 2) {
                             // fallBack(nodes[0]);
+                            nodes.push({uri: self.src, type: 'server'});
+                            cb(nodes);
+                            // self._fallBack();           //test
+                        } else if (nodes.length >= 20){
+                            nodes = nodes.slice(0, 20);
                             cb(nodes);
                         } else {
                             cb(nodes);
@@ -172,6 +180,7 @@ PearPlayer.prototype._getNodes = function (token, cb) {
 };
 
 PearPlayer.prototype._fallBack = function (url) {
+    var self = this;
 
     if (this.isPlaying) return;
     if (url) {
@@ -182,6 +191,25 @@ PearPlayer.prototype._fallBack = function (url) {
     if (this.autoPlay) {
         this.video.play();
     }
+
+    // nodeFilter([{uri: this.src, type: 'server'}], function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+    //
+    //     var length = nodes.length;
+    //     console.log('nodes:'+JSON.stringify(nodes));
+    //
+    //     if (length) {
+    //         self.fileLength = fileLength;
+    //         console.log('nodeFilter fileLength:'+fileLength);
+    //         self._startPlaying(nodes);
+    //         if (self.useDataChannel) {
+    //             self._pearSignalHandshake();
+    //         }
+    //     } else {
+    //         // self._fallBack();
+    //         self.emit('exception', {errCode: 2, errMsg: 'Access video source fail'});
+    //     }
+    // });
+
     this.isPlaying = true;
 };
 
@@ -443,7 +471,7 @@ function Dispatcher(config) {
     self.pieceLength = config.chunkSize || 1*1024*1024;
     self.interval = config.interval || 10000;
     self._slideInterval = config.slideInterval || 20;
-    self.auto = config.auto || true;
+    self.auto = config.auto || false;
     self.useMonitor = config.useMonitor || false;
     self.downloaded = 0;
     self.fogDownloaded = 0;                         //通过data channel下载的字节数
@@ -616,7 +644,7 @@ Dispatcher.prototype._slide = function () {
     var self = this;
 
     if (self.done) return;
-    console.log('[dispatcher] slide window downloader length:'+self.downloaders.length);
+    // console.log('[dispatcher] slide window downloader length:'+self.downloaders.length);
     self._fillWindow();
 };
 
@@ -752,7 +780,7 @@ Dispatcher.prototype._fillWindow = function () {
 
             var pair = self._calRange(index);
             var node = self._getNodes(count);    //prefetch
-            console.log('node type:'+node.type);
+            console.log('_getNodes node type:'+node.type);
             node.select(pair[0],pair[1]);
             count ++;
         } else {
@@ -877,8 +905,9 @@ Dispatcher.prototype._setupDC = function (jd) {
 
     jd.on('error', function () {
         console.warn('jd error');
+        jd.close();
         self.downloaders.removeObj(jd);
-
+        self._windowLength --;
         self.checkoutDownloaders();
 
     });
@@ -897,11 +926,13 @@ Dispatcher.prototype.checkoutDownloaders = function () {
 
 Dispatcher.prototype.addDataChannel = function (dc) {          //TODO:让每个新加入的节点都有至少一次下载机会
 
-    this.downloaders.push(dc);
+    // this.downloaders.push(dc);
+    this.downloaders.splice(this._windowLength,0,dc);
+    this._windowLength ++;
+    console.log('addDataChannel _windowLength:' + this._windowLength);
     this._setupDC(dc);
     console.log('addDataChannel now:'+this.downloaders.length);
     for (var i=0;i<this.downloaders.length;++i) {
-        console.log('666');
         console.log('downloader type:'+this.downloaders[i].type);
     }
 };
@@ -1939,7 +1970,7 @@ RTCDownloader.prototype._receive = function (chunk) {
     // }
 
     var headerInfo = self._getHeaderInfo(uint8);
-    console.log('headerInfo:'+JSON.stringify(headerInfo));
+    // console.log('headerInfo:'+JSON.stringify(headerInfo));
     if (headerInfo) {
 
         if (headerInfo.value){
