@@ -780,7 +780,7 @@ Dispatcher.prototype._fillWindow = function () {
 
             var pair = self._calRange(index);
             var node = self._getNodes(count);    //prefetch
-            console.log('_getNodes node type:'+node.type);
+            console.log('_getNodes windowLength:'+self._windowLength);
             node.select(pair[0],pair[1]);
             count ++;
         } else {
@@ -1934,6 +1934,13 @@ RTCDownloader.prototype.select = function (start, end) {
     if (self.redundance >= 3) {
         self.weight -= 0.1;
         self.redundance --;
+        if (self.weight < 0.1) {
+            self.emit('error');
+        }
+    }
+    if (self.queue.length >= 3) {
+        self.clearQueue();
+        self.weight -= 0.1;
         if (self.weight < 0.1) {
             self.emit('error');
         }
