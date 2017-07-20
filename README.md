@@ -18,7 +18,7 @@
 
 只需将`pear-player.min.js`通过`<script>`标签导入到HTML就可以使用。 参考以下[代码示例](#使用方法)，也可以查看[`/examples/test.html`](/examples/test.html)来了解使用方法。
 
-信令部分以及WebRTC部分我们使用了自己精心设计的协议，实现此部分可以参考我们的[API文档](docs/get-started.md)。<br/>
+信令部分以及WebRTC部分使用了精心设计的协议，实现此部分可以参考[API文档](docs/get-started.md)。<br/>
 Demo演示地址：[https://qq.webrtc.win/watch](https://qq.webrtc.win/watch/)
 
 ### 特性
@@ -63,8 +63,8 @@ var player = new PearPlayer('#pearvideo', token, opts);
 恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！
 
 ### 获取token
-在使用PearPlayer之前，需要获取token，通过调用我们提供的API接口（/v1/customer/login）并传入用户名和密码，
-我们已经为访客提供了测试帐号（用户名：test　密码：123456），获取token的示例代码如下：
+在使用PearPlayer之前，需要获取token，通过调用提供的API接口（/v1/customer/login）并传入用户名和密码，
+这里已经为访客提供了测试帐号（用户名：test　密码：123456），获取token的示例代码如下：
 ```js
 var xhr = new XMLHttpRequest();
 xhr.open("POST", 'https://api.webrtc.win:6601/v1/customer/login');
@@ -100,7 +100,7 @@ xhr.send(data);
 - **[阅读API文档](docs/api.md)**
 
 ### 致谢
-特别感谢以下项目，为我们提供了部分灵感来源以及API设计参考：
+特别感谢以下项目，为本项目提供了部分灵感来源以及API设计参考：
 
 - [WebTorrent](https://github.com/webtorrent/webtorrent)
 - [Peer5](https://www.peer5.com/#)
