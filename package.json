@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "dependencies": {
+    "babili": "^0.1.4",
     "blueimp-md5": "^2.7.0",
     "buffer": "^5.0.6",
     "end-of-stream": "^1.4.0",
@@ -32,7 +33,7 @@
   "scripts": {
     "test": "",
     "build": "browserify index.js -s PearPlayer > pear-player.js",
-    "gulp": "gulp"
+    "uglify": "browserify -s PearPlayer -e ./ | babili > ./dist/pear-player.min.js"
   },
   "author": "Xie Ting Pear Limited",
   "license": "ISC",

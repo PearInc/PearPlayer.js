@@ -15,12 +15,13 @@ var nodeFilter = require('./lib/node-filter');
 var inherits = require('inherits');
 var EventEmitter = require('events').EventEmitter;
 var Set = require('./lib/set');
+var WebTorrent = require('./lib/pear-torrent');
 
 var BLOCK_LENGTH = 32 * 1024;
 
 inherits(PearPlayer, EventEmitter);
 
-function PearPlayer(selector,token, opts) {
+function PearPlayer(selector, token, opts) {
     var self = this;
     if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
     EventEmitter.call(self);
@@ -40,8 +41,10 @@ function PearPlayer(selector,token, opts) {
     self.token = token;
     self.useDataChannel = (opts.useDataChannel === false)? false : true;
     self.useMonitor = (opts.useMonitor === true)? true : false;
+    self.useTorrent = (opts.useTorrent === false)? false : true;
+    self.magnetURI = opts.magnetURI || undefined;
+    self.trackers = opts.trackers && Array.isArray(opts.trackers) && opts.trackers.length > 0 ? opts.trackers : null;
     self.autoPlay = (opts.autoplay === false)? false : true;
-    self.params = opts.params || {};
     self.dataChannels = opts.dataChannels || 2;
     self.peerId = getPeerId();
     self.isPlaying = false;
@@ -81,9 +84,9 @@ PearPlayer.prototype._start = function () {
         // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
         if (nodes) {
             self._startPlaying(nodes);
-            if (self.useDataChannel) {
-                self._pearSignalHandshake();
-            }
+            // if (self.useDataChannel) {
+            //     self._pearSignalHandshake();
+            // }
         } else {
             self._fallBack();
         }
@@ -126,17 +129,24 @@ PearPlayer.prototype._getNodes = function (token, cb) {
             } else {
                 var nodes = res.nodes;
                 var allNodes = [];
-                var isHTTP = location.protocol === 'http:' ? true : false;
+                var isLocationHTTP = location.protocol === 'http:' ? true : false;
                 for (var i=0; i<nodes.length; ++i){
                     var protocol = nodes[i].protocol;
-                    if (isHTTP || protocol !== 'http') {
-                        var host = nodes[i].host;
-                        var type = nodes[i].type;
-                        var path = self.urlObj.host + self.urlObj.path;
-                        var url = protocol+'://'+host+'/'+path;
-                        if (!self.nodeSet.has(url)) {
-                            allNodes.push({uri: url, type: type});
-                            self.nodeSet.add(url);
+                    if (protocol === 'webtorrent') {
+                        if (!self.magnetURI) {                     //如果用户没有指定magnetURI
+                            self.magnetURI = nodes[i].magnet_uri;
+                            console.log('_getNodes magnetURI:'+nodes[i].magnet_uri);
+                        }
+                    } else {
+                        if (isLocationHTTP || protocol !== 'http') {
+                            var host = nodes[i].host;
+                            var type = nodes[i].type;
+                            var path = self.urlObj.host + self.urlObj.path;
+                            var url = protocol+'://'+host+'/'+path;
+                            if (!self.nodeSet.has(url)) {
+                                allNodes.push({uri: url, type: type});
+                                self.nodeSet.add(url);
+                            }
                         }
                     }
                 }
@@ -322,6 +332,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     d.once('ready', function (chunks) {
 
         self.emit('begin', self.fileLength, chunks);
+
     });
 
     var file = new File(d, fileConfig);
@@ -338,6 +349,37 @@ PearPlayer.prototype._startPlaying = function (nodes) {
         // // d.addNodes([{uri: self.src, type: 'server'}]);
         // d.addNode(hd);
     });
+
+    d.on('loadedmetadata', function () {
+
+        if (self.useDataChannel) {
+            self._pearSignalHandshake();
+        }
+
+        if (self.useTorrent && self.magnetURI) {
+            var client = new WebTorrent();
+            client.on('error', function () {
+
+            });
+            console.log('magnetURI:'+self.magnetURI);
+            client.add(self.magnetURI, {
+                    announce: self.trackers || [
+                        "wss://tracker.openwebtorrent.com",
+                        "wss://tracker.btorrent.xyz",
+                        "wss://tracker.fastcast.nz"
+                    ],
+                    store: d.store,
+                    bitfield: d.bitfield
+                },
+                function (torrent) {
+                    console.log('Torrent:', torrent);
+
+                    d.addTorrent(torrent);
+                }
+            );
+        }
+    });
+
     d.on('needmorenodes', function () {
         console.log('request more nodes');
         self._getNodes(self.token, function (nodes) {
@@ -426,8 +468,3 @@ function getBrowserRTC () {
     return wrtc
 }
 
-
-
-/**
- * Created by snow on 17-6-28.
- */
