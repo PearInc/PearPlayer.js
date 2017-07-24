@@ -46,12 +46,6 @@ xhr.onload = function () {
                 type: 'mp4',                           //播放视频的类型，目前只能是mp4
                 algorithm: 'firstaid',                 //核心算法,默认firstaid
                 autoplay: true,                        //是否自动播发视频，默认true
-                chunkSize: 1*1024*1024,                //每个chunk的大小，必须是32K的整数倍,默认1M
-                interval: 5000,                        //滑动窗口的时间间隔,单位毫秒，默认10s
-                auto: false,                           //true为连续下载buffer，false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer，如果是fmp4建议设为true，默认false
-                slideInterval: 10,                     //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
-                useDataChannel: true,                  //是否开启Datachannel,默认true
-                dataChannels: 1,                       //创建DataChannel的最大数量,默认3
                 useMonitor: true                       //是否开启monitor，会稍微影响性能，默认true
             });
         }
