@@ -544,7 +544,6 @@ function Dispatcher(config) {
 
     //webtorrent
     self.torrent = null;
-    self.torrentOffsetTime = 50;                   //torrent开始下载的时间偏移量，单位秒
 };
 
 Dispatcher.prototype._init = function () {
@@ -582,8 +581,6 @@ Dispatcher.prototype._init = function () {
         console.info('loadedmetadata duration:' + self.video.duration);
         self.bitrate = Math.ceil(self.fileSize/self.video.duration);
         self._windowLength = Math.ceil(self.bitrate * 10 / self.pieceLength);       //根据码率和时间间隔来计算窗口长度
-        self.torrentOffset = Math.ceil(self.bitrate * self.torrentOffsetTime / self.pieceLength);   //torrent开始下载的位置偏移量
-        console.info('self.torrentOffset:' + self.torrentOffset);
         if (self._windowLength < 3) {
             self._windowLength = 3;
         } else if (self._windowLength > 10) {
@@ -971,14 +968,14 @@ Dispatcher.prototype.checkoutDownloaders = function () {
 
 Dispatcher.prototype.addTorrent = function (torrent) {
     var self = this;
-    console.log('torrent.pieces.length:'+torrent.pieces.length+' chunks:'+this.chunks);
-    if (this.video.duration <= this.torrentOffsetTime || torrent.pieces.length !== this.chunks || this.torrentOffset >= this.chunks-1)
-        return;
+    // console.log('torrent.pieces.length:'+torrent.pieces.length+' chunks:'+this.chunks);
+    if (torrent.pieces.length !== this.chunks) return;
     this.torrent = torrent;
-    console.log('torrent select from:'+self.torrentOffset+' to:'+torrent.pieces.length);
-    torrent.select(self.torrentOffset, torrent.pieces.length-1, 1000, function () {
+    if (self._windowOffset + 10 < torrent.pieces.length-1) {
+        torrent.select(self._windowOffset+10, torrent.pieces.length-1, 1000, function () {
 
-    });
+        });
+    }
     torrent.on('piecefromtorrent', function (index) {
 
         console.log('piecefromtorrent:'+index);
@@ -3634,7 +3631,7 @@ Torrent.prototype._request = function (wire, index, hotswap) {
         }
         self.bitfield.set(index, true)
         self.store.put(index, buf)
-
+        // console.log('self.store.put:'+index);
         self.wires.forEach(function (wire) {
           wire.have(index)
         })
@@ -5088,7 +5085,7 @@ SimpleRTC.prototype.startHeartbeat = function () {
         console.log(JSON.stringify(heartbeat));
         self.send(JSON.stringify(heartbeat));
 
-    }, 30*1000);
+    }, 90*1000);
 };
 
 
@@ -5303,7 +5300,7 @@ RTCDownloader.prototype.clearQueue = function () {              //清空下载�
 };
 
 RTCDownloader.prototype._getHeaderInfo = function (uint8arr) {
-
+    // console.log('_getHeaderInfo mac:'+this.mac);
     var sub = uint8arr.subarray(0, 256);
     var headerString =  String.fromCharCode.apply(String, sub);
     // console.log('headerString:'+headerString)
@@ -5344,7 +5341,7 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
         self.emit('signal',message);
     });
     simpleRTC.on('connect', function (state) {
-        console.log('[datachannel] '+self.dc_id+' CONNECT');
+        console.info('[datachannel] '+self.dc_id+' CONNECT');
         // simpleRTC.send('[simpleRTC] PEER CONNECTED!');
         simpleRTC.startHeartbeat();                          //开始周期性发送心跳信息
         if (!self.connectFlag){
