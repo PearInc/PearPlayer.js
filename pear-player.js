@@ -865,15 +865,15 @@ Dispatcher.prototype._setupHttp = function (hd) {
             }
             self._checkDone();
             if (self.useMonitor) {
-                self.downloaded += end - start + 1;
+                self.downloaded += self.pieceLength;
                 self.emit('downloaded', self.downloaded/self.fileSize);
-                hd.downloaded += end - start + 1;
+                hd.downloaded += self.pieceLength;
                 self.emit('traffic', hd.mac, hd.downloaded, 'http');
                 console.log('ondata hd.type:' + hd.type +' index:' + index);
                 if (hd.type === 'node' || hd.type === 'browser') {
-                    self.fogDownloaded += end - start + 1;
+                    self.fogDownloaded += self.pieceLength;
                     self.emit('fograte', self.fogDownloaded/self.downloaded);
-                    self.emit('fogspeed', self.downloaders.getMeanSpeed(['node','browser','datachannel']));
+                    self.emit('fogspeed', self.downloaders.getMeanSpeed(['node', 'datachannel']));
                     hd.type === 'node' ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
                 } else {
                     self.emit('cloudspeed', self.downloaders.getMeanSpeed(['server']));
@@ -919,15 +919,15 @@ Dispatcher.prototype._setupDC = function (jd) {
             }
             self._checkDone();
             if (self.useMonitor) {
-                self.downloaded += end - start + 1;
-                self.fogDownloaded += end - start + 1;
+                self.downloaded += self.pieceLength;
+                self.fogDownloaded += self.pieceLength;
                 console.log('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
                 self.emit('downloaded', self.downloaded/self.fileSize);
                 self.emit('fograte', self.fogDownloaded/self.downloaded);
                 self.emit('fogspeed', self.downloaders.getMeanSpeed(['node','browser','datachannel']));
                 self.bufferSources[index] = 'd';
                 self.emit('buffersources', self.bufferSources);
-                jd.downloaded += end - start + 1;
+                jd.downloaded += self.pieceLength;
                 self.emit('traffic', jd.mac, jd.downloaded, 'datachannel');
             }
         } else {
@@ -971,6 +971,7 @@ Dispatcher.prototype.addTorrent = function (torrent) {
     // console.log('torrent.pieces.length:'+torrent.pieces.length+' chunks:'+this.chunks);
     if (torrent.pieces.length !== this.chunks) return;
     this.torrent = torrent;
+    torrent.pear_downloaded = 0;
     if (self._windowOffset + 10 < torrent.pieces.length-1) {
         torrent.select(self._windowOffset+10, torrent.pieces.length-1, 1000, function () {
 
@@ -982,13 +983,15 @@ Dispatcher.prototype.addTorrent = function (torrent) {
         if (self.useMonitor) {
             self.downloaded += self.pieceLength;
             self.fogDownloaded += self.pieceLength;
-            console.log('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
+            torrent.pear_downloaded += self.pieceLength;
+            // console.log('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
             self.emit('downloaded', self.downloaded/self.fileSize);
             self.emit('fograte', self.fogDownloaded/self.downloaded);
-            // self.emit('fogspeed', self.downloaders.getMeanSpeed(['node','browser','datachannel']));  //TODO
+            // console.log('torrent.downloadSpeed:'+torrent.downloadSpeed/1024);
+            self.emit('fogspeed', self.downloaders.getMeanSpeed(['node', 'datachannel']) + torrent.downloadSpeed/1024);
             self.bufferSources[index] = 'b';
             self.emit('buffersources', self.bufferSources);
-            // self.emit('traffic', jd.mac, jd.downloaded, 'datachannel');                    //TODO
+            self.emit('traffic', 'webtorrent', torrent.pear_downloaded, 'browser');
         }
     });
 
@@ -1354,19 +1357,8 @@ function HttpDownloader(uri, type, opts) {
     this.redundance = 0;            //记录重复下载的次数
     this.isAsync = opts.isAsync || false;                  //默认并行下载
     //节点流量统计
-    var rawMac = this.uri.split('.')[0].split('//')[1];
-    var count = 0;
     this.downloaded = 0;
-    this.mac = '';
-    for (var i=0;i<rawMac.length;++i) {
-        count ++;
-        this.mac = this.mac + rawMac[i];
-        if (count === 2) {
-            this.mac = this.mac + ':';
-            count = 0;
-        }
-    }
-    this.mac = this.mac.substring(0, this.mac.length-1);
+    this.mac = this.uri.split('.')[0].split('//')[1];
     console.log('HttpDownloader mac:'+this.mac);
 };
 
@@ -5327,7 +5319,7 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
             "to_peer_id":self.message.peer_id,
             "offer_id":self.message.offer_id
         };
-        self.mac = self.message.peer_id;
+        self.mac = self.message.peer_id.replace(/:/g, '');
         // console.log('webrtc mac:'+self.mac);
         if (data.type == 'answer'){
             message.action = 'answer';
