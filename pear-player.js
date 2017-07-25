@@ -16,12 +16,13 @@ var nodeFilter = require('./lib/node-filter');
 var inherits = require('inherits');
 var EventEmitter = require('events').EventEmitter;
 var Set = require('./lib/set');
+var WebTorrent = require('./lib/pear-torrent');
 
 var BLOCK_LENGTH = 32 * 1024;
 
 inherits(PearPlayer, EventEmitter);
 
-function PearPlayer(selector,token, opts) {
+function PearPlayer(selector, token, opts) {
     var self = this;
     if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
     EventEmitter.call(self);
@@ -41,8 +42,10 @@ function PearPlayer(selector,token, opts) {
     self.token = token;
     self.useDataChannel = (opts.useDataChannel === false)? false : true;
     self.useMonitor = (opts.useMonitor === true)? true : false;
+    self.useTorrent = (opts.useTorrent === false)? false : true;
+    self.magnetURI = opts.magnetURI || undefined;
+    self.trackers = opts.trackers && Array.isArray(opts.trackers) && opts.trackers.length > 0 ? opts.trackers : null;
     self.autoPlay = (opts.autoplay === false)? false : true;
-    self.params = opts.params || {};
     self.dataChannels = opts.dataChannels || 2;
     self.peerId = getPeerId();
     self.isPlaying = false;
@@ -82,9 +85,9 @@ PearPlayer.prototype._start = function () {
         // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
         if (nodes) {
             self._startPlaying(nodes);
-            if (self.useDataChannel) {
-                self._pearSignalHandshake();
-            }
+            // if (self.useDataChannel) {
+            //     self._pearSignalHandshake();
+            // }
         } else {
             self._fallBack();
         }
@@ -127,17 +130,24 @@ PearPlayer.prototype._getNodes = function (token, cb) {
             } else {
                 var nodes = res.nodes;
                 var allNodes = [];
-                var isHTTP = location.protocol === 'http:' ? true : false;
+                var isLocationHTTP = location.protocol === 'http:' ? true : false;
                 for (var i=0; i<nodes.length; ++i){
                     var protocol = nodes[i].protocol;
-                    if (isHTTP || protocol !== 'http') {
-                        var host = nodes[i].host;
-                        var type = nodes[i].type;
-                        var path = self.urlObj.host + self.urlObj.path;
-                        var url = protocol+'://'+host+'/'+path;
-                        if (!self.nodeSet.has(url)) {
-                            allNodes.push({uri: url, type: type});
-                            self.nodeSet.add(url);
+                    if (protocol === 'webtorrent') {
+                        if (!self.magnetURI) {                     //如果用户没有指定magnetURI
+                            self.magnetURI = nodes[i].magnet_uri;
+                            console.log('_getNodes magnetURI:'+nodes[i].magnet_uri);
+                        }
+                    } else {
+                        if (isLocationHTTP || protocol !== 'http') {
+                            var host = nodes[i].host;
+                            var type = nodes[i].type;
+                            var path = self.urlObj.host + self.urlObj.path;
+                            var url = protocol+'://'+host+'/'+path;
+                            if (!self.nodeSet.has(url)) {
+                                allNodes.push({uri: url, type: type});
+                                self.nodeSet.add(url);
+                            }
                         }
                     }
                 }
@@ -323,6 +333,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     d.once('ready', function (chunks) {
 
         self.emit('begin', self.fileLength, chunks);
+
     });
 
     var file = new File(d, fileConfig);
@@ -339,6 +350,37 @@ PearPlayer.prototype._startPlaying = function (nodes) {
         // // d.addNodes([{uri: self.src, type: 'server'}]);
         // d.addNode(hd);
     });
+
+    d.on('loadedmetadata', function () {
+
+        if (self.useDataChannel) {
+            self._pearSignalHandshake();
+        }
+
+        if (self.useTorrent && self.magnetURI) {
+            var client = new WebTorrent();
+            client.on('error', function () {
+
+            });
+            console.log('magnetURI:'+self.magnetURI);
+            client.add(self.magnetURI, {
+                    announce: self.trackers || [
+                        "wss://tracker.openwebtorrent.com",
+                        "wss://tracker.btorrent.xyz",
+                        "wss://tracker.fastcast.nz"
+                    ],
+                    store: d.store,
+                    bitfield: d.bitfield
+                },
+                function (torrent) {
+                    console.log('Torrent:', torrent);
+
+                    d.addTorrent(torrent);
+                }
+            );
+        }
+    });
+
     d.on('needmorenodes', function () {
         console.log('request more nodes');
         self._getNodes(self.token, function (nodes) {
@@ -428,12 +470,7 @@ function getBrowserRTC () {
 }
 
 
-
-/**
- * Created by snow on 17-6-28.
- */
-
-},{"./lib/dispatcher":2,"./lib/file":4,"./lib/http-downloader":5,"./lib/node-filter":6,"./lib/peerid-generator":7,"./lib/set":8,"./lib/webrtc-downloader-bin":10,"blueimp-md5":15,"events":84,"inherits":33,"url":94}],2:[function(require,module,exports){
+},{"./lib/dispatcher":2,"./lib/file":4,"./lib/http-downloader":5,"./lib/node-filter":12,"./lib/pear-torrent":14,"./lib/peerid-generator":15,"./lib/set":16,"./lib/webrtc-downloader-bin":18,"blueimp-md5":33,"events":123,"inherits":48,"url":152}],2:[function(require,module,exports){
 (function (process){
 
 /*
@@ -447,7 +484,7 @@ function getBrowserRTC () {
  interval: number,     //滑动窗口的时间间隔,单位毫秒,默认10s
  auto: boolean,       //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,默认false
  slideInterval: number,  //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
- useMonitor: boolean         //开启监控器,默认关闭
+ useMonitor: boolean      //开启监控器,默认关闭
  }
  */
 module.exports = Dispatcher;
@@ -484,8 +521,8 @@ function Dispatcher(config) {
     self.chunks = (config.fileSize % self.pieceLength)>0 ? Math.floor((config.fileSize / self.pieceLength)) +1:
         (config.fileSize / self.pieceLength);
 
-    self._startPiece = 0;
-    self._endPiece = (self.fileSize-1)/self.pieceLength;
+    // self._startPiece = 0;
+    // self._endPiece = (self.fileSize-1)/self.pieceLength;
 
     self._selections = [];                           //下载队列
     self._store = FSChunkStore;
@@ -504,6 +541,9 @@ function Dispatcher(config) {
     self._windowLength = 5;
     self.downloaders = [];
     self.bitrate = 0;                         //码率
+
+    //webtorrent
+    self.torrent = null;
 };
 
 Dispatcher.prototype._init = function () {
@@ -541,12 +581,12 @@ Dispatcher.prototype._init = function () {
         console.info('loadedmetadata duration:' + self.video.duration);
         self.bitrate = Math.ceil(self.fileSize/self.video.duration);
         self._windowLength = Math.ceil(self.bitrate * 10 / self.pieceLength);       //根据码率和时间间隔来计算窗口长度
-        console.info('self._windowLength:' + self._windowLength);
         if (self._windowLength < 3) {
             self._windowLength = 3;
         } else if (self._windowLength > 10) {
             self._windowLength = 10;
         }
+        self.emit('loadedmetadata');
     });
     self.video.addEventListener('seeked',function () {
         console.info('video seeked');
@@ -770,7 +810,7 @@ Dispatcher.prototype._fillWindow = function () {
     var index = self._windowOffset;
 
     while (count !== self._windowLength){
-
+        console.log('_fillWindow _windowLength:'+self._windowLength);
         if (index >= self.chunks){
 
             break;
@@ -779,8 +819,8 @@ Dispatcher.prototype._fillWindow = function () {
         if (!self.bitfield.get(index)) {
 
             var pair = self._calRange(index);
-            var node = self._getNodes(count);    //prefetch
-            console.log('_getNodes windowLength:'+self._windowLength);
+            var node = self._getNodes(count);
+            // console.log('_getNodes windowLength:'+self._windowLength);
             node.select(pair[0],pair[1]);
             count ++;
         } else {
@@ -825,15 +865,15 @@ Dispatcher.prototype._setupHttp = function (hd) {
             }
             self._checkDone();
             if (self.useMonitor) {
-                self.downloaded += end - start + 1;
+                self.downloaded += self.pieceLength;
                 self.emit('downloaded', self.downloaded/self.fileSize);
-                hd.downloaded += end - start + 1;
+                hd.downloaded += self.pieceLength;
                 self.emit('traffic', hd.mac, hd.downloaded, 'http');
                 console.log('ondata hd.type:' + hd.type +' index:' + index);
                 if (hd.type === 'node' || hd.type === 'browser') {
-                    self.fogDownloaded += end - start + 1;
+                    self.fogDownloaded += self.pieceLength;
                     self.emit('fograte', self.fogDownloaded/self.downloaded);
-                    self.emit('fogspeed', self.downloaders.getMeanSpeed(['node','browser','datachannel']));
+                    self.emit('fogspeed', self.downloaders.getMeanSpeed(['node', 'datachannel']));
                     hd.type === 'node' ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
                 } else {
                     self.emit('cloudspeed', self.downloaders.getMeanSpeed(['server']));
@@ -879,15 +919,15 @@ Dispatcher.prototype._setupDC = function (jd) {
             }
             self._checkDone();
             if (self.useMonitor) {
-                self.downloaded += end - start + 1;
-                self.fogDownloaded += end - start + 1;
+                self.downloaded += self.pieceLength;
+                self.fogDownloaded += self.pieceLength;
                 console.log('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
                 self.emit('downloaded', self.downloaded/self.fileSize);
                 self.emit('fograte', self.fogDownloaded/self.downloaded);
                 self.emit('fogspeed', self.downloaders.getMeanSpeed(['node','browser','datachannel']));
                 self.bufferSources[index] = 'd';
                 self.emit('buffersources', self.bufferSources);
-                jd.downloaded += end - start + 1;
+                jd.downloaded += self.pieceLength;
                 self.emit('traffic', jd.mac, jd.downloaded, 'datachannel');
             }
         } else {
@@ -907,7 +947,9 @@ Dispatcher.prototype._setupDC = function (jd) {
         console.warn('jd error');
         jd.close();
         self.downloaders.removeObj(jd);
-        self._windowLength --;
+        if (self._windowLength >3) {
+            self._windowLength --;
+        }
         self.checkoutDownloaders();
 
     });
@@ -922,13 +964,49 @@ Dispatcher.prototype.checkoutDownloaders = function () {
             this.emit('needsource');
         }
     }
-}
+};
 
-Dispatcher.prototype.addDataChannel = function (dc) {          //TODO:让每个新加入的节点都有至少一次下载机会
+Dispatcher.prototype.addTorrent = function (torrent) {
+    var self = this;
+    // console.log('torrent.pieces.length:'+torrent.pieces.length+' chunks:'+this.chunks);
+    if (torrent.pieces.length !== this.chunks) return;
+    this.torrent = torrent;
+    torrent.pear_downloaded = 0;
+    if (self._windowOffset + 10 < torrent.pieces.length-1) {
+        torrent.select(self._windowOffset+10, torrent.pieces.length-1, 1000, function () {
+
+        });
+    }
+    torrent.on('piecefromtorrent', function (index) {
+
+        console.log('piecefromtorrent:'+index);
+        if (self.useMonitor) {
+            self.downloaded += self.pieceLength;
+            self.fogDownloaded += self.pieceLength;
+            torrent.pear_downloaded += self.pieceLength;
+            // console.log('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
+            self.emit('downloaded', self.downloaded/self.fileSize);
+            self.emit('fograte', self.fogDownloaded/self.downloaded);
+            // console.log('torrent.downloadSpeed:'+torrent.downloadSpeed/1024);
+            self.emit('fogspeed', self.downloaders.getMeanSpeed(['node', 'datachannel']) + torrent.downloadSpeed/1024);
+            self.bufferSources[index] = 'b';
+            self.emit('buffersources', self.bufferSources);
+            self.emit('traffic', 'webtorrent', torrent.pear_downloaded, 'browser');
+        }
+    });
+
+    torrent.on('done', function () {
+        console.log('torrent done');
+    });
+};
+
+Dispatcher.prototype.addDataChannel = function (dc) {
 
     // this.downloaders.push(dc);
     this.downloaders.splice(this._windowLength,0,dc);
-    this._windowLength ++;
+    if (this._windowLength < 10) {
+        this._windowLength ++;
+    }
     console.log('addDataChannel _windowLength:' + this._windowLength);
     this._setupDC(dc);
     console.log('addDataChannel now:'+this.downloaders.length);
@@ -1063,7 +1141,7 @@ Array.prototype.getMeanSpeed = function (typeArr) {              //根据传输�
 
 
 }).call(this,require('_process'))
-},{"_process":89,"bitfield":14,"events":84,"fs-chunk-store":24,"immediate-chunk-store":31,"inherits":33}],3:[function(require,module,exports){
+},{"_process":131,"bitfield":25,"events":123,"fs-chunk-store":56,"immediate-chunk-store":47,"inherits":48}],3:[function(require,module,exports){
 module.exports = FileStream;
 
 var inherits = require('inherits');
@@ -1170,7 +1248,7 @@ FileStream.prototype._destroy = function (err, onclose) {
 };
 
 function noop () {}
-},{"inherits":33,"readable-stream":62}],4:[function(require,module,exports){
+},{"inherits":48,"readable-stream":83}],4:[function(require,module,exports){
 (function (process){
 
 module.exports = File;
@@ -1253,7 +1331,7 @@ File.prototype._destroy = function () {
 }
 
 }).call(this,require('_process'))
-},{"./file-stream":3,"_process":89,"events":84,"inherits":33,"readable-stream":62,"render-media":63}],5:[function(require,module,exports){
+},{"./file-stream":3,"_process":131,"events":123,"inherits":48,"readable-stream":83,"render-media":84}],5:[function(require,module,exports){
 
 module.exports = HttpDownloader;
 
@@ -1279,19 +1357,8 @@ function HttpDownloader(uri, type, opts) {
     this.redundance = 0;            //记录重复下载的次数
     this.isAsync = opts.isAsync || false;                  //默认并行下载
     //节点流量统计
-    var rawMac = this.uri.split('.')[0].split('//')[1];
-    var count = 0;
     this.downloaded = 0;
-    this.mac = '';
-    for (var i=0;i<rawMac.length;++i) {
-        count ++;
-        this.mac = this.mac + rawMac[i];
-        if (count === 2) {
-            this.mac = this.mac + ':';
-            count = 0;
-        }
-    }
-    this.mac = this.mac.substring(0, this.mac.length-1);
+    this.mac = this.uri.split('.')[0].split('//')[1];
     console.log('HttpDownloader mac:'+this.mac);
 };
 
@@ -1402,7 +1469,2570 @@ HttpDownloader.prototype._handleChunk = function (range,data) {
 
 
 
-},{"buffer/":18,"events":84,"inherits":33}],6:[function(require,module,exports){
+},{"buffer/":34,"events":123,"inherits":48}],6:[function(require,module,exports){
+module.exports = FileStream
+
+var debug = require('debug')('webtorrent:file-stream')
+var inherits = require('inherits')
+var stream = require('readable-stream')
+
+inherits(FileStream, stream.Readable)
+
+/**
+ * Readable stream of a torrent file
+ *
+ * @param {File} file
+ * @param {Object} opts
+ * @param {number} opts.start stream slice of file, starting from this byte (inclusive)
+ * @param {number} opts.end stream slice of file, ending with this byte (inclusive)
+ */
+function FileStream (file, opts) {
+  stream.Readable.call(this, opts)
+
+  this.destroyed = false
+  this._torrent = file._torrent
+
+  var start = (opts && opts.start) || 0
+  var end = (opts && opts.end && opts.end < file.length)
+    ? opts.end
+    : file.length - 1
+
+  var pieceLength = file._torrent.pieceLength
+
+  this._startPiece = (start + file.offset) / pieceLength | 0
+  this._endPiece = (end + file.offset) / pieceLength | 0
+
+  this._piece = this._startPiece
+  this._offset = (start + file.offset) - (this._startPiece * pieceLength)
+
+  this._missing = end - start + 1
+  this._reading = false
+  this._notifying = false
+  this._criticalLength = Math.min((1024 * 1024 / pieceLength) | 0, 2)
+}
+
+FileStream.prototype._read = function () {
+  if (this._reading) return
+  this._reading = true
+  this._notify()
+}
+
+FileStream.prototype._notify = function () {
+  var self = this
+
+  if (!self._reading || self._missing === 0) return
+  if (!self._torrent.bitfield.get(self._piece)) {
+    return self._torrent.critical(self._piece, self._piece + self._criticalLength)
+  }
+
+  if (self._notifying) return
+  self._notifying = true
+
+  var p = self._piece
+  self._torrent.store.get(p, function (err, buffer) {
+    self._notifying = false
+    if (self.destroyed) return
+    if (err) return self._destroy(err)
+    debug('read %s (length %s) (err %s)', p, buffer.length, err && err.message)
+
+    if (self._offset) {
+      buffer = buffer.slice(self._offset)
+      self._offset = 0
+    }
+
+    if (self._missing < buffer.length) {
+      buffer = buffer.slice(0, self._missing)
+    }
+    self._missing -= buffer.length
+
+    debug('pushing buffer of length %s', buffer.length)
+    self._reading = false
+    self.push(buffer)
+
+    if (self._missing === 0) self.push(null)
+  })
+  self._piece += 1
+}
+
+FileStream.prototype.destroy = function (onclose) {
+  this._destroy(null, onclose)
+}
+
+FileStream.prototype._destroy = function (err, onclose) {
+  if (this.destroyed) return
+  this.destroyed = true
+
+  if (!this._torrent.destroyed) {
+    this._torrent.deselect(this._startPiece, this._endPiece, true)
+  }
+
+  if (err) this.emit('error', err)
+  this.emit('close')
+  if (onclose) onclose()
+}
+
+},{"debug":39,"inherits":48,"readable-stream":83}],7:[function(require,module,exports){
+(function (process){
+module.exports = File
+
+var eos = require('end-of-stream')
+var EventEmitter = require('events').EventEmitter
+var FileStream = require('./file-stream')
+var inherits = require('inherits')
+var path = require('path')
+var render = require('render-media')
+var stream = require('readable-stream')
+var streamToBlob = require('stream-to-blob')
+var streamToBlobURL = require('stream-to-blob-url')
+var streamToBuffer = require('stream-with-known-length-to-buffer')
+
+inherits(File, EventEmitter)
+
+function File (torrent, file) {
+  EventEmitter.call(this)
+
+  this._torrent = torrent
+  this._destroyed = false
+
+  this.name = file.name
+  this.path = file.path
+  this.length = file.length
+  this.offset = file.offset
+
+  this.done = false
+
+  var start = file.offset
+  var end = start + file.length - 1
+
+  this._startPiece = start / this._torrent.pieceLength | 0
+  this._endPiece = end / this._torrent.pieceLength | 0
+
+  if (this.length === 0) {
+    this.done = true
+    this.emit('done')
+  }
+}
+
+Object.defineProperty(File.prototype, 'downloaded', {
+  get: function () {
+    if (!this._torrent.bitfield) return 0
+    var downloaded = 0
+    for (var index = this._startPiece; index <= this._endPiece; ++index) {
+      if (this._torrent.bitfield.get(index)) {
+        // verified data
+        downloaded += this._torrent.pieceLength
+      } else {
+        // "in progress" data
+        var piece = this._torrent.pieces[index]
+        downloaded += (piece.length - piece.missing)
+      }
+    }
+    return downloaded
+  }
+})
+
+Object.defineProperty(File.prototype, 'progress', {
+  get: function () { return this.length ? this.downloaded / this.length : 0 }
+})
+
+File.prototype.select = function (priority) {
+  if (this.length === 0) return
+  this._torrent.select(this._startPiece, this._endPiece, priority)
+}
+
+File.prototype.deselect = function () {
+  if (this.length === 0) return
+  this._torrent.deselect(this._startPiece, this._endPiece, false)
+}
+
+File.prototype.createReadStream = function (opts) {
+  var self = this
+  if (this.length === 0) {
+    var empty = new stream.PassThrough()
+    process.nextTick(function () {
+      empty.end()
+    })
+    return empty
+  }
+
+  var fileStream = new FileStream(self, opts)
+  self._torrent.select(fileStream._startPiece, fileStream._endPiece, true, function () {
+    fileStream._notify()
+  })
+  eos(fileStream, function () {
+    if (self._destroyed) return
+    if (!self._torrent.destroyed) {
+      self._torrent.deselect(fileStream._startPiece, fileStream._endPiece, true)
+    }
+  })
+  return fileStream
+}
+
+File.prototype.getBuffer = function (cb) {
+  streamToBuffer(this.createReadStream(), this.length, cb)
+}
+
+File.prototype.getBlob = function (cb) {
+  if (typeof window === 'undefined') throw new Error('browser-only method')
+  streamToBlob(this.createReadStream(), this._getMimeType(), cb)
+}
+
+File.prototype.getBlobURL = function (cb) {
+  if (typeof window === 'undefined') throw new Error('browser-only method')
+  streamToBlobURL(this.createReadStream(), this._getMimeType(), cb)
+}
+
+File.prototype.appendTo = function (elem, opts, cb) {
+  if (typeof window === 'undefined') throw new Error('browser-only method')
+  render.append(this, elem, opts, cb)
+}
+
+File.prototype.renderTo = function (elem, opts, cb) {
+  if (typeof window === 'undefined') throw new Error('browser-only method')
+  render.render(this, elem, opts, cb)
+}
+
+File.prototype._getMimeType = function () {
+  return render.mime[path.extname(this.name).toLowerCase()]
+}
+
+File.prototype._destroy = function () {
+  this._destroyed = true
+  this._torrent = null
+}
+
+}).call(this,require('_process'))
+},{"./file-stream":6,"_process":131,"end-of-stream":42,"events":123,"inherits":48,"path":129,"readable-stream":83,"render-media":84,"stream-to-blob":97,"stream-to-blob-url":96,"stream-with-known-length-to-buffer":98}],8:[function(require,module,exports){
+var arrayRemove = require('unordered-array-remove')
+var debug = require('debug')('webtorrent:peer')
+var Wire = require('bittorrent-protocol')
+
+var WebConn = require('./webconn')
+
+var CONNECT_TIMEOUT_TCP = 5000
+var CONNECT_TIMEOUT_WEBRTC = 25000
+var HANDSHAKE_TIMEOUT = 25000
+
+/**
+ * WebRTC peer connections start out connected, because WebRTC peers require an
+ * "introduction" (i.e. WebRTC signaling), and there's no equivalent to an IP address
+ * that lets you refer to a WebRTC endpoint.
+ */
+exports.createWebRTCPeer = function (conn, swarm) {
+  var peer = new Peer(conn.id, 'webrtc')
+  peer.conn = conn
+  peer.swarm = swarm
+
+  if (peer.conn.connected) {
+    peer.onConnect()
+  } else {
+    peer.conn.once('connect', function () { peer.onConnect() })
+    peer.conn.once('error', function (err) { peer.destroy(err) })
+    peer.startConnectTimeout()
+  }
+
+  return peer
+}
+
+/**
+ * Incoming TCP peers start out connected, because the remote peer connected to the
+ * listening port of the TCP server. Until the remote peer sends a handshake, we don't
+ * know what swarm the connection is intended for.
+ */
+exports.createTCPIncomingPeer = function (conn) {
+  var addr = conn.remoteAddress + ':' + conn.remotePort
+  var peer = new Peer(addr, 'tcpIncoming')
+  peer.conn = conn
+  peer.addr = addr
+
+  peer.onConnect()
+
+  return peer
+}
+
+/**
+ * Outgoing TCP peers start out with just an IP address. At some point (when there is an
+ * available connection), the client can attempt to connect to the address.
+ */
+exports.createTCPOutgoingPeer = function (addr, swarm) {
+  var peer = new Peer(addr, 'tcpOutgoing')
+  peer.addr = addr
+  peer.swarm = swarm
+
+  return peer
+}
+
+/**
+ * Peer that represents a Web Seed (BEP17 / BEP19).
+ */
+exports.createWebSeedPeer = function (url, swarm) {
+  var peer = new Peer(url, 'webSeed')
+  peer.swarm = swarm
+  peer.conn = new WebConn(url, swarm)
+
+  peer.onConnect()
+
+  return peer
+}
+
+/**
+ * Peer. Represents a peer in the torrent swarm.
+ *
+ * @param {string} id "ip:port" string, peer id (for WebRTC peers), or url (for Web Seeds)
+ * @param {string} type the type of the peer
+ */
+function Peer (id, type) {
+  var self = this
+  self.id = id
+  self.type = type
+
+  debug('new Peer %s', id)
+
+  self.addr = null
+  self.conn = null
+  self.swarm = null
+  self.wire = null
+
+  self.connected = false
+  self.destroyed = false
+  self.timeout = null // handshake timeout
+  self.retries = 0 // outgoing TCP connection retry count
+
+  self.sentHandshake = false
+}
+
+/**
+ * Called once the peer is connected (i.e. fired 'connect' event)
+ * @param {Socket} conn
+ */
+Peer.prototype.onConnect = function () {
+  var self = this
+  if (self.destroyed) return
+  self.connected = true
+
+  debug('Peer %s connected', self.id)
+
+  clearTimeout(self.connectTimeout)
+
+  var conn = self.conn
+  conn.once('end', function () {
+    self.destroy()
+  })
+  conn.once('close', function () {
+    self.destroy()
+  })
+  conn.once('finish', function () {
+    self.destroy()
+  })
+  conn.once('error', function (err) {
+    self.destroy(err)
+  })
+
+  var wire = self.wire = new Wire()
+  wire.type = self.type
+  wire.once('end', function () {
+    self.destroy()
+  })
+  wire.once('close', function () {
+    self.destroy()
+  })
+  wire.once('finish', function () {
+    self.destroy()
+  })
+  wire.once('error', function (err) {
+    self.destroy(err)
+  })
+
+  wire.once('handshake', function (infoHash, peerId) {
+    self.onHandshake(infoHash, peerId)
+  })
+  self.startHandshakeTimeout()
+
+  conn.pipe(wire).pipe(conn)
+  if (self.swarm && !self.sentHandshake) self.handshake()
+}
+
+/**
+ * Called when handshake is received from remote peer.
+ * @param {string} infoHash
+ * @param {string} peerId
+ */
+Peer.prototype.onHandshake = function (infoHash, peerId) {
+  var self = this
+  if (!self.swarm) return // `self.swarm` not set yet, so do nothing
+  if (self.destroyed) return
+
+  if (self.swarm.destroyed) {
+    return self.destroy(new Error('swarm already destroyed'))
+  }
+  if (infoHash !== self.swarm.infoHash) {
+    return self.destroy(new Error('unexpected handshake info hash for this swarm'))
+  }
+  if (peerId === self.swarm.peerId) {
+    return self.destroy(new Error('refusing to connect to ourselves'))
+  }
+
+  debug('Peer %s got handshake %s', self.id, infoHash)
+
+  clearTimeout(self.handshakeTimeout)
+
+  self.retries = 0
+
+  var addr = self.addr
+  if (!addr && self.conn.remoteAddress) {
+    addr = self.conn.remoteAddress + ':' + self.conn.remotePort
+  }
+  self.swarm._onWire(self.wire, addr)
+
+  // swarm could be destroyed in user's 'wire' event handler
+  if (!self.swarm || self.swarm.destroyed) return
+
+  if (!self.sentHandshake) self.handshake()
+}
+
+Peer.prototype.handshake = function () {
+  var self = this
+  var opts = {
+    dht: self.swarm.private ? false : !!self.swarm.client.dht
+  }
+  self.wire.handshake(self.swarm.infoHash, self.swarm.client.peerId, opts)
+  self.sentHandshake = true
+}
+
+Peer.prototype.startConnectTimeout = function () {
+  var self = this
+  clearTimeout(self.connectTimeout)
+  self.connectTimeout = setTimeout(function () {
+    self.destroy(new Error('connect timeout'))
+  }, self.type === 'webrtc' ? CONNECT_TIMEOUT_WEBRTC : CONNECT_TIMEOUT_TCP)
+  if (self.connectTimeout.unref) self.connectTimeout.unref()
+}
+
+Peer.prototype.startHandshakeTimeout = function () {
+  var self = this
+  clearTimeout(self.handshakeTimeout)
+  self.handshakeTimeout = setTimeout(function () {
+    self.destroy(new Error('handshake timeout'))
+  }, HANDSHAKE_TIMEOUT)
+  if (self.handshakeTimeout.unref) self.handshakeTimeout.unref()
+}
+
+Peer.prototype.destroy = function (err) {
+  var self = this
+  if (self.destroyed) return
+  self.destroyed = true
+  self.connected = false
+
+  debug('destroy %s (error: %s)', self.id, err && (err.message || err))
+
+  clearTimeout(self.connectTimeout)
+  clearTimeout(self.handshakeTimeout)
+
+  var swarm = self.swarm
+  var conn = self.conn
+  var wire = self.wire
+
+  self.swarm = null
+  self.conn = null
+  self.wire = null
+
+  if (swarm && wire) {
+    arrayRemove(swarm.wires, swarm.wires.indexOf(wire))
+  }
+  if (conn) {
+    conn.on('error', noop)
+    conn.destroy()
+  }
+  if (wire) wire.destroy()
+  if (swarm) swarm.removePeer(self.id)
+}
+
+function noop () {}
+
+},{"./webconn":11,"bittorrent-protocol":26,"debug":39,"unordered-array-remove":108}],9:[function(require,module,exports){
+module.exports = RarityMap
+
+/**
+ * Mapping of torrent pieces to their respective availability in the torrent swarm. Used
+ * by the torrent manager for implementing the rarest piece first selection strategy.
+ */
+function RarityMap (torrent) {
+  var self = this
+
+  self._torrent = torrent
+  self._numPieces = torrent.pieces.length
+  self._pieces = []
+
+  self._onWire = function (wire) {
+    self.recalculate()
+    self._initWire(wire)
+  }
+  self._onWireHave = function (index) {
+    self._pieces[index] += 1
+  }
+  self._onWireBitfield = function () {
+    self.recalculate()
+  }
+
+  self._torrent.wires.forEach(function (wire) {
+    self._initWire(wire)
+  })
+  self._torrent.on('wire', self._onWire)
+  self.recalculate()
+}
+
+/**
+ * Get the index of the rarest piece. Optionally, pass a filter function to exclude
+ * certain pieces (for instance, those that we already have).
+ *
+ * @param {function} pieceFilterFunc
+ * @return {number} index of rarest piece, or -1
+ */
+RarityMap.prototype.getRarestPiece = function (pieceFilterFunc) {
+  if (!pieceFilterFunc) pieceFilterFunc = trueFn
+
+  var candidates = []
+  var min = Infinity
+
+  for (var i = 0; i < this._numPieces; ++i) {
+    if (!pieceFilterFunc(i)) continue
+
+    var availability = this._pieces[i]
+    if (availability === min) {
+      candidates.push(i)
+    } else if (availability < min) {
+      candidates = [ i ]
+      min = availability
+    }
+  }
+
+  if (candidates.length > 0) {
+    // if there are multiple pieces with the same availability, choose one randomly
+    return candidates[Math.random() * candidates.length | 0]
+  } else {
+    return -1
+  }
+}
+
+RarityMap.prototype.destroy = function () {
+  var self = this
+  self._torrent.removeListener('wire', self._onWire)
+  self._torrent.wires.forEach(function (wire) {
+    self._cleanupWireEvents(wire)
+  })
+  self._torrent = null
+  self._pieces = null
+
+  self._onWire = null
+  self._onWireHave = null
+  self._onWireBitfield = null
+}
+
+RarityMap.prototype._initWire = function (wire) {
+  var self = this
+
+  wire._onClose = function () {
+    self._cleanupWireEvents(wire)
+    for (var i = 0; i < this._numPieces; ++i) {
+      self._pieces[i] -= wire.peerPieces.get(i)
+    }
+  }
+
+  wire.on('have', self._onWireHave)
+  wire.on('bitfield', self._onWireBitfield)
+  wire.once('close', wire._onClose)
+}
+
+/**
+ * Recalculates piece availability across all peers in the torrent.
+ */
+RarityMap.prototype.recalculate = function () {
+  var i
+  for (i = 0; i < this._numPieces; ++i) {
+    this._pieces[i] = 0
+  }
+
+  var numWires = this._torrent.wires.length
+  for (i = 0; i < numWires; ++i) {
+    var wire = this._torrent.wires[i]
+    for (var j = 0; j < this._numPieces; ++j) {
+      this._pieces[j] += wire.peerPieces.get(j)
+    }
+  }
+}
+
+RarityMap.prototype._cleanupWireEvents = function (wire) {
+  wire.removeListener('have', this._onWireHave)
+  wire.removeListener('bitfield', this._onWireBitfield)
+  if (wire._onClose) wire.removeListener('close', wire._onClose)
+  wire._onClose = null
+}
+
+function trueFn () {
+  return true
+}
+
+},{}],10:[function(require,module,exports){
+(function (process,global){
+/* global URL, Blob */
+
+module.exports = Torrent
+
+var addrToIPPort = require('addr-to-ip-port')
+var BitField = require('bitfield')
+var ChunkStoreWriteStream = require('chunk-store-stream/write')
+var debug = require('debug')('webtorrent:torrent')
+var Discovery = require('torrent-discovery')
+var EventEmitter = require('events').EventEmitter
+var extend = require('xtend')
+var extendMutable = require('xtend/mutable')
+var fs = require('fs')
+var FSChunkStore = require('fs-chunk-store') // browser: `memory-chunk-store`
+var get = require('simple-get')
+var ImmediateChunkStore = require('immediate-chunk-store')
+var inherits = require('inherits')
+var MultiStream = require('multistream')
+var net = require('net') // browser exclude
+var os = require('os') // browser exclude
+var parallel = require('run-parallel')
+var parallelLimit = require('run-parallel-limit')
+var parseTorrent = require('parse-torrent')
+var path = require('path')
+var Piece = require('torrent-piece')
+var pump = require('pump')
+var randomIterate = require('random-iterate')
+var sha1 = require('simple-sha1')
+var speedometer = require('speedometer')
+var uniq = require('uniq')
+var utMetadata = require('ut_metadata')
+var utPex = require('ut_pex') // browser exclude
+
+var File = require('./file')
+var Peer = require('./peer')
+var RarityMap = require('./rarity-map')
+var Server = require('./server') // browser exclude
+
+var MAX_BLOCK_LENGTH = 128 * 1024
+var PIECE_TIMEOUT = 30000
+var CHOKE_TIMEOUT = 5000
+var SPEED_THRESHOLD = 3 * Piece.BLOCK_LENGTH
+
+var PIPELINE_MIN_DURATION = 0.5
+var PIPELINE_MAX_DURATION = 1
+
+var RECHOKE_INTERVAL = 10000 // 10 seconds
+var RECHOKE_OPTIMISTIC_DURATION = 2 // 30 seconds
+
+var FILESYSTEM_CONCURRENCY = 2
+
+var RECONNECT_WAIT = [ 1000, 5000, 15000 ]
+
+var VERSION = require('../package.json').version
+var USER_AGENT = 'WebTorrent/' + VERSION + ' (https://webtorrent.io)'
+
+var TMP
+try {
+  TMP = path.join(fs.statSync('/tmp') && '/tmp', 'webtorrent')
+} catch (err) {
+  TMP = path.join(typeof os.tmpdir === 'function' ? os.tmpdir() : '/', 'webtorrent')
+}
+
+inherits(Torrent, EventEmitter)
+
+function Torrent (torrentId, client, opts) {
+  EventEmitter.call(this)
+
+  this._debugId = 'unknown infohash'
+  this.client = client
+
+  this.announce = opts.announce
+  this.urlList = opts.urlList
+
+  this.path = opts.path
+  this._store = FSChunkStore                           //pear modified
+  this._getAnnounceOpts = opts.getAnnounceOpts
+
+  this.strategy = opts.strategy || 'sequential'
+
+  this.maxWebConns = opts.maxWebConns || 4
+
+  this._rechokeNumSlots = (opts.uploads === false || opts.uploads === 0)
+    ? 0
+    : (+opts.uploads || 10)
+  this._rechokeOptimisticWire = null
+  this._rechokeOptimisticTime = 0
+  this._rechokeIntervalId = null
+
+  this.ready = false
+  this.destroyed = false
+  this.paused = false
+  this.done = false
+
+  this.metadata = null
+  this.store = opts.store                                               //pear modified
+  this.bitfield = opts.bitfield                                      //pear modified
+  this.files = []
+  this.pieces = []
+
+  this._amInterested = false
+  this._selections = []
+  this._critical = []
+
+  this.wires = [] // open wires (added *after* handshake)
+
+  this._queue = [] // queue of outgoing tcp peers to connect to
+  this._peers = {} // connected peers (addr/peerId -> Peer)
+  this._peersLength = 0 // number of elements in `this._peers` (cache, for perf)
+
+  // stats
+  this.received = 0
+  this.uploaded = 0
+  this._downloadSpeed = speedometer()
+  this._uploadSpeed = speedometer()
+
+  // for cleanup
+  this._servers = []
+  this._xsRequests = []
+
+  // TODO: remove this and expose a hook instead
+  // optimization: don't recheck every file if it hasn't changed
+  this._fileModtimes = opts.fileModtimes
+
+  if (torrentId !== null) this._onTorrentId(torrentId)
+
+  this._debug('new torrent')
+}
+
+Object.defineProperty(Torrent.prototype, 'timeRemaining', {
+  get: function () {
+    if (this.done) return 0
+    if (this.downloadSpeed === 0) return Infinity
+    return ((this.length - this.downloaded) / this.downloadSpeed) * 1000
+  }
+})
+
+Object.defineProperty(Torrent.prototype, 'downloaded', {
+  get: function () {
+    if (!this.bitfield) return 0
+    var downloaded = 0
+    for (var index = 0, len = this.pieces.length; index < len; ++index) {
+      if (this.bitfield.get(index)) { // verified data
+        downloaded += (index === len - 1) ? this.lastPieceLength : this.pieceLength
+      } else { // "in progress" data
+        var piece = this.pieces[index]
+        downloaded += (piece.length - piece.missing)
+      }
+    }
+    return downloaded
+  }
+})
+
+// TODO: re-enable this. The number of missing pieces. Used to implement 'end game' mode.
+// Object.defineProperty(Storage.prototype, 'numMissing', {
+//   get: function () {
+//     var self = this
+//     var numMissing = self.pieces.length
+//     for (var index = 0, len = self.pieces.length; index < len; index++) {
+//       numMissing -= self.bitfield.get(index)
+//     }
+//     return numMissing
+//   }
+// })
+
+Object.defineProperty(Torrent.prototype, 'downloadSpeed', {
+  get: function () { return this._downloadSpeed() }
+})
+
+Object.defineProperty(Torrent.prototype, 'uploadSpeed', {
+  get: function () { return this._uploadSpeed() }
+})
+
+Object.defineProperty(Torrent.prototype, 'progress', {
+  get: function () { return this.length ? this.downloaded / this.length : 0 }
+})
+
+Object.defineProperty(Torrent.prototype, 'ratio', {
+  get: function () { return this.uploaded / (this.received || 1) }
+})
+
+Object.defineProperty(Torrent.prototype, 'numPeers', {
+  get: function () { return this.wires.length }
+})
+
+Object.defineProperty(Torrent.prototype, 'torrentFileBlobURL', {
+  get: function () {
+    if (typeof window === 'undefined') throw new Error('browser-only property')
+    if (!this.torrentFile) return null
+    return URL.createObjectURL(
+      new Blob([ this.torrentFile ], { type: 'application/x-bittorrent' })
+    )
+  }
+})
+
+Object.defineProperty(Torrent.prototype, '_numQueued', {
+  get: function () {
+    return this._queue.length + (this._peersLength - this._numConns)
+  }
+})
+
+Object.defineProperty(Torrent.prototype, '_numConns', {
+  get: function () {
+    var self = this
+    var numConns = 0
+    for (var id in self._peers) {
+      if (self._peers[id].connected) numConns += 1
+    }
+    return numConns
+  }
+})
+
+// TODO: remove in v1
+Object.defineProperty(Torrent.prototype, 'swarm', {
+  get: function () {
+    console.warn('WebTorrent: `torrent.swarm` is deprecated. Use `torrent` directly instead.')
+    return this
+  }
+})
+
+Torrent.prototype._onTorrentId = function (torrentId) {
+  var self = this
+  if (self.destroyed) return
+
+  var parsedTorrent
+  try { parsedTorrent = parseTorrent(torrentId) } catch (err) {}
+  if (parsedTorrent) {
+    // Attempt to set infoHash property synchronously
+    self.infoHash = parsedTorrent.infoHash
+    self._debugId = parsedTorrent.infoHash.toString('hex').substring(0, 7)
+    process.nextTick(function () {
+      if (self.destroyed) return
+      self._onParsedTorrent(parsedTorrent)
+    })
+  } else {
+    // If torrentId failed to parse, it could be in a form that requires an async
+    // operation, i.e. http/https link, filesystem path, or Blob.
+    parseTorrent.remote(torrentId, function (err, parsedTorrent) {
+      if (self.destroyed) return
+      if (err) return self._destroy(err)
+      self._onParsedTorrent(parsedTorrent)
+    })
+  }
+}
+
+Torrent.prototype._onParsedTorrent = function (parsedTorrent) {
+  var self = this
+  if (self.destroyed) return
+
+  self._processParsedTorrent(parsedTorrent)
+
+  if (!self.infoHash) {
+    return self._destroy(new Error('Malformed torrent data: No info hash'))
+  }
+
+  if (!self.path) self.path = path.join(TMP, self.infoHash)
+
+  self._rechokeIntervalId = setInterval(function () {
+    self._rechoke()
+  }, RECHOKE_INTERVAL)
+  if (self._rechokeIntervalId.unref) self._rechokeIntervalId.unref()
+
+  // Private 'infoHash' event allows client.add to check for duplicate torrents and
+  // destroy them before the normal 'infoHash' event is emitted. Prevents user
+  // applications from needing to deal with duplicate 'infoHash' events.
+  self.emit('_infoHash', self.infoHash)
+  if (self.destroyed) return
+
+  self.emit('infoHash', self.infoHash)
+  if (self.destroyed) return // user might destroy torrent in event handler
+
+  if (self.client.listening) {
+    self._onListening()
+  } else {
+    self.client.once('listening', function () {
+      self._onListening()
+    })
+  }
+}
+
+Torrent.prototype._processParsedTorrent = function (parsedTorrent) {
+  this._debugId = parsedTorrent.infoHash.toString('hex').substring(0, 7)
+
+  if (this.announce) {
+    // Allow specifying trackers via `opts` parameter
+    parsedTorrent.announce = parsedTorrent.announce.concat(this.announce)
+  }
+
+  if (this.client.tracker && global.WEBTORRENT_ANNOUNCE && !this.private) {
+    // So `webtorrent-hybrid` can force specific trackers to be used
+    parsedTorrent.announce = parsedTorrent.announce.concat(global.WEBTORRENT_ANNOUNCE)
+  }
+
+  if (this.urlList) {
+    // Allow specifying web seeds via `opts` parameter
+    parsedTorrent.urlList = parsedTorrent.urlList.concat(this.urlList)
+  }
+
+  uniq(parsedTorrent.announce)
+  uniq(parsedTorrent.urlList)
+
+  extendMutable(this, parsedTorrent)
+
+  this.magnetURI = parseTorrent.toMagnetURI(parsedTorrent)
+  this.torrentFile = parseTorrent.toTorrentFile(parsedTorrent)
+}
+
+Torrent.prototype._onListening = function () {
+  var self = this
+  if (self.discovery || self.destroyed) return
+
+  var trackerOpts = self.client.tracker
+  if (trackerOpts) {
+    trackerOpts = extend(self.client.tracker, {
+      getAnnounceOpts: function () {
+        var opts = {
+          uploaded: self.uploaded,
+          downloaded: self.downloaded,
+          left: Math.max(self.length - self.downloaded, 0)
+        }
+        if (self.client.tracker.getAnnounceOpts) {
+          extendMutable(opts, self.client.tracker.getAnnounceOpts())
+        }
+        if (self._getAnnounceOpts) {
+          // TODO: consider deprecating this, as it's redundant with the former case
+          extendMutable(opts, self._getAnnounceOpts())
+        }
+        return opts
+      }
+    })
+  }
+
+  // begin discovering peers via DHT and trackers
+  self.discovery = new Discovery({
+    infoHash: self.infoHash,
+    announce: self.announce,
+    peerId: self.client.peerId,
+    dht: !self.private && self.client.dht,
+    tracker: trackerOpts,
+    port: self.client.torrentPort,
+    userAgent: USER_AGENT
+  })
+
+  self.discovery.on('error', onError)
+  self.discovery.on('peer', onPeer)
+  self.discovery.on('trackerAnnounce', onTrackerAnnounce)
+  self.discovery.on('dhtAnnounce', onDHTAnnounce)
+  self.discovery.on('warning', onWarning)
+
+  function onError (err) {
+    self._destroy(err)
+  }
+
+  function onPeer (peer) {
+    // Don't create new outgoing TCP connections when torrent is done
+    if (typeof peer === 'string' && self.done) return
+    self.addPeer(peer)
+  }
+
+  function onTrackerAnnounce () {
+    self.emit('trackerAnnounce')
+    if (self.numPeers === 0) self.emit('noPeers', 'tracker')
+  }
+
+  function onDHTAnnounce () {
+    self.emit('dhtAnnounce')
+    if (self.numPeers === 0) self.emit('noPeers', 'dht')
+  }
+
+  function onWarning (err) {
+    self.emit('warning', err)
+  }
+
+  if (self.info) {
+    // if full metadata was included in initial torrent id, use it immediately. Otherwise,
+    // wait for torrent-discovery to find peers and ut_metadata to get the metadata.
+    self._onMetadata(self)
+  } else if (self.xs) {
+    self._getMetadataFromServer()
+  }
+}
+
+Torrent.prototype._getMetadataFromServer = function () {
+  var self = this
+  var urls = Array.isArray(self.xs) ? self.xs : [ self.xs ]
+
+  var tasks = urls.map(function (url) {
+    return function (cb) {
+      getMetadataFromURL(url, cb)
+    }
+  })
+  parallel(tasks)
+
+  function getMetadataFromURL (url, cb) {
+    if (url.indexOf('http://') !== 0 && url.indexOf('https://') !== 0) {
+      self.emit('warning', new Error('skipping non-http xs param: ' + url))
+      return cb(null)
+    }
+
+    var opts = {
+      url: url,
+      method: 'GET',
+      headers: {
+        'user-agent': USER_AGENT
+      }
+    }
+    var req
+    try {
+      req = get.concat(opts, onResponse)
+    } catch (err) {
+      self.emit('warning', new Error('skipping invalid url xs param: ' + url))
+      return cb(null)
+    }
+
+    self._xsRequests.push(req)
+
+    function onResponse (err, res, torrent) {
+      if (self.destroyed) return cb(null)
+      if (self.metadata) return cb(null)
+
+      if (err) {
+        self.emit('warning', new Error('http error from xs param: ' + url))
+        return cb(null)
+      }
+      if (res.statusCode !== 200) {
+        self.emit('warning', new Error('non-200 status code ' + res.statusCode + ' from xs param: ' + url))
+        return cb(null)
+      }
+
+      var parsedTorrent
+      try {
+        parsedTorrent = parseTorrent(torrent)
+      } catch (err) {}
+
+      if (!parsedTorrent) {
+        self.emit('warning', new Error('got invalid torrent file from xs param: ' + url))
+        return cb(null)
+      }
+
+      if (parsedTorrent.infoHash !== self.infoHash) {
+        self.emit('warning', new Error('got torrent file with incorrect info hash from xs param: ' + url))
+        return cb(null)
+      }
+
+      self._onMetadata(parsedTorrent)
+      cb(null)
+    }
+  }
+}
+
+/**
+ * Called when the full torrent metadata is received.
+ */
+Torrent.prototype._onMetadata = function (metadata) {
+  var self = this
+  if (self.metadata || self.destroyed) return
+  self._debug('got metadata')
+
+  self._xsRequests.forEach(function (req) {
+    req.abort()
+  })
+  self._xsRequests = []
+
+  var parsedTorrent
+  if (metadata && metadata.infoHash) {
+    // `metadata` is a parsed torrent (from parse-torrent module)
+    parsedTorrent = metadata
+  } else {
+    try {
+      parsedTorrent = parseTorrent(metadata)
+    } catch (err) {
+      return self._destroy(err)
+    }
+  }
+
+  self._processParsedTorrent(parsedTorrent)
+  self.metadata = self.torrentFile
+
+  // add web seed urls (BEP19)
+  if (self.client.enableWebSeeds) {
+    self.urlList.forEach(function (url) {
+      self.addWebSeed(url)
+    })
+  }
+
+  // start off selecting the entire torrent with low priority
+  // if (self.pieces.length !== 0) {                                        //pear modified
+  //   self.select(0, self.pieces.length - 1, false)
+  // }
+
+  self._rarityMap = new RarityMap(self)
+
+  // self.store = new ImmediateChunkStore(                                 //pear modified
+  //   new self._store(self.pieceLength, {
+  //     torrent: {
+  //       infoHash: self.infoHash
+  //     },
+  //     files: self.files.map(function (file) {
+  //       return {
+  //         path: path.join(self.path, file.path),
+  //         length: file.length,
+  //         offset: file.offset
+  //       }
+  //     }),
+  //     length: self.length
+  //   })
+  // )
+
+  self.files = self.files.map(function (file) {
+    return new File(self, file)
+  })
+
+  self._hashes = self.pieces
+
+  self.pieces = self.pieces.map(function (hash, i) {
+    var pieceLength = (i === self.pieces.length - 1)
+      ? self.lastPieceLength
+      : self.pieceLength
+    return new Piece(pieceLength)
+  })
+
+  self._reservations = self.pieces.map(function () {
+    return []
+  })
+
+  // self.bitfield = new BitField(self.pieces.length)                     //pear modified
+
+  self.wires.forEach(function (wire) {
+    // If we didn't have the metadata at the time ut_metadata was initialized for this
+    // wire, we still want to make it available to the peer in case they request it.
+    if (wire.ut_metadata) wire.ut_metadata.setMetadata(self.metadata)
+
+    self._onWireWithMetadata(wire)
+  })
+
+  self._debug('verifying existing torrent data')
+  if (self._fileModtimes && self._store === FSChunkStore) {
+    // don't verify if the files haven't been modified since we last checked
+    self.getFileModtimes(function (err, fileModtimes) {
+      if (err) return self._destroy(err)
+
+      var unchanged = self.files.map(function (_, index) {
+        return fileModtimes[index] === self._fileModtimes[index]
+      }).every(function (x) {
+        return x
+      })
+
+      if (unchanged) {
+        for (var index = 0; index < self.pieces.length; index++) {
+          self._markVerified(index)
+        }
+        self._onStore()
+      } else {
+        self._verifyPieces()
+      }
+    })
+  } else {
+    self._verifyPieces()
+  }
+
+  self.emit('metadata')
+}
+
+/*
+ * TODO: remove this
+ * Gets the last modified time of every file on disk for this torrent.
+ * Only valid in Node, not in the browser.
+ */
+Torrent.prototype.getFileModtimes = function (cb) {
+  var self = this
+  var ret = []
+  parallelLimit(self.files.map(function (file, index) {
+    return function (cb) {
+      fs.stat(path.join(self.path, file.path), function (err, stat) {
+        if (err && err.code !== 'ENOENT') return cb(err)
+        ret[index] = stat && stat.mtime.getTime()
+        cb(null)
+      })
+    }
+  }), FILESYSTEM_CONCURRENCY, function (err) {
+    self._debug('done getting file modtimes')
+    cb(err, ret)
+  })
+}
+
+Torrent.prototype._verifyPieces = function () {
+  var self = this
+  parallelLimit(self.pieces.map(function (_, index) {
+    return function (cb) {
+      if (self.destroyed) return cb(new Error('torrent is destroyed'))
+
+      self.store.get(index, function (err, buf) {
+        if (self.destroyed) return cb(new Error('torrent is destroyed'))
+
+        if (err) return process.nextTick(cb, null) // ignore error
+        sha1(buf, function (hash) {
+          if (self.destroyed) return cb(new Error('torrent is destroyed'))
+
+          if (hash === self._hashes[index]) {
+            if (!self.pieces[index]) return
+            self._debug('piece verified %s', index)
+            self._markVerified(index)
+          } else {
+            self._debug('piece invalid %s', index)
+          }
+          cb(null)
+        })
+      })
+    }
+  }), FILESYSTEM_CONCURRENCY, function (err) {
+    if (err) return self._destroy(err)
+    self._debug('done verifying')
+    self._onStore()
+  })
+}
+
+Torrent.prototype._markVerified = function (index) {
+  this.pieces[index] = null
+  this._reservations[index] = null;
+  if (!this.bitfield.get(index)) {                      //pear modified
+      this.emit('piecefromtorrent', index);
+  }
+  this.bitfield.set(index, true)
+}
+
+/**
+ * Called when the metadata, listening server, and underlying chunk store is initialized.
+ */
+Torrent.prototype._onStore = function () {
+  var self = this
+  if (self.destroyed) return
+  self._debug('on store')
+
+  self.ready = true
+  self.emit('ready')
+
+  // Files may start out done if the file was already in the store
+  self._checkDone()
+
+  // In case any selections were made before torrent was ready
+  self._updateSelections()
+}
+
+Torrent.prototype.destroy = function (cb) {
+  var self = this
+  self._destroy(null, cb)
+}
+
+Torrent.prototype._destroy = function (err, cb) {
+  var self = this
+  if (self.destroyed) return
+  self.destroyed = true
+  self._debug('destroy')
+
+  self.client._remove(self)
+
+  clearInterval(self._rechokeIntervalId)
+
+  self._xsRequests.forEach(function (req) {
+    req.abort()
+  })
+
+  if (self._rarityMap) {
+    self._rarityMap.destroy()
+  }
+
+  for (var id in self._peers) {
+    self.removePeer(id)
+  }
+
+  self.files.forEach(function (file) {
+    if (file instanceof File) file._destroy()
+  })
+
+  var tasks = self._servers.map(function (server) {
+    return function (cb) {
+      server.destroy(cb)
+    }
+  })
+
+  if (self.discovery) {
+    tasks.push(function (cb) {
+      self.discovery.destroy(cb)
+    })
+  }
+  if (self.store) {
+    tasks.push(function (cb) {
+      self.store.close(cb)
+    })
+  }
+
+  parallel(tasks, cb)
+
+  if (err) {
+    // Torrent errors are emitted at `torrent.on('error')`. If there are no 'error'
+    // event handlers on the torrent instance, then the error will be emitted at
+    // `client.on('error')`. This prevents throwing an uncaught exception
+    // (unhandled 'error' event), but it makes it impossible to distinguish client
+    // errors versus torrent errors. Torrent errors are not fatal, and the client
+    // is still usable afterwards. Therefore, always listen for errors in both
+    // places (`client.on('error')` and `torrent.on('error')`).
+    if (self.listenerCount('error') === 0) {
+      self.client.emit('error', err)
+    } else {
+      self.emit('error', err)
+    }
+  }
+
+  self.emit('close')
+
+  self.client = null
+  self.files = []
+  self.discovery = null
+  self.store = null
+  self._rarityMap = null
+  self._peers = null
+  self._servers = null
+  self._xsRequests = null
+}
+
+Torrent.prototype.addPeer = function (peer) {
+  var self = this
+  if (self.destroyed) throw new Error('torrent is destroyed')
+  if (!self.infoHash) throw new Error('addPeer() must not be called before the `infoHash` event')
+
+  if (self.client.blocked) {
+    var host
+    if (typeof peer === 'string') {
+      var parts
+      try {
+        parts = addrToIPPort(peer)
+      } catch (e) {
+        self._debug('ignoring peer: invalid %s', peer)
+        self.emit('invalidPeer', peer)
+        return false
+      }
+      host = parts[0]
+    } else if (typeof peer.remoteAddress === 'string') {
+      host = peer.remoteAddress
+    }
+
+    if (host && self.client.blocked.contains(host)) {
+      self._debug('ignoring peer: blocked %s', peer)
+      if (typeof peer !== 'string') peer.destroy()
+      self.emit('blockedPeer', peer)
+      return false
+    }
+  }
+
+  var wasAdded = !!self._addPeer(peer)
+  if (wasAdded) {
+    self.emit('peer', peer)
+  } else {
+    self.emit('invalidPeer', peer)
+  }
+  return wasAdded
+}
+
+Torrent.prototype._addPeer = function (peer) {
+  var self = this
+  if (self.destroyed) {
+    if (typeof peer !== 'string') peer.destroy()
+    return null
+  }
+  if (typeof peer === 'string' && !self._validAddr(peer)) {
+    self._debug('ignoring peer: invalid %s', peer)
+    return null
+  }
+
+  var id = (peer && peer.id) || peer
+  if (self._peers[id]) {
+    self._debug('ignoring peer: duplicate (%s)', id)
+    if (typeof peer !== 'string') peer.destroy()
+    return null
+  }
+
+  if (self.paused) {
+    self._debug('ignoring peer: torrent is paused')
+    if (typeof peer !== 'string') peer.destroy()
+    return null
+  }
+
+  self._debug('add peer %s', id)
+
+  var newPeer
+  if (typeof peer === 'string') {
+    // `peer` is an addr ("ip:port" string)
+    newPeer = Peer.createTCPOutgoingPeer(peer, self)
+  } else {
+    // `peer` is a WebRTC connection (simple-peer)
+    newPeer = Peer.createWebRTCPeer(peer, self)
+  }
+
+  self._peers[newPeer.id] = newPeer
+  self._peersLength += 1
+
+  if (typeof peer === 'string') {
+    // `peer` is an addr ("ip:port" string)
+    self._queue.push(newPeer)
+    self._drain()
+  }
+
+  return newPeer
+}
+
+Torrent.prototype.addWebSeed = function (url) {
+  if (this.destroyed) throw new Error('torrent is destroyed')
+
+  if (!/^https?:\/\/.+/.test(url)) {
+    this.emit('warning', new Error('ignoring invalid web seed: ' + url))
+    this.emit('invalidPeer', url)
+    return
+  }
+
+  if (this._peers[url]) {
+    this.emit('warning', new Error('ignoring duplicate web seed: ' + url))
+    this.emit('invalidPeer', url)
+    return
+  }
+
+  this._debug('add web seed %s', url)
+
+  var newPeer = Peer.createWebSeedPeer(url, this)
+  this._peers[newPeer.id] = newPeer
+  this._peersLength += 1
+
+  this.emit('peer', url)
+}
+
+/**
+ * Called whenever a new incoming TCP peer connects to this torrent swarm. Called with a
+ * peer that has already sent a handshake.
+ */
+Torrent.prototype._addIncomingPeer = function (peer) {
+  var self = this
+  if (self.destroyed) return peer.destroy(new Error('torrent is destroyed'))
+  if (self.paused) return peer.destroy(new Error('torrent is paused'))
+
+  this._debug('add incoming peer %s', peer.id)
+
+  self._peers[peer.id] = peer
+  self._peersLength += 1
+}
+
+Torrent.prototype.removePeer = function (peer) {
+  var self = this
+  var id = (peer && peer.id) || peer
+  peer = self._peers[id]
+
+  if (!peer) return
+
+  this._debug('removePeer %s', id)
+
+  delete self._peers[id]
+  self._peersLength -= 1
+
+  peer.destroy()
+
+  // If torrent swarm was at capacity before, try to open a new connection now
+  self._drain()
+}
+
+Torrent.prototype.select = function (start, end, priority, notify) {
+  var self = this
+  if (self.destroyed) throw new Error('torrent is destroyed')
+
+  if (start < 0 || end < start || self.pieces.length <= end) {
+    console.log('start:'+start + 'end:'+end + 'length:'+self.pieces.length);
+    throw new Error('invalid selection ', start, ':', end)
+  }
+  priority = Number(priority) || 0
+
+  self._debug('select %s-%s (priority %s)', start, end, priority)
+
+  self._selections.push({
+    from: start,
+    to: end,
+    offset: 0,
+    priority: priority,
+    notify: notify || noop
+  })
+
+  self._selections.sort(function (a, b) {
+    return b.priority - a.priority
+  })
+
+  self._updateSelections()
+}
+
+Torrent.prototype.deselect = function (start, end, priority) {
+  var self = this
+  if (self.destroyed) throw new Error('torrent is destroyed')
+
+  priority = Number(priority) || 0
+  self._debug('deselect %s-%s (priority %s)', start, end, priority)
+
+  for (var i = 0; i < self._selections.length; ++i) {
+    var s = self._selections[i]
+    if (s.from === start && s.to === end && s.priority === priority) {
+      self._selections.splice(i, 1)
+      break
+    }
+  }
+
+  self._updateSelections()
+}
+
+Torrent.prototype.critical = function (start, end) {
+  var self = this
+  if (self.destroyed) throw new Error('torrent is destroyed')
+
+  self._debug('critical %s-%s', start, end)
+
+  for (var i = start; i <= end; ++i) {
+    self._critical[i] = true
+  }
+
+  self._updateSelections()
+}
+
+Torrent.prototype._onWire = function (wire, addr) {
+  var self = this
+  self._debug('got wire %s (%s)', wire._debugId, addr || 'Unknown')
+
+  wire.on('download', function (downloaded) {
+    if (self.destroyed) return
+    self.received += downloaded
+    self._downloadSpeed(downloaded)
+    self.client._downloadSpeed(downloaded)
+    self.emit('download', downloaded)
+    self.client.emit('download', downloaded)
+  })
+
+  wire.on('upload', function (uploaded) {
+    if (self.destroyed) return
+    self.uploaded += uploaded
+    self._uploadSpeed(uploaded)
+    self.client._uploadSpeed(uploaded)
+    self.emit('upload', uploaded)
+    self.client.emit('upload', uploaded)
+  })
+
+  self.wires.push(wire)
+
+  if (addr) {
+    // Sometimes RTCPeerConnection.getStats() doesn't return an ip:port for peers
+    var parts = addrToIPPort(addr)
+    wire.remoteAddress = parts[0]
+    wire.remotePort = parts[1]
+  }
+
+  // When peer sends PORT message, add that DHT node to routing table
+  if (self.client.dht && self.client.dht.listening) {
+    wire.on('port', function (port) {
+      if (self.destroyed || self.client.dht.destroyed) {
+        return
+      }
+      if (!wire.remoteAddress) {
+        return self._debug('ignoring PORT from peer with no address')
+      }
+      if (port === 0 || port > 65536) {
+        return self._debug('ignoring invalid PORT from peer')
+      }
+
+      self._debug('port: %s (from %s)', port, addr)
+      self.client.dht.addNode({ host: wire.remoteAddress, port: port })
+    })
+  }
+
+  wire.on('timeout', function () {
+    self._debug('wire timeout (%s)', addr)
+    // TODO: this might be destroying wires too eagerly
+    wire.destroy()
+  })
+
+  // Timeout for piece requests to this peer
+  wire.setTimeout(PIECE_TIMEOUT, true)
+
+  // Send KEEP-ALIVE (every 60s) so peers will not disconnect the wire
+  wire.setKeepAlive(true)
+
+  // use ut_metadata extension
+  wire.use(utMetadata(self.metadata))
+
+  wire.ut_metadata.on('warning', function (err) {
+    self._debug('ut_metadata warning: %s', err.message)
+  })
+
+  if (!self.metadata) {
+    wire.ut_metadata.on('metadata', function (metadata) {
+      self._debug('got metadata via ut_metadata')
+      self._onMetadata(metadata)
+    })
+    wire.ut_metadata.fetch()
+  }
+
+  // use ut_pex extension if the torrent is not flagged as private
+  if (typeof utPex === 'function' && !self.private) {
+    wire.use(utPex())
+
+    wire.ut_pex.on('peer', function (peer) {
+      // Only add potential new peers when we're not seeding
+      if (self.done) return
+      self._debug('ut_pex: got peer: %s (from %s)', peer, addr)
+      self.addPeer(peer)
+    })
+
+    wire.ut_pex.on('dropped', function (peer) {
+      // the remote peer believes a given peer has been dropped from the torrent swarm.
+      // if we're not currently connected to it, then remove it from the queue.
+      var peerObj = self._peers[peer]
+      if (peerObj && !peerObj.connected) {
+        self._debug('ut_pex: dropped peer: %s (from %s)', peer, addr)
+        self.removePeer(peer)
+      }
+    })
+
+    wire.once('close', function () {
+      // Stop sending updates to remote peer
+      wire.ut_pex.reset()
+    })
+  }
+
+  // Hook to allow user-defined `bittorrent-protocol` extensions
+  // More info: https://github.com/webtorrent/bittorrent-protocol#extension-api
+  self.emit('wire', wire, addr)
+
+  if (self.metadata) {
+    process.nextTick(function () {
+      // This allows wire.handshake() to be called (by Peer.onHandshake) before any
+      // messages get sent on the wire
+      self._onWireWithMetadata(wire)
+    })
+  }
+}
+
+Torrent.prototype._onWireWithMetadata = function (wire) {
+  var self = this
+  var timeoutId = null
+
+  function onChokeTimeout () {
+    if (self.destroyed || wire.destroyed) return
+
+    if (self._numQueued > 2 * (self._numConns - self.numPeers) &&
+      wire.amInterested) {
+      wire.destroy()
+    } else {
+      timeoutId = setTimeout(onChokeTimeout, CHOKE_TIMEOUT)
+      if (timeoutId.unref) timeoutId.unref()
+    }
+  }
+
+  var i
+  function updateSeedStatus () {
+    if (wire.peerPieces.buffer.length !== self.bitfield.buffer.length) return
+    for (i = 0; i < self.pieces.length; ++i) {
+      if (!wire.peerPieces.get(i)) return
+    }
+    wire.isSeeder = true
+    wire.choke() // always choke seeders
+  }
+
+  wire.on('bitfield', function () {
+    updateSeedStatus()
+    self._update()
+  })
+
+  wire.on('have', function () {
+    updateSeedStatus()
+    self._update()
+  })
+
+  wire.once('interested', function () {
+    wire.unchoke()
+  })
+
+  wire.once('close', function () {
+    clearTimeout(timeoutId)
+  })
+
+  wire.on('choke', function () {
+    clearTimeout(timeoutId)
+    timeoutId = setTimeout(onChokeTimeout, CHOKE_TIMEOUT)
+    if (timeoutId.unref) timeoutId.unref()
+  })
+
+  wire.on('unchoke', function () {
+    clearTimeout(timeoutId)
+    self._update()
+  })
+
+  wire.on('request', function (index, offset, length, cb) {
+    if (length > MAX_BLOCK_LENGTH) {
+      // Per spec, disconnect from peers that request >128KB
+      return wire.destroy()
+    }
+    if (self.pieces[index]) return
+    self.store.get(index, { offset: offset, length: length }, cb)
+  })
+
+  wire.bitfield(self.bitfield) // always send bitfield (required)
+  wire.interested() // always start out interested
+
+  // Send PORT message to peers that support DHT
+  if (wire.peerExtensions.dht && self.client.dht && self.client.dht.listening) {
+    wire.port(self.client.dht.address().port)
+  }
+
+  if (wire.type !== 'webSeed') { // do not choke on webseeds
+    timeoutId = setTimeout(onChokeTimeout, CHOKE_TIMEOUT)
+    if (timeoutId.unref) timeoutId.unref()
+  }
+
+  wire.isSeeder = false
+  updateSeedStatus()
+}
+
+/**
+ * Called on selection changes.
+ */
+Torrent.prototype._updateSelections = function () {
+  var self = this
+  if (!self.ready || self.destroyed) return
+
+  process.nextTick(function () {
+    self._gcSelections()
+  })
+  self._updateInterest()
+  self._update()
+}
+
+/**
+ * Garbage collect selections with respect to the store's current state.
+ */
+Torrent.prototype._gcSelections = function () {
+  var self = this
+
+  for (var i = 0; i < self._selections.length; ++i) {
+    var s = self._selections[i]
+    var oldOffset = s.offset
+
+    // check for newly downloaded pieces in selection
+    while (self.bitfield.get(s.from + s.offset) && s.from + s.offset < s.to) {
+      s.offset += 1
+    }
+
+    if (oldOffset !== s.offset) s.notify()
+    if (s.to !== s.from + s.offset) continue
+    if (!self.bitfield.get(s.from + s.offset)) continue
+
+    self._selections.splice(i, 1) // remove fully downloaded selection
+    i -= 1 // decrement i to offset splice
+
+    s.notify()
+    self._updateInterest()
+  }
+
+  if (!self._selections.length) self.emit('idle')
+}
+
+/**
+ * Update interested status for all peers.
+ */
+Torrent.prototype._updateInterest = function () {
+  var self = this
+
+  var prev = self._amInterested
+  self._amInterested = !!self._selections.length
+
+  self.wires.forEach(function (wire) {
+    // TODO: only call wire.interested if the wire has at least one piece we need
+    if (self._amInterested) wire.interested()
+    else wire.uninterested()
+  })
+
+  if (prev === self._amInterested) return
+  if (self._amInterested) self.emit('interested')
+  else self.emit('uninterested')
+}
+
+/**
+ * Heartbeat to update all peers and their requests.
+ */
+Torrent.prototype._update = function () {
+  var self = this
+  if (self.destroyed) return
+
+  // update wires in random order for better request distribution
+  var ite = randomIterate(self.wires)
+  var wire
+  while ((wire = ite())) {
+    self._updateWire(wire)
+  }
+}
+
+/**
+ * Attempts to update a peer's requests
+ */
+Torrent.prototype._updateWire = function (wire) {
+  var self = this
+
+  if (wire.peerChoking) return
+  if (!wire.downloaded) return validateWire()
+
+  var minOutstandingRequests = getBlockPipelineLength(wire, PIPELINE_MIN_DURATION)
+  if (wire.requests.length >= minOutstandingRequests) return
+  var maxOutstandingRequests = getBlockPipelineLength(wire, PIPELINE_MAX_DURATION)
+
+  trySelectWire(false) || trySelectWire(true)
+
+  function genPieceFilterFunc (start, end, tried, rank) {
+    return function (i) {
+      return i >= start && i <= end && !(i in tried) && wire.peerPieces.get(i) && (!rank || rank(i))
+    }
+  }
+
+  // TODO: Do we need both validateWire and trySelectWire?
+  function validateWire () {
+    if (wire.requests.length) return
+
+    var i = self._selections.length
+    while (i--) {
+      var next = self._selections[i]
+      var piece
+      if (self.strategy === 'rarest') {
+        var start = next.from + next.offset
+        var end = next.to
+        var len = end - start + 1
+        var tried = {}
+        var tries = 0
+        var filter = genPieceFilterFunc(start, end, tried)
+
+        while (tries < len) {
+          piece = self._rarityMap.getRarestPiece(filter)
+          if (piece < 0) break
+          if (self._request(wire, piece, false)) return
+          tried[piece] = true
+          tries += 1
+        }
+      } else {
+        for (piece = next.to; piece >= next.from + next.offset; --piece) {
+          if (!wire.peerPieces.get(piece)) continue
+          if (self._request(wire, piece, false)) return
+        }
+      }
+    }
+
+    // TODO: wire failed to validate as useful; should we close it?
+    // probably not, since 'have' and 'bitfield' messages might be coming
+  }
+
+  function speedRanker () {
+    var speed = wire.downloadSpeed() || 1
+    if (speed > SPEED_THRESHOLD) return function () { return true }
+
+    var secs = Math.max(1, wire.requests.length) * Piece.BLOCK_LENGTH / speed
+    var tries = 10
+    var ptr = 0
+
+    return function (index) {
+      if (!tries || self.bitfield.get(index)) return true
+
+      var missing = self.pieces[index].missing
+
+      for (; ptr < self.wires.length; ptr++) {
+        var otherWire = self.wires[ptr]
+        var otherSpeed = otherWire.downloadSpeed()
+
+        if (otherSpeed < SPEED_THRESHOLD) continue
+        if (otherSpeed <= speed) continue
+        if (!otherWire.peerPieces.get(index)) continue
+        if ((missing -= otherSpeed * secs) > 0) continue
+
+        tries--
+        return false
+      }
+
+      return true
+    }
+  }
+
+  function shufflePriority (i) {
+    var last = i
+    for (var j = i; j < self._selections.length && self._selections[j].priority; j++) {
+      last = j
+    }
+    var tmp = self._selections[i]
+    self._selections[i] = self._selections[last]
+    self._selections[last] = tmp
+  }
+
+  function trySelectWire (hotswap) {
+    if (wire.requests.length >= maxOutstandingRequests) return true
+    var rank = speedRanker()
+
+    for (var i = 0; i < self._selections.length; i++) {
+      var next = self._selections[i]
+
+      var piece
+      if (self.strategy === 'rarest') {
+        var start = next.from + next.offset
+        var end = next.to
+        var len = end - start + 1
+        var tried = {}
+        var tries = 0
+        var filter = genPieceFilterFunc(start, end, tried, rank)
+
+        while (tries < len) {
+          piece = self._rarityMap.getRarestPiece(filter)
+          if (piece < 0) break
+
+          // request all non-reserved blocks in this piece
+          while (self._request(wire, piece, self._critical[piece] || hotswap)) {}
+
+          if (wire.requests.length < maxOutstandingRequests) {
+            tried[piece] = true
+            tries++
+            continue
+          }
+
+          if (next.priority) shufflePriority(i)
+          return true
+        }
+      } else {
+        for (piece = next.from + next.offset; piece <= next.to; piece++) {
+          if (!wire.peerPieces.get(piece) || !rank(piece)) continue
+
+          // request all non-reserved blocks in piece
+          while (self._request(wire, piece, self._critical[piece] || hotswap)) {}
+
+          if (wire.requests.length < maxOutstandingRequests) continue
+
+          if (next.priority) shufflePriority(i)
+          return true
+        }
+      }
+    }
+
+    return false
+  }
+}
+
+/**
+ * Called periodically to update the choked status of all peers, handling optimistic
+ * unchoking as described in BEP3.
+ */
+Torrent.prototype._rechoke = function () {
+  var self = this
+  if (!self.ready) return
+
+  if (self._rechokeOptimisticTime > 0) self._rechokeOptimisticTime -= 1
+  else self._rechokeOptimisticWire = null
+
+  var peers = []
+
+  self.wires.forEach(function (wire) {
+    if (!wire.isSeeder && wire !== self._rechokeOptimisticWire) {
+      peers.push({
+        wire: wire,
+        downloadSpeed: wire.downloadSpeed(),
+        uploadSpeed: wire.uploadSpeed(),
+        salt: Math.random(),
+        isChoked: true
+      })
+    }
+  })
+
+  peers.sort(rechokeSort)
+
+  var unchokeInterested = 0
+  var i = 0
+  for (; i < peers.length && unchokeInterested < self._rechokeNumSlots; ++i) {
+    peers[i].isChoked = false
+    if (peers[i].wire.peerInterested) unchokeInterested += 1
+  }
+
+  // Optimistically unchoke a peer
+  if (!self._rechokeOptimisticWire && i < peers.length && self._rechokeNumSlots) {
+    var candidates = peers.slice(i).filter(function (peer) { return peer.wire.peerInterested })
+    var optimistic = candidates[randomInt(candidates.length)]
+
+    if (optimistic) {
+      optimistic.isChoked = false
+      self._rechokeOptimisticWire = optimistic.wire
+      self._rechokeOptimisticTime = RECHOKE_OPTIMISTIC_DURATION
+    }
+  }
+
+  // Unchoke best peers
+  peers.forEach(function (peer) {
+    if (peer.wire.amChoking !== peer.isChoked) {
+      if (peer.isChoked) peer.wire.choke()
+      else peer.wire.unchoke()
+    }
+  })
+
+  function rechokeSort (peerA, peerB) {
+    // Prefer higher download speed
+    if (peerA.downloadSpeed !== peerB.downloadSpeed) {
+      return peerB.downloadSpeed - peerA.downloadSpeed
+    }
+
+    // Prefer higher upload speed
+    if (peerA.uploadSpeed !== peerB.uploadSpeed) {
+      return peerB.uploadSpeed - peerA.uploadSpeed
+    }
+
+    // Prefer unchoked
+    if (peerA.wire.amChoking !== peerB.wire.amChoking) {
+      return peerA.wire.amChoking ? 1 : -1
+    }
+
+    // Random order
+    return peerA.salt - peerB.salt
+  }
+}
+
+/**
+ * Attempts to cancel a slow block request from another wire such that the
+ * given wire may effectively swap out the request for one of its own.
+ */
+Torrent.prototype._hotswap = function (wire, index) {
+  var self = this
+
+  var speed = wire.downloadSpeed()
+  if (speed < Piece.BLOCK_LENGTH) return false
+  if (!self._reservations[index]) return false
+
+  var r = self._reservations[index]
+  if (!r) {
+    return false
+  }
+
+  var minSpeed = Infinity
+  var minWire
+
+  var i
+  for (i = 0; i < r.length; i++) {
+    var otherWire = r[i]
+    if (!otherWire || otherWire === wire) continue
+
+    var otherSpeed = otherWire.downloadSpeed()
+    if (otherSpeed >= SPEED_THRESHOLD) continue
+    if (2 * otherSpeed > speed || otherSpeed > minSpeed) continue
+
+    minWire = otherWire
+    minSpeed = otherSpeed
+  }
+
+  if (!minWire) return false
+
+  for (i = 0; i < r.length; i++) {
+    if (r[i] === minWire) r[i] = null
+  }
+
+  for (i = 0; i < minWire.requests.length; i++) {
+    var req = minWire.requests[i]
+    if (req.piece !== index) continue
+
+    self.pieces[index].cancel((req.offset / Piece.BLOCK_LENGTH) | 0)
+  }
+
+  self.emit('hotswap', minWire, wire, index)
+  return true
+}
+
+/**
+ * Attempts to request a block from the given wire.
+ */
+Torrent.prototype._request = function (wire, index, hotswap) {
+  var self = this
+  var numRequests = wire.requests.length
+  var isWebSeed = wire.type === 'webSeed'
+
+  if (self.bitfield.get(index)) return false
+
+  var maxOutstandingRequests = isWebSeed
+    ? Math.min(
+        getPiecePipelineLength(wire, PIPELINE_MAX_DURATION, self.pieceLength),
+        self.maxWebConns
+      )
+    : getBlockPipelineLength(wire, PIPELINE_MAX_DURATION)
+
+  if (numRequests >= maxOutstandingRequests) return false
+  // var endGame = (wire.requests.length === 0 && self.store.numMissing < 30)
+
+  var piece = self.pieces[index]
+  var reservation = isWebSeed ? piece.reserveRemaining() : piece.reserve()
+
+  if (reservation === -1 && hotswap && self._hotswap(wire, index)) {
+    reservation = isWebSeed ? piece.reserveRemaining() : piece.reserve()
+  }
+  if (reservation === -1) return false
+
+  var r = self._reservations[index]
+  if (!r) r = self._reservations[index] = []
+  var i = r.indexOf(null)
+  if (i === -1) i = r.length
+  r[i] = wire
+
+  var chunkOffset = piece.chunkOffset(reservation)
+  var chunkLength = isWebSeed ? piece.chunkLengthRemaining(reservation) : piece.chunkLength(reservation)
+
+  wire.request(index, chunkOffset, chunkLength, function onChunk (err, chunk) {
+    if (self.destroyed) return
+
+    // TODO: what is this for?
+    if (!self.ready) return self.once('ready', function () { onChunk(err, chunk) })
+
+    if (r[i] === wire) r[i] = null
+
+    if (piece !== self.pieces[index]) return onUpdateTick()
+
+    if (err) {
+      self._debug(
+        'error getting piece %s (offset: %s length: %s) from %s: %s',
+        index, chunkOffset, chunkLength, wire.remoteAddress + ':' + wire.remotePort,
+        err.message
+      )
+      isWebSeed ? piece.cancelRemaining(reservation) : piece.cancel(reservation)
+      onUpdateTick()
+      return
+    }
+
+    self._debug(
+      'got piece %s (offset: %s length: %s) from %s',
+      index, chunkOffset, chunkLength, wire.remoteAddress + ':' + wire.remotePort
+    )
+
+    if (!piece.set(reservation, chunk, wire)) return onUpdateTick()
+
+    var buf = piece.flush()
+
+    // TODO: might need to set self.pieces[index] = null here since sha1 is async
+
+    sha1(buf, function (hash) {
+      if (self.destroyed) return
+
+      if (hash === self._hashes[index]) {
+        if (!self.pieces[index]) return
+        self._debug('piece verified %s', index)
+
+        self.pieces[index] = null
+        self._reservations[index] = null
+        if (!self.bitfield.get(index)) {                      //pear modified
+            self.emit('piecefromtorrent', index);
+        }
+        self.bitfield.set(index, true)
+        self.store.put(index, buf)
+        // console.log('self.store.put:'+index);
+        self.wires.forEach(function (wire) {
+          wire.have(index)
+        })
+
+        // We also check `self.destroyed` since `torrent.destroy()` could have been
+        // called in the `torrent.on('done')` handler, triggered by `_checkDone()`.
+        if (self._checkDone() && !self.destroyed) self.discovery.complete()
+      } else {
+        self.pieces[index] = new Piece(piece.length)
+        self.emit('warning', new Error('Piece ' + index + ' failed verification'))
+      }
+      onUpdateTick()
+    })
+  })
+
+  function onUpdateTick () {
+    process.nextTick(function () { self._update() })
+  }
+
+  return true
+}
+
+Torrent.prototype._checkDone = function () {
+  var self = this
+  if (self.destroyed) return
+
+  // are any new files done?
+  self.files.forEach(function (file) {
+    if (file.done) return
+    for (var i = file._startPiece; i <= file._endPiece; ++i) {
+      if (!self.bitfield.get(i)) return
+    }
+    file.done = true
+    file.emit('done')
+    self._debug('file done: ' + file.name)
+  })
+
+  // is the torrent done? (if all current selections are satisfied, or there are
+  // no selections, then torrent is done)
+  var done = true
+  for (var i = 0; i < self._selections.length; i++) {
+    var selection = self._selections[i]
+    for (var piece = selection.from; piece <= selection.to; piece++) {
+      if (!self.bitfield.get(piece)) {
+        done = false
+        break
+      }
+    }
+    if (!done) break
+  }
+  if (!self.done && done) {
+    self.done = true
+    self._debug('torrent done: ' + self.infoHash)
+    self.emit('done')
+  }
+  self._gcSelections()
+
+  return done
+}
+
+Torrent.prototype.load = function (streams, cb) {
+  var self = this
+  if (self.destroyed) throw new Error('torrent is destroyed')
+  if (!self.ready) return self.once('ready', function () { self.load(streams, cb) })
+
+  if (!Array.isArray(streams)) streams = [ streams ]
+  if (!cb) cb = noop
+
+  var readable = new MultiStream(streams)
+  var writable = new ChunkStoreWriteStream(self.store, self.pieceLength)
+
+  pump(readable, writable, function (err) {
+    if (err) return cb(err)
+    self.pieces.forEach(function (piece, index) {
+      self.pieces[index] = null
+      self._reservations[index] = null;
+      if (!self.bitfield.get(index)) {                      //pear modified
+          self.emit('piecefromtorrent', index);
+      }
+      self.bitfield.set(index, true)
+    })
+    self._checkDone()
+    cb(null)
+  })
+}
+
+Torrent.prototype.createServer = function (requestListener) {
+  if (typeof Server !== 'function') throw new Error('node.js-only method')
+  if (this.destroyed) throw new Error('torrent is destroyed')
+  var server = new Server(this, requestListener)
+  this._servers.push(server)
+  return server
+}
+
+Torrent.prototype.pause = function () {
+  if (this.destroyed) return
+  this._debug('pause')
+  this.paused = true
+}
+
+Torrent.prototype.resume = function () {
+  if (this.destroyed) return
+  this._debug('resume')
+  this.paused = false
+  this._drain()
+}
+
+Torrent.prototype._debug = function () {
+  var args = [].slice.call(arguments)
+  args[0] = '[' + this.client._debugId + '] [' + this._debugId + '] ' + args[0]
+  debug.apply(null, args)
+}
+
+/**
+ * Pop a peer off the FIFO queue and connect to it. When _drain() gets called,
+ * the queue will usually have only one peer in it, except when there are too
+ * many peers (over `this.maxConns`) in which case they will just sit in the
+ * queue until another connection closes.
+ */
+Torrent.prototype._drain = function () {
+  var self = this
+  this._debug('_drain numConns %s maxConns %s', self._numConns, self.client.maxConns)
+  if (typeof net.connect !== 'function' || self.destroyed || self.paused ||
+      self._numConns >= self.client.maxConns) {
+    return
+  }
+  this._debug('drain (%s queued, %s/%s peers)', self._numQueued, self.numPeers, self.client.maxConns)
+
+  var peer = self._queue.shift()
+  if (!peer) return // queue could be empty
+
+  this._debug('tcp connect attempt to %s', peer.addr)
+
+  var parts = addrToIPPort(peer.addr)
+  var opts = {
+    host: parts[0],
+    port: parts[1]
+  }
+
+  var conn = peer.conn = net.connect(opts)
+
+  conn.once('connect', function () { peer.onConnect() })
+  conn.once('error', function (err) { peer.destroy(err) })
+  peer.startConnectTimeout()
+
+  // When connection closes, attempt reconnect after timeout (with exponential backoff)
+  conn.on('close', function () {
+    if (self.destroyed) return
+
+    // TODO: If torrent is done, do not try to reconnect after a timeout
+
+    if (peer.retries >= RECONNECT_WAIT.length) {
+      self._debug(
+        'conn %s closed: will not re-add (max %s attempts)',
+        peer.addr, RECONNECT_WAIT.length
+      )
+      return
+    }
+
+    var ms = RECONNECT_WAIT[peer.retries]
+    self._debug(
+      'conn %s closed: will re-add to queue in %sms (attempt %s)',
+      peer.addr, ms, peer.retries + 1
+    )
+
+    var reconnectTimeout = setTimeout(function reconnectTimeout () {
+      var newPeer = self._addPeer(peer.addr)
+      if (newPeer) newPeer.retries = peer.retries + 1
+    }, ms)
+    if (reconnectTimeout.unref) reconnectTimeout.unref()
+  })
+}
+
+/**
+ * Returns `true` if string is valid IPv4/6 address.
+ * @param {string} addr
+ * @return {boolean}
+ */
+Torrent.prototype._validAddr = function (addr) {
+  var parts
+  try {
+    parts = addrToIPPort(addr)
+  } catch (e) {
+    return false
+  }
+  var host = parts[0]
+  var port = parts[1]
+  return port > 0 && port < 65535 &&
+    !(host === '127.0.0.1' && port === this.client.torrentPort)
+}
+
+function getBlockPipelineLength (wire, duration) {
+  return 2 + Math.ceil(duration * wire.downloadSpeed() / Piece.BLOCK_LENGTH)
+}
+
+function getPiecePipelineLength (wire, duration, pieceLength) {
+  return 1 + Math.ceil(duration * wire.downloadSpeed() / pieceLength)
+}
+
+/**
+ * Returns a random integer in [0,high)
+ */
+function randomInt (high) {
+  return Math.random() * high | 0
+}
+
+function noop () {}
+
+}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../package.json":13,"./file":7,"./peer":8,"./rarity-map":9,"./server":119,"_process":131,"addr-to-ip-port":19,"bitfield":25,"chunk-store-stream/write":35,"debug":39,"events":123,"fs":117,"fs-chunk-store":56,"immediate-chunk-store":47,"inherits":48,"multistream":64,"net":119,"os":119,"parse-torrent":68,"path":129,"pump":71,"random-iterate":72,"run-parallel":87,"run-parallel-limit":86,"simple-get":91,"simple-sha1":93,"speedometer":95,"torrent-discovery":103,"torrent-piece":104,"uniq":107,"ut_metadata":109,"ut_pex":119,"xtend":114,"xtend/mutable":115}],11:[function(require,module,exports){
+module.exports = WebConn
+
+var BitField = require('bitfield')
+var Buffer = require('safe-buffer').Buffer
+var debug = require('debug')('webtorrent:webconn')
+var get = require('simple-get')
+var inherits = require('inherits')
+var sha1 = require('simple-sha1')
+var Wire = require('bittorrent-protocol')
+
+var VERSION = require('../package.json').version
+
+inherits(WebConn, Wire)
+
+/**
+ * Converts requests for torrent blocks into http range requests.
+ * @param {string} url web seed url
+ * @param {Object} torrent
+ */
+function WebConn (url, torrent) {
+  Wire.call(this)
+
+  this.url = url
+  this.webPeerId = sha1.sync(url)
+  this._torrent = torrent
+
+  this._init()
+}
+
+WebConn.prototype._init = function () {
+  var self = this
+  self.setKeepAlive(true)
+
+  self.once('handshake', function (infoHash, peerId) {
+    if (self.destroyed) return
+    self.handshake(infoHash, self.webPeerId)
+    var numPieces = self._torrent.pieces.length
+    var bitfield = new BitField(numPieces)
+    for (var i = 0; i <= numPieces; i++) {
+      bitfield.set(i, true)
+    }
+    self.bitfield(bitfield)
+  })
+
+  self.once('interested', function () {
+    debug('interested')
+    self.unchoke()
+  })
+
+  self.on('uninterested', function () { debug('uninterested') })
+  self.on('choke', function () { debug('choke') })
+  self.on('unchoke', function () { debug('unchoke') })
+  self.on('bitfield', function () { debug('bitfield') })
+
+  self.on('request', function (pieceIndex, offset, length, callback) {
+    debug('request pieceIndex=%d offset=%d length=%d', pieceIndex, offset, length)
+    self.httpRequest(pieceIndex, offset, length, callback)
+  })
+}
+
+WebConn.prototype.httpRequest = function (pieceIndex, offset, length, cb) {
+  var self = this
+  var pieceOffset = pieceIndex * self._torrent.pieceLength
+  var rangeStart = pieceOffset + offset /* offset within whole torrent */
+  var rangeEnd = rangeStart + length - 1
+
+  // Web seed URL format:
+  // For single-file torrents, make HTTP range requests directly to the web seed URL
+  // For multi-file torrents, add the torrent folder and file name to the URL
+  var files = self._torrent.files
+  var requests
+  if (files.length <= 1) {
+    requests = [{
+      url: self.url,
+      start: rangeStart,
+      end: rangeEnd
+    }]
+  } else {
+    var requestedFiles = files.filter(function (file) {
+      return file.offset <= rangeEnd && (file.offset + file.length) > rangeStart
+    })
+    if (requestedFiles.length < 1) {
+      return cb(new Error('Could not find file corresponnding to web seed range request'))
+    }
+
+    requests = requestedFiles.map(function (requestedFile) {
+      var fileEnd = requestedFile.offset + requestedFile.length - 1
+      var url = self.url +
+        (self.url[self.url.length - 1] === '/' ? '' : '/') +
+        requestedFile.path
+      return {
+        url: url,
+        fileOffsetInRange: Math.max(requestedFile.offset - rangeStart, 0),
+        start: Math.max(rangeStart - requestedFile.offset, 0),
+        end: Math.min(fileEnd, rangeEnd - requestedFile.offset)
+      }
+    })
+  }
+
+  // Now make all the HTTP requests we need in order to load this piece
+  // Usually that's one requests, but sometimes it will be multiple
+  // Send requests in parallel and wait for them all to come back
+  var numRequestsSucceeded = 0
+  var hasError = false
+
+  var ret
+  if (requests.length > 1) {
+    ret = Buffer.alloc(length)
+  }
+
+  requests.forEach(function (request) {
+    var url = request.url
+    var start = request.start
+    var end = request.end
+    debug(
+      'Requesting url=%s pieceIndex=%d offset=%d length=%d start=%d end=%d',
+      url, pieceIndex, offset, length, start, end
+    )
+    var opts = {
+      url: url,
+      method: 'GET',
+      headers: {
+        'user-agent': 'WebTorrent/' + VERSION + ' (https://webtorrent.io)',
+        range: 'bytes=' + start + '-' + end
+      }
+    }
+    function onResponse (res, data) {
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        hasError = true
+        return cb(new Error('Unexpected HTTP status code ' + res.statusCode))
+      }
+      debug('Got data of length %d', data.length)
+
+      if (requests.length === 1) {
+        // Common case: fetch piece in a single HTTP request, return directly
+        cb(null, data)
+      } else {
+        // Rare case: reconstruct multiple HTTP requests across 2+ files into one
+        // piece buffer
+        data.copy(ret, request.fileOffsetInRange)
+        if (++numRequestsSucceeded === requests.length) {
+          cb(null, ret)
+        }
+      }
+    }
+    get.concat(opts, function (err, res, data) {
+      if (hasError) return
+      if (err) {
+        // Browsers allow HTTP redirects for simple cross-origin
+        // requests but not for requests that require preflight.
+        // Use a simple request to unravel any redirects and get the
+        // final URL.  Retry the original request with the new URL if
+        // it's different.
+        //
+        // This test is imperfect but it's simple and good for common
+        // cases.  It catches all cross-origin cases but matches a few
+        // same-origin cases too.
+        if (typeof window === 'undefined' || url.startsWith(window.location.origin + '/')) {
+          hasError = true
+          return cb(err)
+        }
+
+        return get.head(url, function (errHead, res) {
+          if (hasError) return
+          if (errHead) {
+            hasError = true
+            return cb(errHead)
+          }
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            hasError = true
+            return cb(new Error('Unexpected HTTP status code ' + res.statusCode))
+          }
+          if (res.url === url) {
+            hasError = true
+            return cb(err)
+          }
+
+          opts.url = res.url
+          get.concat(opts, function (err, res, data) {
+            if (hasError) return
+            if (err) {
+              hasError = true
+              return cb(err)
+            }
+            onResponse(res, data)
+          })
+        })
+      }
+      onResponse(res, data)
+    })
+  })
+}
+
+WebConn.prototype.destroy = function () {
+  Wire.prototype.destroy.call(this)
+  this._torrent = null
+}
+
+},{"../package.json":13,"bitfield":25,"bittorrent-protocol":26,"debug":39,"inherits":48,"safe-buffer":89,"simple-get":91,"simple-sha1":93}],12:[function(require,module,exports){
 /**
  * 过滤掉不能下载的节点
  */
@@ -1470,7 +4100,619 @@ function NodeFilter(nodesArray, cb) {
 //     }
 //     return n;
 // };
-},{}],7:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
+module.exports={
+  "name": "webtorrent",
+  "description": "Streaming torrent client",
+  "version": "0.98.19",
+  "author": {
+    "name": "WebTorrent, LLC",
+    "email": "feross@webtorrent.io",
+    "url": "https://webtorrent.io"
+  },
+  "browser": {
+    "./lib/server.js": false,
+    "./lib/tcp-pool.js": false,
+    "bittorrent-dht/client": false,
+    "fs-chunk-store": "memory-chunk-store",
+    "load-ip-set": false,
+    "net": false,
+    "os": false,
+    "ut_pex": false
+  },
+  "browserify": {
+    "transform": [
+      "package-json-versionify"
+    ]
+  },
+  "bugs": {
+    "url": "https://github.com/webtorrent/webtorrent/issues"
+  },
+  "dependencies": {
+    "addr-to-ip-port": "^1.4.2",
+    "bitfield": "^1.1.2",
+    "bittorrent-dht": "^7.2.2",
+    "bittorrent-protocol": "^2.1.5",
+    "chunk-store-stream": "^2.0.2",
+    "create-torrent": "^3.24.5",
+    "debug": "^2.2.0",
+    "end-of-stream": "^1.1.0",
+    "fs-chunk-store": "^1.6.2",
+    "immediate-chunk-store": "^1.0.8",
+    "inherits": "^2.0.1",
+    "load-ip-set": "^1.2.7",
+    "memory-chunk-store": "^1.2.0",
+    "mime": "^1.3.4",
+    "multistream": "^2.0.5",
+    "package-json-versionify": "^1.0.2",
+    "parse-torrent": "^5.8.0",
+    "pump": "^1.0.1",
+    "random-iterate": "^1.0.1",
+    "randombytes": "^2.0.3",
+    "range-parser": "^1.2.0",
+    "readable-stream": "^2.1.4",
+    "render-media": "^2.8.0",
+    "run-parallel": "^1.1.6",
+    "run-parallel-limit": "^1.0.3",
+    "safe-buffer": "^5.0.1",
+    "simple-concat": "^1.0.0",
+    "simple-get": "^2.2.1",
+    "simple-peer": "^8.0.0",
+    "simple-sha1": "^2.0.8",
+    "speedometer": "^1.0.0",
+    "stream-to-blob": "^1.0.0",
+    "stream-to-blob-url": "^2.1.0",
+    "stream-with-known-length-to-buffer": "^1.0.0",
+    "torrent-discovery": "^8.1.0",
+    "torrent-piece": "^1.1.0",
+    "uniq": "^1.0.1",
+    "unordered-array-remove": "^1.0.2",
+    "ut_metadata": "^3.0.8",
+    "ut_pex": "^1.1.1",
+    "xtend": "^4.0.1",
+    "zero-fill": "^2.2.3"
+  },
+  "devDependencies": {
+    "babili": "^0.1.4",
+    "bittorrent-tracker": "^9.0.0",
+    "brfs": "^1.4.3",
+    "browserify": "^14.0.0",
+    "cross-spawn": "^5.0.1",
+    "electron-prebuilt": "^0.37.8",
+    "finalhandler": "^1.0.0",
+    "network-address": "^1.1.0",
+    "run-series": "^1.1.4",
+    "serve-static": "^1.11.1",
+    "standard": "*",
+    "tape": "^4.6.0",
+    "webtorrent-fixtures": "^1.5.0",
+    "zuul": "^3.10.1"
+  },
+  "engines": {
+    "node": ">=4"
+  },
+  "homepage": "https://webtorrent.io",
+  "keywords": [
+    "bittorrent",
+    "bittorrent client",
+    "download",
+    "mad science",
+    "p2p",
+    "peer-to-peer",
+    "peers",
+    "streaming",
+    "swarm",
+    "torrent",
+    "web torrent",
+    "webrtc",
+    "webrtc data",
+    "webtorrent"
+  ],
+  "license": "MIT",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/webtorrent/webtorrent.git"
+  },
+  "scripts": {
+    "build": "browserify -s WebTorrent -e ./ | babili > webtorrent.min.js",
+    "build-debug": "browserify -s WebTorrent -e ./ > webtorrent.debug.js",
+    "size": "npm run build && cat webtorrent.min.js | gzip | wc -c",
+    "test": "standard && node ./bin/test.js",
+    "test-browser": "zuul -- test/*.js test/browser/*.js",
+    "test-browser-headless": "zuul --electron -- test/*.js test/browser/*.js",
+    "test-browser-local": "zuul --local -- test/*.js test/browser/*.js",
+    "test-node": "tape test/*.js test/node/*.js",
+    "update-authors": "./bin/update-authors.sh"
+  }
+}
+
+},{}],14:[function(require,module,exports){
+(function (process,global){
+/* global FileList */
+
+module.exports = WebTorrent
+
+var Buffer = require('safe-buffer').Buffer
+var concat = require('simple-concat')
+var createTorrent = require('create-torrent')
+var debug = require('debug')('webtorrent')
+var DHT = require('bittorrent-dht/client') // browser exclude
+var EventEmitter = require('events').EventEmitter
+var extend = require('xtend')
+var inherits = require('inherits')
+var loadIPSet = require('load-ip-set') // browser exclude
+var parallel = require('run-parallel')
+var parseTorrent = require('parse-torrent')
+var path = require('path')
+var Peer = require('simple-peer')
+var randombytes = require('randombytes')
+var speedometer = require('speedometer')
+var zeroFill = require('zero-fill')
+
+var TCPPool = require('./lib/tcp-pool') // browser exclude
+var Torrent = require('./lib/torrent')
+
+/**
+ * WebTorrent version.
+ */
+var VERSION = require('./package.json').version
+
+/**
+ * Version number in Azureus-style. Generated from major and minor semver version.
+ * For example:
+ *   '0.16.1' -> '0016'
+ *   '1.2.5' -> '0102'
+ */
+var VERSION_STR = VERSION.match(/([0-9]+)/g)
+  .slice(0, 2)
+  .map(function (v) { return zeroFill(2, v) })
+  .join('')
+
+/**
+ * Version prefix string (used in peer ID). WebTorrent uses the Azureus-style
+ * encoding: '-', two characters for client id ('WW'), four ascii digits for version
+ * number, '-', followed by random numbers.
+ * For example:
+ *   '-WW0102-'...
+ */
+var VERSION_PREFIX = '-WW' + VERSION_STR + '-'
+
+inherits(WebTorrent, EventEmitter)
+
+/**
+ * WebTorrent Client
+ * @param {Object=} opts
+ */
+function WebTorrent (opts) {
+  var self = this
+  if (!(self instanceof WebTorrent)) return new WebTorrent(opts)
+  EventEmitter.call(self)
+
+  if (!opts) opts = {}
+
+  if (typeof opts.peerId === 'string') {
+    self.peerId = opts.peerId
+  } else if (Buffer.isBuffer(opts.peerId)) {
+    self.peerId = opts.peerId.toString('hex')
+  } else {
+    self.peerId = Buffer.from(VERSION_PREFIX + randombytes(9).toString('base64')).toString('hex')
+  }
+  self.peerIdBuffer = Buffer.from(self.peerId, 'hex')
+
+  if (typeof opts.nodeId === 'string') {
+    self.nodeId = opts.nodeId
+  } else if (Buffer.isBuffer(opts.nodeId)) {
+    self.nodeId = opts.nodeId.toString('hex')
+  } else {
+    self.nodeId = randombytes(20).toString('hex')
+  }
+  self.nodeIdBuffer = Buffer.from(self.nodeId, 'hex')
+
+  self._debugId = self.peerId.toString('hex').substring(0, 7)
+
+  self.destroyed = false
+  self.listening = false
+  self.torrentPort = opts.torrentPort || 0
+  self.dhtPort = opts.dhtPort || 0
+  self.tracker = opts.tracker !== undefined ? opts.tracker : {}
+  self.torrents = []
+  self.maxConns = Number(opts.maxConns) || 55
+
+  self._debug(
+    'new webtorrent (peerId %s, nodeId %s, port %s)',
+    self.peerId, self.nodeId, self.torrentPort
+  )
+
+  if (self.tracker) {
+    if (typeof self.tracker !== 'object') self.tracker = {}
+    if (opts.rtcConfig) {
+      // TODO: remove in v1
+      console.warn('WebTorrent: opts.rtcConfig is deprecated. Use opts.tracker.rtcConfig instead')
+      self.tracker.rtcConfig = opts.rtcConfig
+    }
+    if (opts.wrtc) {
+      // TODO: remove in v1
+      console.warn('WebTorrent: opts.wrtc is deprecated. Use opts.tracker.wrtc instead')
+      self.tracker.wrtc = opts.wrtc
+    }
+    if (global.WRTC && !self.tracker.wrtc) {
+      self.tracker.wrtc = global.WRTC
+    }
+  }
+
+  if (typeof TCPPool === 'function') {
+    self._tcpPool = new TCPPool(self)
+  } else {
+    process.nextTick(function () {
+      self._onListening()
+    })
+  }
+
+  // stats
+  self._downloadSpeed = speedometer()
+  self._uploadSpeed = speedometer()
+
+  if (opts.dht !== false && typeof DHT === 'function' /* browser exclude */) {
+    // use a single DHT instance for all torrents, so the routing table can be reused
+    self.dht = new DHT(extend({ nodeId: self.nodeId }, opts.dht))
+
+    self.dht.once('error', function (err) {
+      self._destroy(err)
+    })
+
+    self.dht.once('listening', function () {
+      var address = self.dht.address()
+      if (address) self.dhtPort = address.port
+    })
+
+    // Ignore warning when there are > 10 torrents in the client
+    self.dht.setMaxListeners(0)
+
+    self.dht.listen(self.dhtPort)
+  } else {
+    self.dht = false
+  }
+
+  // Enable or disable BEP19 (Web Seeds). Enabled by default:
+  self.enableWebSeeds = opts.webSeeds !== false
+
+  if (typeof loadIPSet === 'function' && opts.blocklist != null) {
+    loadIPSet(opts.blocklist, {
+      headers: {
+        'user-agent': 'WebTorrent/' + VERSION + ' (https://webtorrent.io)'
+      }
+    }, function (err, ipSet) {
+      if (err) return self.error('Failed to load blocklist: ' + err.message)
+      self.blocked = ipSet
+      ready()
+    })
+  } else {
+    process.nextTick(ready)
+  }
+
+  function ready () {
+    if (self.destroyed) return
+    self.ready = true
+    self.emit('ready')
+  }
+}
+
+WebTorrent.WEBRTC_SUPPORT = Peer.WEBRTC_SUPPORT
+
+Object.defineProperty(WebTorrent.prototype, 'downloadSpeed', {
+  get: function () { return this._downloadSpeed() }
+})
+
+Object.defineProperty(WebTorrent.prototype, 'uploadSpeed', {
+  get: function () { return this._uploadSpeed() }
+})
+
+Object.defineProperty(WebTorrent.prototype, 'progress', {
+  get: function () {
+    var torrents = this.torrents.filter(function (torrent) {
+      return torrent.progress !== 1
+    })
+    var downloaded = torrents.reduce(function (total, torrent) {
+      return total + torrent.downloaded
+    }, 0)
+    var length = torrents.reduce(function (total, torrent) {
+      return total + (torrent.length || 0)
+    }, 0) || 1
+    return downloaded / length
+  }
+})
+
+Object.defineProperty(WebTorrent.prototype, 'ratio', {
+  get: function () {
+    var uploaded = this.torrents.reduce(function (total, torrent) {
+      return total + torrent.uploaded
+    }, 0)
+    var received = this.torrents.reduce(function (total, torrent) {
+      return total + torrent.received
+    }, 0) || 1
+    return uploaded / received
+  }
+})
+
+/**
+ * Returns the torrent with the given `torrentId`. Convenience method. Easier than
+ * searching through the `client.torrents` array. Returns `null` if no matching torrent
+ * found.
+ *
+ * @param  {string|Buffer|Object|Torrent} torrentId
+ * @return {Torrent|null}
+ */
+WebTorrent.prototype.get = function (torrentId) {
+  var self = this
+  var i, torrent
+  var len = self.torrents.length
+
+  if (torrentId instanceof Torrent) {
+    for (i = 0; i < len; i++) {
+      torrent = self.torrents[i]
+      if (torrent === torrentId) return torrent
+    }
+  } else {
+    var parsed
+    try { parsed = parseTorrent(torrentId) } catch (err) {}
+
+    if (!parsed) return null
+    if (!parsed.infoHash) throw new Error('Invalid torrent identifier')
+
+    for (i = 0; i < len; i++) {
+      torrent = self.torrents[i]
+      if (torrent.infoHash === parsed.infoHash) return torrent
+    }
+  }
+  return null
+}
+
+// TODO: remove in v1
+WebTorrent.prototype.download = function (torrentId, opts, ontorrent) {
+  console.warn('WebTorrent: client.download() is deprecated. Use client.add() instead')
+  return this.add(torrentId, opts, ontorrent)
+}
+
+/**
+ * Start downloading a new torrent. Aliased as `client.download`.
+ * @param {string|Buffer|Object} torrentId
+ * @param {Object} opts torrent-specific options
+ * @param {function=} ontorrent called when the torrent is ready (has metadata)
+ */
+WebTorrent.prototype.add = function (torrentId, opts, ontorrent) {
+  var self = this
+  if (self.destroyed) throw new Error('client is destroyed')
+  if (typeof opts === 'function') return self.add(torrentId, null, opts)
+
+  self._debug('add')
+  opts = opts ? extend(opts) : {}
+
+  var torrent = new Torrent(torrentId, self, opts)
+  self.torrents.push(torrent)
+
+  torrent.once('_infoHash', onInfoHash)
+  torrent.once('ready', onReady)
+  torrent.once('close', onClose)
+  // torrent.on('piecefromtorrent', function (index) {
+  //     self.emit('piecefromtorrent', index);
+  // })
+
+  function onInfoHash () {
+    if (self.destroyed) return
+    for (var i = 0, len = self.torrents.length; i < len; i++) {
+      var t = self.torrents[i]
+      if (t.infoHash === torrent.infoHash && t !== torrent) {
+        torrent._destroy(new Error('Cannot add duplicate torrent ' + torrent.infoHash))
+        return
+      }
+    }
+  }
+
+  function onReady () {
+    if (self.destroyed) return
+    if (typeof ontorrent === 'function') ontorrent(torrent)
+    self.emit('torrent', torrent)
+  }
+
+  function onClose () {
+    torrent.removeListener('_infoHash', onInfoHash)
+    torrent.removeListener('ready', onReady)
+    torrent.removeListener('close', onClose)
+  }
+
+  return torrent
+}
+
+/**
+ * Start seeding a new file/folder.
+ * @param  {string|File|FileList|Buffer|Array.<string|File|Buffer>} input
+ * @param  {Object=} opts
+ * @param  {function=} onseed called when torrent is seeding
+ */
+WebTorrent.prototype.seed = function (input, opts, onseed) {
+  var self = this
+  if (self.destroyed) throw new Error('client is destroyed')
+  if (typeof opts === 'function') return self.seed(input, null, opts)
+
+  self._debug('seed')
+  opts = opts ? extend(opts) : {}
+
+  // When seeding from fs path, initialize store from that path to avoid a copy
+  if (typeof input === 'string') opts.path = path.dirname(input)
+  if (!opts.createdBy) opts.createdBy = 'WebTorrent/' + VERSION_STR
+
+  var torrent = self.add(null, opts, onTorrent)
+  var streams
+
+  if (isFileList(input)) input = Array.prototype.slice.call(input)
+  if (!Array.isArray(input)) input = [ input ]
+
+  parallel(input.map(function (item) {
+    return function (cb) {
+      if (isReadable(item)) concat(item, cb)
+      else cb(null, item)
+    }
+  }), function (err, input) {
+    if (self.destroyed) return
+    if (err) return torrent._destroy(err)
+
+    createTorrent.parseInput(input, opts, function (err, files) {
+      if (self.destroyed) return
+      if (err) return torrent._destroy(err)
+
+      streams = files.map(function (file) {
+        return file.getStream
+      })
+
+      createTorrent(input, opts, function (err, torrentBuf) {
+        if (self.destroyed) return
+        if (err) return torrent._destroy(err)
+
+        var existingTorrent = self.get(torrentBuf)
+        if (existingTorrent) {
+          torrent._destroy(new Error('Cannot add duplicate torrent ' + existingTorrent.infoHash))
+        } else {
+          torrent._onTorrentId(torrentBuf)
+        }
+      })
+    })
+  })
+
+  function onTorrent (torrent) {
+    var tasks = [
+      function (cb) {
+        torrent.load(streams, cb)
+      }
+    ]
+    if (self.dht) {
+      tasks.push(function (cb) {
+        torrent.once('dhtAnnounce', cb)
+      })
+    }
+    parallel(tasks, function (err) {
+      if (self.destroyed) return
+      if (err) return torrent._destroy(err)
+      _onseed(torrent)
+    })
+  }
+
+  function _onseed (torrent) {
+    self._debug('on seed')
+    if (typeof onseed === 'function') onseed(torrent)
+    torrent.emit('seed')
+    self.emit('seed', torrent)
+  }
+
+  return torrent
+}
+
+/**
+ * Remove a torrent from the client.
+ * @param  {string|Buffer|Torrent}   torrentId
+ * @param  {function} cb
+ */
+WebTorrent.prototype.remove = function (torrentId, cb) {
+  this._debug('remove')
+  var torrent = this.get(torrentId)
+  if (!torrent) throw new Error('No torrent with id ' + torrentId)
+  this._remove(torrentId, cb)
+}
+
+WebTorrent.prototype._remove = function (torrentId, cb) {
+  var torrent = this.get(torrentId)
+  if (!torrent) return
+  this.torrents.splice(this.torrents.indexOf(torrent), 1)
+  torrent.destroy(cb)
+}
+
+WebTorrent.prototype.address = function () {
+  if (!this.listening) return null
+  return this._tcpPool
+    ? this._tcpPool.server.address()
+    : { address: '0.0.0.0', family: 'IPv4', port: 0 }
+}
+
+/**
+ * Destroy the client, including all torrents and connections to peers.
+ * @param  {function} cb
+ */
+WebTorrent.prototype.destroy = function (cb) {
+  if (this.destroyed) throw new Error('client already destroyed')
+  this._destroy(null, cb)
+}
+
+WebTorrent.prototype._destroy = function (err, cb) {
+  var self = this
+  self._debug('client destroy')
+  self.destroyed = true
+
+  var tasks = self.torrents.map(function (torrent) {
+    return function (cb) {
+      torrent.destroy(cb)
+    }
+  })
+
+  if (self._tcpPool) {
+    tasks.push(function (cb) {
+      self._tcpPool.destroy(cb)
+    })
+  }
+
+  if (self.dht) {
+    tasks.push(function (cb) {
+      self.dht.destroy(cb)
+    })
+  }
+
+  parallel(tasks, cb)
+
+  if (err) self.emit('error', err)
+
+  self.torrents = []
+  self._tcpPool = null
+  self.dht = null
+}
+
+WebTorrent.prototype._onListening = function () {
+  this._debug('listening')
+  this.listening = true
+
+  if (this._tcpPool) {
+    // Sometimes server.address() returns `null` in Docker.
+    var address = this._tcpPool.server.address()
+    if (address) this.torrentPort = address.port
+  }
+
+  this.emit('listening')
+}
+
+WebTorrent.prototype._debug = function () {
+  var args = [].slice.call(arguments)
+  args[0] = '[' + this._debugId + '] ' + args[0]
+  debug.apply(null, args)
+}
+
+/**
+ * Check if `obj` is a node Readable stream
+ * @param  {*} obj
+ * @return {boolean}
+ */
+function isReadable (obj) {
+  return typeof obj === 'object' && obj != null && typeof obj.pipe === 'function'
+}
+
+/**
+ * Check if `obj` is a W3C `FileList` object
+ * @param  {*} obj
+ * @return {boolean}
+ */
+function isFileList (obj) {
+  return typeof FileList !== 'undefined' && obj instanceof FileList
+}
+
+}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"./lib/tcp-pool":119,"./lib/torrent":10,"./package.json":13,"_process":131,"bittorrent-dht/client":119,"create-torrent":38,"debug":39,"events":123,"inherits":48,"load-ip-set":119,"parse-torrent":68,"path":129,"randombytes":73,"run-parallel":87,"safe-buffer":89,"simple-concat":90,"simple-peer":92,"speedometer":95,"xtend":114,"zero-fill":116}],15:[function(require,module,exports){
 module.exports = peerId;
 
 function peerId() {
@@ -1499,7 +4741,7 @@ function peerId() {
 
 // console.log(peerId());
 
-},{}],8:[function(require,module,exports){
+},{}],16:[function(require,module,exports){
 /**
  * Created by snow on 17-6-22.
  */
@@ -1585,7 +4827,7 @@ Set.prototype = {
     }
 }
 
-},{}],9:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 /**
  * Created by snow on 17-6-19.
  */
@@ -1835,7 +5077,7 @@ SimpleRTC.prototype.startHeartbeat = function () {
         console.log(JSON.stringify(heartbeat));
         self.send(JSON.stringify(heartbeat));
 
-    }, 30*1000);
+    }, 90*1000);
 };
 
 
@@ -1855,7 +5097,7 @@ function getBrowserRTC () {
 
 
 
-},{"events":84,"inherits":33}],10:[function(require,module,exports){
+},{"events":123,"inherits":48}],18:[function(require,module,exports){
 
 /*
  config:{
@@ -2050,7 +5292,7 @@ RTCDownloader.prototype.clearQueue = function () {              //清空下载�
 };
 
 RTCDownloader.prototype._getHeaderInfo = function (uint8arr) {
-
+    // console.log('_getHeaderInfo mac:'+this.mac);
     var sub = uint8arr.subarray(0, 256);
     var headerString =  String.fromCharCode.apply(String, sub);
     // console.log('headerString:'+headerString)
@@ -2077,7 +5319,7 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
             "to_peer_id":self.message.peer_id,
             "offer_id":self.message.offer_id
         };
-        self.mac = self.message.peer_id;
+        self.mac = self.message.peer_id.replace(/:/g, '');
         // console.log('webrtc mac:'+self.mac);
         if (data.type == 'answer'){
             message.action = 'answer';
@@ -2091,7 +5333,7 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
         self.emit('signal',message);
     });
     simpleRTC.on('connect', function (state) {
-        console.log('[datachannel] '+self.dc_id+' CONNECT');
+        console.info('[datachannel] '+self.dc_id+' CONNECT');
         // simpleRTC.send('[simpleRTC] PEER CONNECTED!');
         simpleRTC.startHeartbeat();                          //开始周期性发送心跳信息
         if (!self.connectFlag){
@@ -2102,68 +5344,32 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
     });
 };
 
-},{"./simple-RTC":9,"buffer/":18,"events":84,"inherits":33}],11:[function(require,module,exports){
-'use strict';
-module.exports = balanced;
-function balanced(a, b, str) {
-  if (a instanceof RegExp) a = maybeMatch(a, str);
-  if (b instanceof RegExp) b = maybeMatch(b, str);
+},{"./simple-RTC":17,"buffer/":34,"events":123,"inherits":48}],19:[function(require,module,exports){
+var ADDR_RE = /^\[?([^\]]+)\]?:(\d+)$/ // ipv4/ipv6/hostname + port
 
-  var r = range(a, b, str);
+var cache = {}
 
-  return r && {
-    start: r[0],
-    end: r[1],
-    pre: str.slice(0, r[0]),
-    body: str.slice(r[0] + a.length, r[1]),
-    post: str.slice(r[1] + b.length)
-  };
-}
+// reset cache when it gets to 100,000 elements (~ 600KB of ipv4 addresses)
+// so it will not grow to consume all memory in long-running processes
+var size = 0
 
-function maybeMatch(reg, str) {
-  var m = str.match(reg);
-  return m ? m[0] : null;
-}
-
-balanced.range = range;
-function range(a, b, str) {
-  var begs, beg, left, right, result;
-  var ai = str.indexOf(a);
-  var bi = str.indexOf(b, ai + 1);
-  var i = ai;
-
-  if (ai >= 0 && bi > 0) {
-    begs = [];
-    left = str.length;
-
-    while (i >= 0 && !result) {
-      if (i == ai) {
-        begs.push(i);
-        ai = str.indexOf(a, i + 1);
-      } else if (begs.length == 1) {
-        result = [ begs.pop(), bi ];
-      } else {
-        beg = begs.pop();
-        if (beg < left) {
-          left = beg;
-          right = bi;
-        }
-
-        bi = str.indexOf(b, i + 1);
-      }
-
-      i = ai < bi && ai >= 0 ? ai : bi;
-    }
-
-    if (begs.length) {
-      result = [ left, right ];
-    }
+module.exports = function addrToIPPort (addr) {
+  if (size === 100000) module.exports.reset()
+  if (!cache[addr]) {
+    var m = ADDR_RE.exec(addr)
+    if (!m) throw new Error('invalid addr: ' + addr)
+    cache[addr] = [ m[1], Number(m[2]) ]
+    size += 1
   }
-
-  return result;
+  return cache[addr]
 }
 
-},{}],12:[function(require,module,exports){
+module.exports.reset = function reset () {
+  cache = {}
+  size = 0
+}
+
+},{}],20:[function(require,module,exports){
 'use strict'
 
 exports.byteLength = byteLength
@@ -2279,7 +5485,310 @@ function fromByteArray (uint8) {
   return parts.join('')
 }
 
-},{}],13:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
+(function (Buffer){
+const INTEGER_START = 0x69 // 'i'
+const STRING_DELIM = 0x3A // ':'
+const DICTIONARY_START = 0x64 // 'd'
+const LIST_START = 0x6C // 'l'
+const END_OF_TYPE = 0x65 // 'e'
+
+/**
+ * replaces parseInt(buffer.toString('ascii', start, end)).
+ * For strings with less then ~30 charachters, this is actually a lot faster.
+ *
+ * @param {Buffer} data
+ * @param {Number} start
+ * @param {Number} end
+ * @return {Number} calculated number
+ */
+function getIntFromBuffer (buffer, start, end) {
+  var sum = 0
+  var sign = 1
+
+  for (var i = start; i < end; i++) {
+    var num = buffer[i]
+
+    if (num < 58 && num >= 48) {
+      sum = sum * 10 + (num - 48)
+      continue
+    }
+
+    if (i === start && num === 43) { // +
+      continue
+    }
+
+    if (i === start && num === 45) { // -
+      sign = -1
+      continue
+    }
+
+    if (num === 46) { // .
+      // its a float. break here.
+      break
+    }
+
+    throw new Error('not a number: buffer[' + i + '] = ' + num)
+  }
+
+  return sum * sign
+}
+
+/**
+ * Decodes bencoded data.
+ *
+ * @param  {Buffer} data
+ * @param  {Number} start (optional)
+ * @param  {Number} end (optional)
+ * @param  {String} encoding (optional)
+ * @return {Object|Array|Buffer|String|Number}
+ */
+function decode (data, start, end, encoding) {
+  if (data == null || data.length === 0) {
+    return null
+  }
+
+  if (typeof start !== 'number' && encoding == null) {
+    encoding = start
+    start = undefined
+  }
+
+  if (typeof end !== 'number' && encoding == null) {
+    encoding = end
+    end = undefined
+  }
+
+  decode.position = 0
+  decode.encoding = encoding || null
+
+  decode.data = !(Buffer.isBuffer(data))
+    ? new Buffer(data)
+    : data.slice(start, end)
+
+  decode.bytes = decode.data.length
+
+  return decode.next()
+}
+
+decode.bytes = 0
+decode.position = 0
+decode.data = null
+decode.encoding = null
+
+decode.next = function () {
+  switch (decode.data[decode.position]) {
+    case DICTIONARY_START:
+      return decode.dictionary()
+    case LIST_START:
+      return decode.list()
+    case INTEGER_START:
+      return decode.integer()
+    default:
+      return decode.buffer()
+  }
+}
+
+decode.find = function (chr) {
+  var i = decode.position
+  var c = decode.data.length
+  var d = decode.data
+
+  while (i < c) {
+    if (d[i] === chr) return i
+    i++
+  }
+
+  throw new Error(
+    'Invalid data: Missing delimiter "' +
+    String.fromCharCode(chr) + '" [0x' +
+    chr.toString(16) + ']'
+  )
+}
+
+decode.dictionary = function () {
+  decode.position++
+
+  var dict = {}
+
+  while (decode.data[decode.position] !== END_OF_TYPE) {
+    dict[decode.buffer()] = decode.next()
+  }
+
+  decode.position++
+
+  return dict
+}
+
+decode.list = function () {
+  decode.position++
+
+  var lst = []
+
+  while (decode.data[decode.position] !== END_OF_TYPE) {
+    lst.push(decode.next())
+  }
+
+  decode.position++
+
+  return lst
+}
+
+decode.integer = function () {
+  var end = decode.find(END_OF_TYPE)
+  var number = getIntFromBuffer(decode.data, decode.position + 1, end)
+
+  decode.position += end + 1 - decode.position
+
+  return number
+}
+
+decode.buffer = function () {
+  var sep = decode.find(STRING_DELIM)
+  var length = getIntFromBuffer(decode.data, decode.position, sep)
+  var end = ++sep + length
+
+  decode.position = end
+
+  return decode.encoding
+    ? decode.data.toString(decode.encoding, sep, end)
+    : decode.data.slice(sep, end)
+}
+
+module.exports = decode
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":120}],22:[function(require,module,exports){
+var Buffer = require('safe-buffer').Buffer
+
+/**
+ * Encodes data in bencode.
+ *
+ * @param  {Buffer|Array|String|Object|Number|Boolean} data
+ * @return {Buffer}
+ */
+function encode (data, buffer, offset) {
+  var buffers = []
+  var result = null
+
+  encode._encode(buffers, data)
+  result = Buffer.concat(buffers)
+  encode.bytes = result.length
+
+  if (Buffer.isBuffer(buffer)) {
+    result.copy(buffer, offset)
+    return buffer
+  }
+
+  return result
+}
+
+encode.bytes = -1
+encode._floatConversionDetected = false
+
+encode._encode = function (buffers, data) {
+  if (Buffer.isBuffer(data)) {
+    buffers.push(Buffer.from(data.length + ':'))
+    buffers.push(data)
+    return
+  }
+
+  if (data == null) { return }
+
+  switch (typeof data) {
+    case 'string':
+      encode.buffer(buffers, data)
+      break
+    case 'number':
+      encode.number(buffers, data)
+      break
+    case 'object':
+      data.constructor === Array
+        ? encode.list(buffers, data)
+        : encode.dict(buffers, data)
+      break
+    case 'boolean':
+      encode.number(buffers, data ? 1 : 0)
+      break
+  }
+}
+
+var buffE = Buffer.from('e')
+var buffD = Buffer.from('d')
+var buffL = Buffer.from('l')
+
+encode.buffer = function (buffers, data) {
+  buffers.push(Buffer.from(Buffer.byteLength(data) + ':' + data))
+}
+
+encode.number = function (buffers, data) {
+  var maxLo = 0x80000000
+  var hi = (data / maxLo) << 0
+  var lo = (data % maxLo) << 0
+  var val = hi * maxLo + lo
+
+  buffers.push(Buffer.from('i' + val + 'e'))
+
+  if (val !== data && !encode._floatConversionDetected) {
+    encode._floatConversionDetected = true
+    console.warn(
+      'WARNING: Possible data corruption detected with value "' + data + '":',
+      'Bencoding only defines support for integers, value was converted to "' + val + '"'
+    )
+    console.trace()
+  }
+}
+
+encode.dict = function (buffers, data) {
+  buffers.push(buffD)
+
+  var j = 0
+  var k
+  // fix for issue #13 - sorted dicts
+  var keys = Object.keys(data).sort()
+  var kl = keys.length
+
+  for (; j < kl; j++) {
+    k = keys[j]
+    if (data[k] == null) continue
+    encode.buffer(buffers, k)
+    encode._encode(buffers, data[k])
+  }
+
+  buffers.push(buffE)
+}
+
+encode.list = function (buffers, data) {
+  var i = 0
+  var c = data.length
+  buffers.push(buffL)
+
+  for (; i < c; i++) {
+    if (data[i] == null) continue
+    encode._encode(buffers, data[i])
+  }
+
+  buffers.push(buffE)
+}
+
+module.exports = encode
+
+},{"safe-buffer":89}],23:[function(require,module,exports){
+var bencode = module.exports
+
+bencode.encode = require('./encode')
+bencode.decode = require('./decode')
+
+/**
+ * Determines the amount of bytes
+ * needed to encode the given value
+ * @param  {Object|Array|Buffer|String|Number|Boolean} value
+ * @return {Number} byteCount
+ */
+bencode.byteLength = bencode.encodingLength = function (value) {
+  return bencode.encode(value).length
+}
+
+},{"./decode":21,"./encode":22}],24:[function(require,module,exports){
 module.exports = function(haystack, needle, comparator, low, high) {
   var mid, cmp;
 
@@ -2324,7 +5833,7 @@ module.exports = function(haystack, needle, comparator, low, high) {
   return ~low;
 }
 
-},{}],14:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 (function (Buffer){
 var Container = typeof Buffer !== "undefined" ? Buffer //in node, use buffers
 		: typeof Int8Array !== "undefined" ? Int8Array //in newer browsers, use webgl int8arrays
@@ -2389,7 +5898,1639 @@ BitField.prototype._grow = function(length) {
 if(typeof module !== "undefined") module.exports = BitField;
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":82}],15:[function(require,module,exports){
+},{"buffer":120}],26:[function(require,module,exports){
+module.exports = Wire
+
+var arrayRemove = require('unordered-array-remove')
+var bencode = require('bencode')
+var BitField = require('bitfield')
+var Buffer = require('safe-buffer').Buffer
+var debug = require('debug')('bittorrent-protocol')
+var extend = require('xtend')
+var inherits = require('inherits')
+var randombytes = require('randombytes')
+var speedometer = require('speedometer')
+var stream = require('readable-stream')
+
+var BITFIELD_GROW = 400000
+var KEEP_ALIVE_TIMEOUT = 55000
+
+var MESSAGE_PROTOCOL = Buffer.from('\u0013BitTorrent protocol')
+var MESSAGE_KEEP_ALIVE = Buffer.from([0x00, 0x00, 0x00, 0x00])
+var MESSAGE_CHOKE = Buffer.from([0x00, 0x00, 0x00, 0x01, 0x00])
+var MESSAGE_UNCHOKE = Buffer.from([0x00, 0x00, 0x00, 0x01, 0x01])
+var MESSAGE_INTERESTED = Buffer.from([0x00, 0x00, 0x00, 0x01, 0x02])
+var MESSAGE_UNINTERESTED = Buffer.from([0x00, 0x00, 0x00, 0x01, 0x03])
+
+var MESSAGE_RESERVED = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+var MESSAGE_PORT = [0x00, 0x00, 0x00, 0x03, 0x09, 0x00, 0x00]
+
+function Request (piece, offset, length, callback) {
+  this.piece = piece
+  this.offset = offset
+  this.length = length
+  this.callback = callback
+}
+
+inherits(Wire, stream.Duplex)
+
+function Wire () {
+  if (!(this instanceof Wire)) return new Wire()
+  stream.Duplex.call(this)
+
+  this._debugId = randombytes(4).toString('hex')
+  this._debug('new wire')
+
+  this.peerId = null // remote peer id (hex string)
+  this.peerIdBuffer = null // remote peer id (buffer)
+  this.type = null // connection type ('webrtc', 'tcpIncoming', 'tcpOutgoing', 'webSeed')
+
+  this.amChoking = true // are we choking the peer?
+  this.amInterested = false // are we interested in the peer?
+
+  this.peerChoking = true // is the peer choking us?
+  this.peerInterested = false // is the peer interested in us?
+
+  // The largest torrent that I know of (the Geocities archive) is ~641 GB and has
+  // ~41,000 pieces. Therefore, cap bitfield to 10x larger (400,000 bits) to support all
+  // possible torrents but prevent malicious peers from growing bitfield to fill memory.
+  this.peerPieces = new BitField(0, { grow: BITFIELD_GROW })
+
+  this.peerExtensions = {}
+
+  this.requests = [] // outgoing
+  this.peerRequests = [] // incoming
+
+  this.extendedMapping = {} // number -> string, ex: 1 -> 'ut_metadata'
+  this.peerExtendedMapping = {} // string -> number, ex: 9 -> 'ut_metadata'
+
+  // The extended handshake to send, minus the "m" field, which gets automatically
+  // filled from `this.extendedMapping`
+  this.extendedHandshake = {}
+
+  this.peerExtendedHandshake = {} // remote peer's extended handshake
+
+  this._ext = {}  // string -> function, ex 'ut_metadata' -> ut_metadata()
+  this._nextExt = 1
+
+  this.uploaded = 0
+  this.downloaded = 0
+  this.uploadSpeed = speedometer()
+  this.downloadSpeed = speedometer()
+
+  this._keepAliveInterval = null
+  this._timeout = null
+  this._timeoutMs = 0
+
+  this.destroyed = false // was the wire ended by calling `destroy`?
+  this._finished = false
+
+  this._parserSize = 0 // number of needed bytes to parse next message from remote peer
+  this._parser = null // function to call once `this._parserSize` bytes are available
+
+  this._buffer = [] // incomplete message data
+  this._bufferSize = 0 // cached total length of buffers in `this._buffer`
+
+  this.on('finish', this._onFinish)
+
+  this._parseHandshake()
+}
+
+/**
+ * Set whether to send a "keep-alive" ping (sent every 55s)
+ * @param {boolean} enable
+ */
+Wire.prototype.setKeepAlive = function (enable) {
+  var self = this
+  self._debug('setKeepAlive %s', enable)
+  clearInterval(self._keepAliveInterval)
+  if (enable === false) return
+  self._keepAliveInterval = setInterval(function () {
+    self.keepAlive()
+  }, KEEP_ALIVE_TIMEOUT)
+}
+
+/**
+ * Set the amount of time to wait before considering a request to be "timed out"
+ * @param {number} ms
+ * @param {boolean=} unref (should the timer be unref'd? default: false)
+ */
+Wire.prototype.setTimeout = function (ms, unref) {
+  this._debug('setTimeout ms=%d unref=%s', ms, unref)
+  this._clearTimeout()
+  this._timeoutMs = ms
+  this._timeoutUnref = !!unref
+  this._updateTimeout()
+}
+
+Wire.prototype.destroy = function () {
+  if (this.destroyed) return
+  this.destroyed = true
+  this._debug('destroy')
+  this.emit('close')
+  this.end()
+}
+
+Wire.prototype.end = function () {
+  this._debug('end')
+  this._onUninterested()
+  this._onChoke()
+  stream.Duplex.prototype.end.apply(this, arguments)
+}
+
+/**
+ * Use the specified protocol extension.
+ * @param  {function} Extension
+ */
+Wire.prototype.use = function (Extension) {
+  var name = Extension.prototype.name
+  if (!name) {
+    throw new Error('Extension class requires a "name" property on the prototype')
+  }
+  this._debug('use extension.name=%s', name)
+
+  var ext = this._nextExt
+  var handler = new Extension(this)
+
+  function noop () {}
+
+  if (typeof handler.onHandshake !== 'function') {
+    handler.onHandshake = noop
+  }
+  if (typeof handler.onExtendedHandshake !== 'function') {
+    handler.onExtendedHandshake = noop
+  }
+  if (typeof handler.onMessage !== 'function') {
+    handler.onMessage = noop
+  }
+
+  this.extendedMapping[ext] = name
+  this._ext[name] = handler
+  this[name] = handler
+
+  this._nextExt += 1
+}
+
+//
+// OUTGOING MESSAGES
+//
+
+/**
+ * Message "keep-alive": <len=0000>
+ */
+Wire.prototype.keepAlive = function () {
+  this._debug('keep-alive')
+  this._push(MESSAGE_KEEP_ALIVE)
+}
+
+/**
+ * Message: "handshake" <pstrlen><pstr><reserved><info_hash><peer_id>
+ * @param  {Buffer|string} infoHash (as Buffer or *hex* string)
+ * @param  {Buffer|string} peerId
+ * @param  {Object} extensions
+ */
+Wire.prototype.handshake = function (infoHash, peerId, extensions) {
+  var infoHashBuffer, peerIdBuffer
+  if (typeof infoHash === 'string') {
+    infoHashBuffer = Buffer.from(infoHash, 'hex')
+  } else {
+    infoHashBuffer = infoHash
+    infoHash = infoHashBuffer.toString('hex')
+  }
+  if (typeof peerId === 'string') {
+    peerIdBuffer = Buffer.from(peerId, 'hex')
+  } else {
+    peerIdBuffer = peerId
+    peerId = peerIdBuffer.toString('hex')
+  }
+
+  if (infoHashBuffer.length !== 20 || peerIdBuffer.length !== 20) {
+    throw new Error('infoHash and peerId MUST have length 20')
+  }
+
+  this._debug('handshake i=%s p=%s exts=%o', infoHash, peerId, extensions)
+
+  var reserved = Buffer.from(MESSAGE_RESERVED)
+
+  // enable extended message
+  reserved[5] |= 0x10
+
+  if (extensions && extensions.dht) reserved[7] |= 1
+
+  this._push(Buffer.concat([MESSAGE_PROTOCOL, reserved, infoHashBuffer, peerIdBuffer]))
+  this._handshakeSent = true
+
+  if (this.peerExtensions.extended && !this._extendedHandshakeSent) {
+    // Peer's handshake indicated support already
+    // (incoming connection)
+    this._sendExtendedHandshake()
+  }
+}
+
+/* Peer supports BEP-0010, send extended handshake.
+ *
+ * This comes after the 'handshake' event to give the user a chance to populate
+ * `this.extendedHandshake` and `this.extendedMapping` before the extended handshake
+ * is sent to the remote peer.
+ */
+Wire.prototype._sendExtendedHandshake = function () {
+  // Create extended message object from registered extensions
+  var msg = extend(this.extendedHandshake)
+  msg.m = {}
+  for (var ext in this.extendedMapping) {
+    var name = this.extendedMapping[ext]
+    msg.m[name] = Number(ext)
+  }
+
+  // Send extended handshake
+  this.extended(0, bencode.encode(msg))
+  this._extendedHandshakeSent = true
+}
+
+/**
+ * Message "choke": <len=0001><id=0>
+ */
+Wire.prototype.choke = function () {
+  if (this.amChoking) return
+  this.amChoking = true
+  this._debug('choke')
+  while (this.peerRequests.length) {
+    this.peerRequests.pop()
+  }
+  this._push(MESSAGE_CHOKE)
+}
+
+/**
+ * Message "unchoke": <len=0001><id=1>
+ */
+Wire.prototype.unchoke = function () {
+  if (!this.amChoking) return
+  this.amChoking = false
+  this._debug('unchoke')
+  this._push(MESSAGE_UNCHOKE)
+}
+
+/**
+ * Message "interested": <len=0001><id=2>
+ */
+Wire.prototype.interested = function () {
+  if (this.amInterested) return
+  this.amInterested = true
+  this._debug('interested')
+  this._push(MESSAGE_INTERESTED)
+}
+
+/**
+ * Message "uninterested": <len=0001><id=3>
+ */
+Wire.prototype.uninterested = function () {
+  if (!this.amInterested) return
+  this.amInterested = false
+  this._debug('uninterested')
+  this._push(MESSAGE_UNINTERESTED)
+}
+
+/**
+ * Message "have": <len=0005><id=4><piece index>
+ * @param  {number} index
+ */
+Wire.prototype.have = function (index) {
+  this._debug('have %d', index)
+  this._message(4, [index], null)
+}
+
+/**
+ * Message "bitfield": <len=0001+X><id=5><bitfield>
+ * @param  {BitField|Buffer} bitfield
+ */
+Wire.prototype.bitfield = function (bitfield) {
+  this._debug('bitfield')
+  if (!Buffer.isBuffer(bitfield)) bitfield = bitfield.buffer
+  this._message(5, [], bitfield)
+}
+
+/**
+ * Message "request": <len=0013><id=6><index><begin><length>
+ * @param  {number}   index
+ * @param  {number}   offset
+ * @param  {number}   length
+ * @param  {function} cb
+ */
+Wire.prototype.request = function (index, offset, length, cb) {
+  if (!cb) cb = function () {}
+  if (this._finished) return cb(new Error('wire is closed'))
+  if (this.peerChoking) return cb(new Error('peer is choking'))
+
+  this._debug('request index=%d offset=%d length=%d', index, offset, length)
+
+  this.requests.push(new Request(index, offset, length, cb))
+  this._updateTimeout()
+  this._message(6, [index, offset, length], null)
+}
+
+/**
+ * Message "piece": <len=0009+X><id=7><index><begin><block>
+ * @param  {number} index
+ * @param  {number} offset
+ * @param  {Buffer} buffer
+ */
+Wire.prototype.piece = function (index, offset, buffer) {
+  this._debug('piece index=%d offset=%d', index, offset)
+  this.uploaded += buffer.length
+  this.uploadSpeed(buffer.length)
+  this.emit('upload', buffer.length)
+  this._message(7, [index, offset], buffer)
+}
+
+/**
+ * Message "cancel": <len=0013><id=8><index><begin><length>
+ * @param  {number} index
+ * @param  {number} offset
+ * @param  {number} length
+ */
+Wire.prototype.cancel = function (index, offset, length) {
+  this._debug('cancel index=%d offset=%d length=%d', index, offset, length)
+  this._callback(
+    pull(this.requests, index, offset, length),
+    new Error('request was cancelled'),
+    null
+  )
+  this._message(8, [index, offset, length], null)
+}
+
+/**
+ * Message: "port" <len=0003><id=9><listen-port>
+ * @param {Number} port
+ */
+Wire.prototype.port = function (port) {
+  this._debug('port %d', port)
+  var message = Buffer.from(MESSAGE_PORT)
+  message.writeUInt16BE(port, 5)
+  this._push(message)
+}
+
+/**
+ * Message: "extended" <len=0005+X><id=20><ext-number><payload>
+ * @param  {number|string} ext
+ * @param  {Object} obj
+ */
+Wire.prototype.extended = function (ext, obj) {
+  this._debug('extended ext=%s', ext)
+  if (typeof ext === 'string' && this.peerExtendedMapping[ext]) {
+    ext = this.peerExtendedMapping[ext]
+  }
+  if (typeof ext === 'number') {
+    var extId = Buffer.from([ext])
+    var buf = Buffer.isBuffer(obj) ? obj : bencode.encode(obj)
+
+    this._message(20, [], Buffer.concat([extId, buf]))
+  } else {
+    throw new Error('Unrecognized extension: ' + ext)
+  }
+}
+
+/**
+ * Duplex stream method. Called whenever the remote peer stream wants data. No-op
+ * since we'll just push data whenever we get it.
+ */
+Wire.prototype._read = function () {}
+
+/**
+ * Send a message to the remote peer.
+ */
+Wire.prototype._message = function (id, numbers, data) {
+  var dataLength = data ? data.length : 0
+  var buffer = Buffer.allocUnsafe(5 + (4 * numbers.length))
+
+  buffer.writeUInt32BE(buffer.length + dataLength - 4, 0)
+  buffer[4] = id
+  for (var i = 0; i < numbers.length; i++) {
+    buffer.writeUInt32BE(numbers[i], 5 + (4 * i))
+  }
+
+  this._push(buffer)
+  if (data) this._push(data)
+}
+
+Wire.prototype._push = function (data) {
+  if (this._finished) return
+  return this.push(data)
+}
+
+//
+// INCOMING MESSAGES
+//
+
+Wire.prototype._onKeepAlive = function () {
+  this._debug('got keep-alive')
+  this.emit('keep-alive')
+}
+
+Wire.prototype._onHandshake = function (infoHashBuffer, peerIdBuffer, extensions) {
+  var infoHash = infoHashBuffer.toString('hex')
+  var peerId = peerIdBuffer.toString('hex')
+
+  this._debug('got handshake i=%s p=%s exts=%o', infoHash, peerId, extensions)
+
+  this.peerId = peerId
+  this.peerIdBuffer = peerIdBuffer
+  this.peerExtensions = extensions
+
+  this.emit('handshake', infoHash, peerId, extensions)
+
+  var name
+  for (name in this._ext) {
+    this._ext[name].onHandshake(infoHash, peerId, extensions)
+  }
+
+  if (extensions.extended && this._handshakeSent &&
+      !this._extendedHandshakeSent) {
+    // outgoing connection
+    this._sendExtendedHandshake()
+  }
+}
+
+Wire.prototype._onChoke = function () {
+  this.peerChoking = true
+  this._debug('got choke')
+  this.emit('choke')
+  while (this.requests.length) {
+    this._callback(this.requests.pop(), new Error('peer is choking'), null)
+  }
+}
+
+Wire.prototype._onUnchoke = function () {
+  this.peerChoking = false
+  this._debug('got unchoke')
+  this.emit('unchoke')
+}
+
+Wire.prototype._onInterested = function () {
+  this.peerInterested = true
+  this._debug('got interested')
+  this.emit('interested')
+}
+
+Wire.prototype._onUninterested = function () {
+  this.peerInterested = false
+  this._debug('got uninterested')
+  this.emit('uninterested')
+}
+
+Wire.prototype._onHave = function (index) {
+  if (this.peerPieces.get(index)) return
+  this._debug('got have %d', index)
+
+  this.peerPieces.set(index, true)
+  this.emit('have', index)
+}
+
+Wire.prototype._onBitField = function (buffer) {
+  this.peerPieces = new BitField(buffer)
+  this._debug('got bitfield')
+  this.emit('bitfield', this.peerPieces)
+}
+
+Wire.prototype._onRequest = function (index, offset, length) {
+  var self = this
+  if (self.amChoking) return
+  self._debug('got request index=%d offset=%d length=%d', index, offset, length)
+
+  var respond = function (err, buffer) {
+    if (request !== pull(self.peerRequests, index, offset, length)) return
+    if (err) return self._debug('error satisfying request index=%d offset=%d length=%d (%s)', index, offset, length, err.message)
+    self.piece(index, offset, buffer)
+  }
+
+  var request = new Request(index, offset, length, respond)
+  self.peerRequests.push(request)
+  self.emit('request', index, offset, length, respond)
+}
+
+Wire.prototype._onPiece = function (index, offset, buffer) {
+  this._debug('got piece index=%d offset=%d', index, offset)
+  this._callback(pull(this.requests, index, offset, buffer.length), null, buffer)
+  this.downloaded += buffer.length
+  this.downloadSpeed(buffer.length)
+  this.emit('download', buffer.length)
+  this.emit('piece', index, offset, buffer)
+}
+
+Wire.prototype._onCancel = function (index, offset, length) {
+  this._debug('got cancel index=%d offset=%d length=%d', index, offset, length)
+  pull(this.peerRequests, index, offset, length)
+  this.emit('cancel', index, offset, length)
+}
+
+Wire.prototype._onPort = function (port) {
+  this._debug('got port %d', port)
+  this.emit('port', port)
+}
+
+Wire.prototype._onExtended = function (ext, buf) {
+  if (ext === 0) {
+    var info
+    try {
+      info = bencode.decode(buf)
+    } catch (err) {
+      this._debug('ignoring invalid extended handshake: %s', err.message || err)
+    }
+
+    if (!info) return
+    this.peerExtendedHandshake = info
+
+    var name
+    if (typeof info.m === 'object') {
+      for (name in info.m) {
+        this.peerExtendedMapping[name] = Number(info.m[name].toString())
+      }
+    }
+    for (name in this._ext) {
+      if (this.peerExtendedMapping[name]) {
+        this._ext[name].onExtendedHandshake(this.peerExtendedHandshake)
+      }
+    }
+    this._debug('got extended handshake')
+    this.emit('extended', 'handshake', this.peerExtendedHandshake)
+  } else {
+    if (this.extendedMapping[ext]) {
+      ext = this.extendedMapping[ext] // friendly name for extension
+      if (this._ext[ext]) {
+        // there is an registered extension handler, so call it
+        this._ext[ext].onMessage(buf)
+      }
+    }
+    this._debug('got extended message ext=%s', ext)
+    this.emit('extended', ext, buf)
+  }
+}
+
+Wire.prototype._onTimeout = function () {
+  this._debug('request timed out')
+  this._callback(this.requests.shift(), new Error('request has timed out'), null)
+  this.emit('timeout')
+}
+
+/**
+ * Duplex stream method. Called whenever the remote peer has data for us. Data that the
+ * remote peer sends gets buffered (i.e. not actually processed) until the right number
+ * of bytes have arrived, determined by the last call to `this._parse(number, callback)`.
+ * Once enough bytes have arrived to process the message, the callback function
+ * (i.e. `this._parser`) gets called with the full buffer of data.
+ * @param  {Buffer} data
+ * @param  {string} encoding
+ * @param  {function} cb
+ */
+Wire.prototype._write = function (data, encoding, cb) {
+  this._bufferSize += data.length
+  this._buffer.push(data)
+
+  while (this._bufferSize >= this._parserSize) {
+    var buffer = (this._buffer.length === 1)
+      ? this._buffer[0]
+      : Buffer.concat(this._buffer)
+    this._bufferSize -= this._parserSize
+    this._buffer = this._bufferSize
+      ? [buffer.slice(this._parserSize)]
+      : []
+    this._parser(buffer.slice(0, this._parserSize))
+  }
+
+  cb(null) // Signal that we're ready for more data
+}
+
+Wire.prototype._callback = function (request, err, buffer) {
+  if (!request) return
+
+  this._clearTimeout()
+
+  if (!this.peerChoking && !this._finished) this._updateTimeout()
+  request.callback(err, buffer)
+}
+
+Wire.prototype._clearTimeout = function () {
+  if (!this._timeout) return
+
+  clearTimeout(this._timeout)
+  this._timeout = null
+}
+
+Wire.prototype._updateTimeout = function () {
+  var self = this
+  if (!self._timeoutMs || !self.requests.length || self._timeout) return
+
+  self._timeout = setTimeout(function () {
+    self._onTimeout()
+  }, self._timeoutMs)
+  if (self._timeoutUnref && self._timeout.unref) self._timeout.unref()
+}
+
+/**
+ * Takes a number of bytes that the local peer is waiting to receive from the remote peer
+ * in order to parse a complete message, and a callback function to be called once enough
+ * bytes have arrived.
+ * @param  {number} size
+ * @param  {function} parser
+ */
+Wire.prototype._parse = function (size, parser) {
+  this._parserSize = size
+  this._parser = parser
+}
+
+/**
+ * Handle the first 4 bytes of a message, to determine the length of bytes that must be
+ * waited for in order to have the whole message.
+ * @param  {Buffer} buffer
+ */
+Wire.prototype._onMessageLength = function (buffer) {
+  var length = buffer.readUInt32BE(0)
+  if (length > 0) {
+    this._parse(length, this._onMessage)
+  } else {
+    this._onKeepAlive()
+    this._parse(4, this._onMessageLength)
+  }
+}
+
+/**
+ * Handle a message from the remote peer.
+ * @param  {Buffer} buffer
+ */
+Wire.prototype._onMessage = function (buffer) {
+  this._parse(4, this._onMessageLength)
+  switch (buffer[0]) {
+    case 0:
+      return this._onChoke()
+    case 1:
+      return this._onUnchoke()
+    case 2:
+      return this._onInterested()
+    case 3:
+      return this._onUninterested()
+    case 4:
+      return this._onHave(buffer.readUInt32BE(1))
+    case 5:
+      return this._onBitField(buffer.slice(1))
+    case 6:
+      return this._onRequest(buffer.readUInt32BE(1),
+          buffer.readUInt32BE(5), buffer.readUInt32BE(9))
+    case 7:
+      return this._onPiece(buffer.readUInt32BE(1),
+          buffer.readUInt32BE(5), buffer.slice(9))
+    case 8:
+      return this._onCancel(buffer.readUInt32BE(1),
+          buffer.readUInt32BE(5), buffer.readUInt32BE(9))
+    case 9:
+      return this._onPort(buffer.readUInt16BE(1))
+    case 20:
+      return this._onExtended(buffer.readUInt8(1), buffer.slice(2))
+    default:
+      this._debug('got unknown message')
+      return this.emit('unknownmessage', buffer)
+  }
+}
+
+Wire.prototype._parseHandshake = function () {
+  var self = this
+  self._parse(1, function (buffer) {
+    var pstrlen = buffer.readUInt8(0)
+    self._parse(pstrlen + 48, function (handshake) {
+      var protocol = handshake.slice(0, pstrlen)
+      if (protocol.toString() !== 'BitTorrent protocol') {
+        self._debug('Error: wire not speaking BitTorrent protocol (%s)', protocol.toString())
+        self.end()
+        return
+      }
+      handshake = handshake.slice(pstrlen)
+      self._onHandshake(handshake.slice(8, 28), handshake.slice(28, 48), {
+        dht: !!(handshake[7] & 0x01), // see bep_0005
+        extended: !!(handshake[5] & 0x10) // see bep_0010
+      })
+      self._parse(4, self._onMessageLength)
+    })
+  })
+}
+
+Wire.prototype._onFinish = function () {
+  this._finished = true
+
+  this.push(null) // stream cannot be half open, so signal the end of it
+  while (this.read()) {} // consume and discard the rest of the stream data
+
+  clearInterval(this._keepAliveInterval)
+  this._parse(Number.MAX_VALUE, function () {})
+  while (this.peerRequests.length) {
+    this.peerRequests.pop()
+  }
+  while (this.requests.length) {
+    this._callback(this.requests.pop(), new Error('wire was closed'), null)
+  }
+}
+
+Wire.prototype._debug = function () {
+  var args = [].slice.call(arguments)
+  args[0] = '[' + this._debugId + '] ' + args[0]
+  debug.apply(null, args)
+}
+
+function pull (requests, piece, offset, length) {
+  for (var i = 0; i < requests.length; i++) {
+    var req = requests[i]
+    if (req.piece === piece && req.offset === offset && req.length === length) {
+      arrayRemove(requests, i)
+      return req
+    }
+  }
+  return null
+}
+
+},{"bencode":23,"bitfield":25,"debug":39,"inherits":48,"randombytes":73,"readable-stream":83,"safe-buffer":89,"speedometer":95,"unordered-array-remove":108,"xtend":114}],27:[function(require,module,exports){
+(function (process){
+module.exports = Client
+
+var Buffer = require('safe-buffer').Buffer
+var debug = require('debug')('bittorrent-tracker:client')
+var EventEmitter = require('events').EventEmitter
+var extend = require('xtend')
+var inherits = require('inherits')
+var once = require('once')
+var parallel = require('run-parallel')
+var Peer = require('simple-peer')
+var uniq = require('uniq')
+var url = require('url')
+
+var common = require('./lib/common')
+var HTTPTracker = require('./lib/client/http-tracker') // empty object in browser
+var UDPTracker = require('./lib/client/udp-tracker') // empty object in browser
+var WebSocketTracker = require('./lib/client/websocket-tracker')
+
+inherits(Client, EventEmitter)
+
+/**
+ * BitTorrent tracker client.
+ *
+ * Find torrent peers, to help a torrent client participate in a torrent swarm.
+ *
+ * @param {Object} opts                          options object
+ * @param {string|Buffer} opts.infoHash          torrent info hash
+ * @param {string|Buffer} opts.peerId            peer id
+ * @param {string|Array.<string>} opts.announce  announce
+ * @param {number} opts.port                     torrent client listening port
+ * @param {function} opts.getAnnounceOpts        callback to provide data to tracker
+ * @param {number} opts.rtcConfig                RTCPeerConnection configuration object
+ * @param {number} opts.userAgent                User-Agent header for http requests
+ * @param {number} opts.wrtc                     custom webrtc impl (useful in node.js)
+ */
+function Client (opts) {
+  var self = this
+  if (!(self instanceof Client)) return new Client(opts)
+  EventEmitter.call(self)
+  if (!opts) opts = {}
+
+  if (!opts.peerId) throw new Error('Option `peerId` is required')
+  if (!opts.infoHash) throw new Error('Option `infoHash` is required')
+  if (!opts.announce) throw new Error('Option `announce` is required')
+  if (!process.browser && !opts.port) throw new Error('Option `port` is required')
+
+  self.peerId = typeof opts.peerId === 'string'
+    ? opts.peerId
+    : opts.peerId.toString('hex')
+  self._peerIdBuffer = Buffer.from(self.peerId, 'hex')
+  self._peerIdBinary = self._peerIdBuffer.toString('binary')
+
+  self.infoHash = typeof opts.infoHash === 'string'
+    ? opts.infoHash
+    : opts.infoHash.toString('hex')
+  self._infoHashBuffer = Buffer.from(self.infoHash, 'hex')
+  self._infoHashBinary = self._infoHashBuffer.toString('binary')
+
+  debug('new client %s', self.infoHash)
+
+  self.destroyed = false
+
+  self._port = opts.port
+  self._getAnnounceOpts = opts.getAnnounceOpts
+  self._rtcConfig = opts.rtcConfig
+  self._userAgent = opts.userAgent
+
+  // Support lazy 'wrtc' module initialization
+  // See: https://github.com/webtorrent/webtorrent-hybrid/issues/46
+  self._wrtc = typeof opts.wrtc === 'function' ? opts.wrtc() : opts.wrtc
+
+  var announce = typeof opts.announce === 'string'
+    ? [ opts.announce ]
+    : opts.announce == null ? [] : opts.announce
+
+  // Remove trailing slash from trackers to catch duplicates
+  announce = announce.map(function (announceUrl) {
+    announceUrl = announceUrl.toString()
+    if (announceUrl[announceUrl.length - 1] === '/') {
+      announceUrl = announceUrl.substring(0, announceUrl.length - 1)
+    }
+    return announceUrl
+  })
+  announce = uniq(announce)
+
+  var webrtcSupport = self._wrtc !== false && (!!self._wrtc || Peer.WEBRTC_SUPPORT)
+
+  self._trackers = announce
+    .map(function (announceUrl) {
+      var protocol = url.parse(announceUrl).protocol
+      if ((protocol === 'http:' || protocol === 'https:') &&
+          typeof HTTPTracker === 'function') {
+        return new HTTPTracker(self, announceUrl)
+      } else if (protocol === 'udp:' && typeof UDPTracker === 'function') {
+        return new UDPTracker(self, announceUrl)
+      } else if ((protocol === 'ws:' || protocol === 'wss:') && webrtcSupport) {
+        // Skip ws:// trackers on https:// sites because they throw SecurityError
+        if (protocol === 'ws:' && typeof window !== 'undefined' &&
+            window.location.protocol === 'https:') {
+          nextTickWarn(new Error('Unsupported tracker protocol: ' + announceUrl))
+          return null
+        }
+        return new WebSocketTracker(self, announceUrl)
+      } else {
+        nextTickWarn(new Error('Unsupported tracker protocol: ' + announceUrl))
+        return null
+      }
+    })
+    .filter(Boolean)
+
+  function nextTickWarn (err) {
+    process.nextTick(function () {
+      self.emit('warning', err)
+    })
+  }
+}
+
+/**
+ * Simple convenience function to scrape a tracker for an info hash without needing to
+ * create a Client, pass it a parsed torrent, etc. Support scraping a tracker for multiple
+ * torrents at the same time.
+ * @params {Object} opts
+ * @param  {string|Array.<string>} opts.infoHash
+ * @param  {string} opts.announce
+ * @param  {function} cb
+ */
+Client.scrape = function (opts, cb) {
+  cb = once(cb)
+
+  if (!opts.infoHash) throw new Error('Option `infoHash` is required')
+  if (!opts.announce) throw new Error('Option `announce` is required')
+
+  var clientOpts = extend(opts, {
+    infoHash: Array.isArray(opts.infoHash) ? opts.infoHash[0] : opts.infoHash,
+    peerId: Buffer.from('01234567890123456789'), // dummy value
+    port: 6881 // dummy value
+  })
+
+  var client = new Client(clientOpts)
+  client.once('error', cb)
+  client.once('warning', cb)
+
+  var len = Array.isArray(opts.infoHash) ? opts.infoHash.length : 1
+  var results = {}
+  client.on('scrape', function (data) {
+    len -= 1
+    results[data.infoHash] = data
+    if (len === 0) {
+      client.destroy()
+      var keys = Object.keys(results)
+      if (keys.length === 1) {
+        cb(null, results[keys[0]])
+      } else {
+        cb(null, results)
+      }
+    }
+  })
+
+  opts.infoHash = Array.isArray(opts.infoHash)
+    ? opts.infoHash.map(function (infoHash) {
+      return Buffer.from(infoHash, 'hex')
+    })
+    : Buffer.from(opts.infoHash, 'hex')
+  client.scrape({ infoHash: opts.infoHash })
+  return client
+}
+
+/**
+ * Send a `start` announce to the trackers.
+ * @param {Object} opts
+ * @param {number=} opts.uploaded
+ * @param {number=} opts.downloaded
+ * @param {number=} opts.left (if not set, calculated automatically)
+ */
+Client.prototype.start = function (opts) {
+  var self = this
+  debug('send `start`')
+  opts = self._defaultAnnounceOpts(opts)
+  opts.event = 'started'
+  self._announce(opts)
+
+  // start announcing on intervals
+  self._trackers.forEach(function (tracker) {
+    tracker.setInterval()
+  })
+}
+
+/**
+ * Send a `stop` announce to the trackers.
+ * @param {Object} opts
+ * @param {number=} opts.uploaded
+ * @param {number=} opts.downloaded
+ * @param {number=} opts.numwant
+ * @param {number=} opts.left (if not set, calculated automatically)
+ */
+Client.prototype.stop = function (opts) {
+  var self = this
+  debug('send `stop`')
+  opts = self._defaultAnnounceOpts(opts)
+  opts.event = 'stopped'
+  self._announce(opts)
+}
+
+/**
+ * Send a `complete` announce to the trackers.
+ * @param {Object} opts
+ * @param {number=} opts.uploaded
+ * @param {number=} opts.downloaded
+ * @param {number=} opts.numwant
+ * @param {number=} opts.left (if not set, calculated automatically)
+ */
+Client.prototype.complete = function (opts) {
+  var self = this
+  debug('send `complete`')
+  if (!opts) opts = {}
+  opts = self._defaultAnnounceOpts(opts)
+  opts.event = 'completed'
+  self._announce(opts)
+}
+
+/**
+ * Send a `update` announce to the trackers.
+ * @param {Object} opts
+ * @param {number=} opts.uploaded
+ * @param {number=} opts.downloaded
+ * @param {number=} opts.numwant
+ * @param {number=} opts.left (if not set, calculated automatically)
+ */
+Client.prototype.update = function (opts) {
+  var self = this
+  debug('send `update`')
+  opts = self._defaultAnnounceOpts(opts)
+  if (opts.event) delete opts.event
+  self._announce(opts)
+}
+
+Client.prototype._announce = function (opts) {
+  var self = this
+  self._trackers.forEach(function (tracker) {
+    // tracker should not modify `opts` object, it's passed to all trackers
+    tracker.announce(opts)
+  })
+}
+
+/**
+ * Send a scrape request to the trackers.
+ * @param {Object} opts
+ */
+Client.prototype.scrape = function (opts) {
+  var self = this
+  debug('send `scrape`')
+  if (!opts) opts = {}
+  self._trackers.forEach(function (tracker) {
+    // tracker should not modify `opts` object, it's passed to all trackers
+    tracker.scrape(opts)
+  })
+}
+
+Client.prototype.setInterval = function (intervalMs) {
+  var self = this
+  debug('setInterval %d', intervalMs)
+  self._trackers.forEach(function (tracker) {
+    tracker.setInterval(intervalMs)
+  })
+}
+
+Client.prototype.destroy = function (cb) {
+  var self = this
+  if (self.destroyed) return
+  self.destroyed = true
+  debug('destroy')
+
+  var tasks = self._trackers.map(function (tracker) {
+    return function (cb) {
+      tracker.destroy(cb)
+    }
+  })
+
+  parallel(tasks, cb)
+
+  self._trackers = []
+  self._getAnnounceOpts = null
+}
+
+Client.prototype._defaultAnnounceOpts = function (opts) {
+  var self = this
+  if (!opts) opts = {}
+
+  if (opts.numwant == null) opts.numwant = common.DEFAULT_ANNOUNCE_PEERS
+
+  if (opts.uploaded == null) opts.uploaded = 0
+  if (opts.downloaded == null) opts.downloaded = 0
+
+  if (self._getAnnounceOpts) opts = extend(opts, self._getAnnounceOpts())
+  return opts
+}
+
+}).call(this,require('_process'))
+},{"./lib/client/http-tracker":119,"./lib/client/udp-tracker":119,"./lib/client/websocket-tracker":29,"./lib/common":30,"_process":131,"debug":39,"events":123,"inherits":48,"once":66,"run-parallel":87,"safe-buffer":89,"simple-peer":92,"uniq":107,"url":152,"xtend":114}],28:[function(require,module,exports){
+module.exports = Tracker
+
+var EventEmitter = require('events').EventEmitter
+var inherits = require('inherits')
+
+inherits(Tracker, EventEmitter)
+
+function Tracker (client, announceUrl) {
+  var self = this
+  EventEmitter.call(self)
+  self.client = client
+  self.announceUrl = announceUrl
+
+  self.interval = null
+  self.destroyed = false
+}
+
+Tracker.prototype.setInterval = function (intervalMs) {
+  var self = this
+  if (intervalMs == null) intervalMs = self.DEFAULT_ANNOUNCE_INTERVAL
+
+  clearInterval(self.interval)
+
+  if (intervalMs) {
+    self.interval = setInterval(function () {
+      self.announce(self.client._defaultAnnounceOpts())
+    }, intervalMs)
+    if (self.interval.unref) self.interval.unref()
+  }
+}
+
+},{"events":123,"inherits":48}],29:[function(require,module,exports){
+module.exports = WebSocketTracker
+
+var debug = require('debug')('bittorrent-tracker:websocket-tracker')
+var extend = require('xtend')
+var inherits = require('inherits')
+var Peer = require('simple-peer')
+var randombytes = require('randombytes')
+var Socket = require('simple-websocket')
+
+var common = require('../common')
+var Tracker = require('./tracker')
+
+// Use a socket pool, so tracker clients share WebSocket objects for the same server.
+// In practice, WebSockets are pretty slow to establish, so this gives a nice performance
+// boost, and saves browser resources.
+var socketPool = {}
+
+var RECONNECT_MINIMUM = 15 * 1000
+var RECONNECT_MAXIMUM = 30 * 60 * 1000
+var RECONNECT_VARIANCE = 30 * 1000
+var OFFER_TIMEOUT = 50 * 1000
+
+inherits(WebSocketTracker, Tracker)
+
+function WebSocketTracker (client, announceUrl, opts) {
+  var self = this
+  Tracker.call(self, client, announceUrl)
+  debug('new websocket tracker %s', announceUrl)
+
+  self.peers = {} // peers (offer id -> peer)
+  self.socket = null
+
+  self.reconnecting = false
+  self.retries = 0
+  self.reconnectTimer = null
+
+  // Simple boolean flag to track whether the socket has received data from
+  // the websocket server since the last time socket.send() was called.
+  self.expectingResponse = false
+
+  self._openSocket()
+}
+
+WebSocketTracker.prototype.DEFAULT_ANNOUNCE_INTERVAL = 30 * 1000 // 30 seconds
+
+WebSocketTracker.prototype.announce = function (opts) {
+  var self = this
+  if (self.destroyed || self.reconnecting) return
+  if (!self.socket.connected) {
+    self.socket.once('connect', function () {
+      self.announce(opts)
+    })
+    return
+  }
+
+  var params = extend(opts, {
+    action: 'announce',
+    info_hash: self.client._infoHashBinary,
+    peer_id: self.client._peerIdBinary
+  })
+  if (self._trackerId) params.trackerid = self._trackerId
+
+  if (opts.event === 'stopped' || opts.event === 'completed') {
+    // Don't include offers with 'stopped' or 'completed' event
+    self._send(params)
+  } else {
+    // Limit the number of offers that are generated, since it can be slow
+    var numwant = Math.min(opts.numwant, 10)
+
+    self._generateOffers(numwant, function (offers) {
+      params.numwant = numwant
+      params.offers = offers
+      self._send(params)
+    })
+  }
+}
+
+WebSocketTracker.prototype.scrape = function (opts) {
+  var self = this
+  if (self.destroyed || self.reconnecting) return
+  if (!self.socket.connected) {
+    self.socket.once('connect', function () {
+      self.scrape(opts)
+    })
+    return
+  }
+
+  var infoHashes = (Array.isArray(opts.infoHash) && opts.infoHash.length > 0)
+    ? opts.infoHash.map(function (infoHash) {
+      return infoHash.toString('binary')
+    })
+    : (opts.infoHash && opts.infoHash.toString('binary')) || self.client._infoHashBinary
+  var params = {
+    action: 'scrape',
+    info_hash: infoHashes
+  }
+
+  self._send(params)
+}
+
+WebSocketTracker.prototype.destroy = function (cb) {
+  var self = this
+  if (!cb) cb = noop
+  if (self.destroyed) return cb(null)
+
+  self.destroyed = true
+
+  clearInterval(self.interval)
+  clearTimeout(self.reconnectTimer)
+
+  // Destroy peers
+  for (var peerId in self.peers) {
+    var peer = self.peers[peerId]
+    clearTimeout(peer.trackerTimeout)
+    peer.destroy()
+  }
+  self.peers = null
+
+  if (self.socket) {
+    self.socket.removeListener('connect', self._onSocketConnectBound)
+    self.socket.removeListener('data', self._onSocketDataBound)
+    self.socket.removeListener('close', self._onSocketCloseBound)
+    self.socket.removeListener('error', self._onSocketErrorBound)
+    self.socket = null
+  }
+
+  self._onSocketConnectBound = null
+  self._onSocketErrorBound = null
+  self._onSocketDataBound = null
+  self._onSocketCloseBound = null
+
+  if (socketPool[self.announceUrl]) {
+    socketPool[self.announceUrl].consumers -= 1
+  }
+
+  // Other instances are using the socket, so there's nothing left to do here
+  if (socketPool[self.announceUrl].consumers > 0) return cb()
+
+  var socket = socketPool[self.announceUrl]
+  delete socketPool[self.announceUrl]
+  socket.on('error', noop) // ignore all future errors
+  socket.once('close', cb)
+
+  // If there is no data response expected, destroy immediately.
+  if (!self.expectingResponse) return destroyCleanup()
+
+  // Otherwise, wait a short time for potential responses to come in from the
+  // server, then force close the socket.
+  var timeout = setTimeout(destroyCleanup, common.DESTROY_TIMEOUT)
+
+  // But, if a response comes from the server before the timeout fires, do cleanup
+  // right away.
+  socket.once('data', destroyCleanup)
+
+  function destroyCleanup () {
+    if (timeout) {
+      clearTimeout(timeout)
+      timeout = null
+    }
+    socket.removeListener('data', destroyCleanup)
+    socket.destroy()
+    socket = null
+  }
+}
+
+WebSocketTracker.prototype._openSocket = function () {
+  var self = this
+  self.destroyed = false
+
+  if (!self.peers) self.peers = {}
+
+  self._onSocketConnectBound = function () {
+    self._onSocketConnect()
+  }
+  self._onSocketErrorBound = function (err) {
+    self._onSocketError(err)
+  }
+  self._onSocketDataBound = function (data) {
+    self._onSocketData(data)
+  }
+  self._onSocketCloseBound = function () {
+    self._onSocketClose()
+  }
+
+  self.socket = socketPool[self.announceUrl]
+  if (self.socket) {
+    socketPool[self.announceUrl].consumers += 1
+  } else {
+    self.socket = socketPool[self.announceUrl] = new Socket(self.announceUrl)
+    self.socket.consumers = 1
+    self.socket.once('connect', self._onSocketConnectBound)
+  }
+
+  self.socket.on('data', self._onSocketDataBound)
+  self.socket.once('close', self._onSocketCloseBound)
+  self.socket.once('error', self._onSocketErrorBound)
+}
+
+WebSocketTracker.prototype._onSocketConnect = function () {
+  var self = this
+  if (self.destroyed) return
+
+  if (self.reconnecting) {
+    self.reconnecting = false
+    self.retries = 0
+    self.announce(self.client._defaultAnnounceOpts())
+  }
+}
+
+WebSocketTracker.prototype._onSocketData = function (data) {
+  var self = this
+  if (self.destroyed) return
+
+  self.expectingResponse = false
+
+  try {
+    data = JSON.parse(data)
+  } catch (err) {
+    self.client.emit('warning', new Error('Invalid tracker response'))
+    return
+  }
+
+  if (data.action === 'announce') {
+    self._onAnnounceResponse(data)
+  } else if (data.action === 'scrape') {
+    self._onScrapeResponse(data)
+  } else {
+    self._onSocketError(new Error('invalid action in WS response: ' + data.action))
+  }
+}
+
+WebSocketTracker.prototype._onAnnounceResponse = function (data) {
+  var self = this
+
+  if (data.info_hash !== self.client._infoHashBinary) {
+    debug(
+      'ignoring websocket data from %s for %s (looking for %s: reused socket)',
+      self.announceUrl, common.binaryToHex(data.info_hash), self.client.infoHash
+    )
+    return
+  }
+
+  if (data.peer_id && data.peer_id === self.client._peerIdBinary) {
+    // ignore offers/answers from this client
+    return
+  }
+
+  debug(
+    'received %s from %s for %s',
+    JSON.stringify(data), self.announceUrl, self.client.infoHash
+  )
+
+  var failure = data['failure reason']
+  if (failure) return self.client.emit('warning', new Error(failure))
+
+  var warning = data['warning message']
+  if (warning) self.client.emit('warning', new Error(warning))
+
+  var interval = data.interval || data['min interval']
+  if (interval) self.setInterval(interval * 1000)
+
+  var trackerId = data['tracker id']
+  if (trackerId) {
+    // If absent, do not discard previous trackerId value
+    self._trackerId = trackerId
+  }
+
+  if (data.complete != null) {
+    var response = Object.assign({}, data, {
+      announce: self.announceUrl,
+      infoHash: common.binaryToHex(data.info_hash)
+    })
+    self.client.emit('update', response)
+  }
+
+  var peer
+  if (data.offer && data.peer_id) {
+    debug('creating peer (from remote offer)')
+    peer = self._createPeer()
+    peer.id = common.binaryToHex(data.peer_id)
+    peer.once('signal', function (answer) {
+      var params = {
+        action: 'announce',
+        info_hash: self.client._infoHashBinary,
+        peer_id: self.client._peerIdBinary,
+        to_peer_id: data.peer_id,
+        answer: answer,
+        offer_id: data.offer_id
+      }
+      if (self._trackerId) params.trackerid = self._trackerId
+      self._send(params)
+    })
+    peer.signal(data.offer)
+    self.client.emit('peer', peer)
+  }
+
+  if (data.answer && data.peer_id) {
+    var offerId = common.binaryToHex(data.offer_id)
+    peer = self.peers[offerId]
+    if (peer) {
+      peer.id = common.binaryToHex(data.peer_id)
+      peer.signal(data.answer)
+      self.client.emit('peer', peer)
+
+      clearTimeout(peer.trackerTimeout)
+      peer.trackerTimeout = null
+      delete self.peers[offerId]
+    } else {
+      debug('got unexpected answer: ' + JSON.stringify(data.answer))
+    }
+  }
+}
+
+WebSocketTracker.prototype._onScrapeResponse = function (data) {
+  var self = this
+  data = data.files || {}
+
+  var keys = Object.keys(data)
+  if (keys.length === 0) {
+    self.client.emit('warning', new Error('invalid scrape response'))
+    return
+  }
+
+  keys.forEach(function (infoHash) {
+    // TODO: optionally handle data.flags.min_request_interval
+    // (separate from announce interval)
+    var response = Object.assign(data[infoHash], {
+      announce: self.announceUrl,
+      infoHash: common.binaryToHex(infoHash)
+    })
+    self.client.emit('scrape', response)
+  })
+}
+
+WebSocketTracker.prototype._onSocketClose = function () {
+  var self = this
+  if (self.destroyed) return
+  self.destroy()
+  self._startReconnectTimer()
+}
+
+WebSocketTracker.prototype._onSocketError = function (err) {
+  var self = this
+  if (self.destroyed) return
+  self.destroy()
+  // errors will often happen if a tracker is offline, so don't treat it as fatal
+  self.client.emit('warning', err)
+  self._startReconnectTimer()
+}
+
+WebSocketTracker.prototype._startReconnectTimer = function () {
+  var self = this
+  var ms = Math.floor(Math.random() * RECONNECT_VARIANCE) + Math.min(Math.pow(2, self.retries) * RECONNECT_MINIMUM, RECONNECT_MAXIMUM)
+
+  self.reconnecting = true
+  clearTimeout(self.reconnectTimer)
+  self.reconnectTimer = setTimeout(function () {
+    self.retries++
+    self._openSocket()
+  }, ms)
+  if (self.reconnectTimer.unref) self.reconnectTimer.unref()
+
+  debug('reconnecting socket in %s ms', ms)
+}
+
+WebSocketTracker.prototype._send = function (params) {
+  var self = this
+  if (self.destroyed) return
+  self.expectingResponse = true
+  var message = JSON.stringify(params)
+  debug('send %s', message)
+  self.socket.send(message)
+}
+
+WebSocketTracker.prototype._generateOffers = function (numwant, cb) {
+  var self = this
+  var offers = []
+  debug('generating %s offers', numwant)
+
+  for (var i = 0; i < numwant; ++i) {
+    generateOffer()
+  }
+  checkDone()
+
+  function generateOffer () {
+    var offerId = randombytes(20).toString('hex')
+    debug('creating peer (from _generateOffers)')
+    var peer = self.peers[offerId] = self._createPeer({ initiator: true })
+    peer.once('signal', function (offer) {
+      offers.push({
+        offer: offer,
+        offer_id: common.hexToBinary(offerId)
+      })
+      checkDone()
+    })
+    peer.trackerTimeout = setTimeout(function () {
+      debug('tracker timeout: destroying peer')
+      peer.trackerTimeout = null
+      delete self.peers[offerId]
+      peer.destroy()
+    }, OFFER_TIMEOUT)
+    if (peer.trackerTimeout.unref) peer.trackerTimeout.unref()
+  }
+
+  function checkDone () {
+    if (offers.length === numwant) {
+      debug('generated %s offers', numwant)
+      cb(offers)
+    }
+  }
+}
+
+WebSocketTracker.prototype._createPeer = function (opts) {
+  var self = this
+
+  opts = Object.assign({
+    trickle: false,
+    config: self.client._rtcConfig,
+    wrtc: self.client._wrtc
+  }, opts)
+
+  var peer = new Peer(opts)
+
+  peer.once('error', onError)
+  peer.once('connect', onConnect)
+
+  return peer
+
+  // Handle peer 'error' events that are fired *before* the peer is emitted in
+  // a 'peer' event.
+  function onError (err) {
+    self.client.emit('warning', new Error('Connection error: ' + err.message))
+    peer.destroy()
+  }
+
+  // Once the peer is emitted in a 'peer' event, then it's the consumer's
+  // responsibility to listen for errors, so the listeners are removed here.
+  function onConnect () {
+    peer.removeListener('error', onError)
+    peer.removeListener('connect', onConnect)
+  }
+}
+
+function noop () {}
+
+},{"../common":30,"./tracker":28,"debug":39,"inherits":48,"randombytes":73,"simple-peer":92,"simple-websocket":94,"xtend":114}],30:[function(require,module,exports){
+/**
+ * Functions/constants needed by both the client and server.
+ */
+
+var Buffer = require('safe-buffer').Buffer
+var extend = require('xtend/mutable')
+
+exports.DEFAULT_ANNOUNCE_PEERS = 50
+exports.MAX_ANNOUNCE_PEERS = 82
+
+exports.binaryToHex = function (str) {
+  if (typeof str !== 'string') {
+    str = String(str)
+  }
+  return Buffer.from(str, 'binary').toString('hex')
+}
+
+exports.hexToBinary = function (str) {
+  if (typeof str !== 'string') {
+    str = String(str)
+  }
+  return Buffer.from(str, 'hex').toString('binary')
+}
+
+var config = require('./common-node')
+extend(exports, config)
+
+},{"./common-node":119,"safe-buffer":89,"xtend/mutable":115}],31:[function(require,module,exports){
+(function (Buffer){
+/* global Blob, FileReader */
+
+module.exports = function blobToBuffer (blob, cb) {
+  if (typeof Blob === 'undefined' || !(blob instanceof Blob)) {
+    throw new Error('first argument must be a Blob')
+  }
+  if (typeof cb !== 'function') {
+    throw new Error('second argument must be a function')
+  }
+
+  var reader = new FileReader()
+
+  function onLoadEnd (e) {
+    reader.removeEventListener('loadend', onLoadEnd, false)
+    if (e.error) cb(e.error)
+    else cb(null, new Buffer(reader.result))
+  }
+
+  reader.addEventListener('loadend', onLoadEnd, false)
+  reader.readAsArrayBuffer(blob)
+}
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":120}],32:[function(require,module,exports){
+(function (Buffer){
+var inherits = require('inherits');
+var Transform = require('readable-stream').Transform;
+var defined = require('defined');
+
+module.exports = Block;
+inherits(Block, Transform);
+
+function Block (size, opts) {
+    if (!(this instanceof Block)) return new Block(size, opts);
+    Transform.call(this);
+    if (!opts) opts = {};
+    if (typeof size === 'object') {
+        opts = size;
+        size = opts.size;
+    }
+    this.size = size || 512;
+    
+    if (opts.nopad) this._zeroPadding = false;
+    else this._zeroPadding = defined(opts.zeroPadding, true);
+    
+    this._buffered = [];
+    this._bufferedBytes = 0;
+}
+
+Block.prototype._transform = function (buf, enc, next) {
+    this._bufferedBytes += buf.length;
+    this._buffered.push(buf);
+    
+    while (this._bufferedBytes >= this.size) {
+        var b = Buffer.concat(this._buffered);
+        this._bufferedBytes -= this.size;
+        this.push(b.slice(0, this.size));
+        this._buffered = [ b.slice(this.size, b.length) ];
+    }
+    next();
+};
+
+Block.prototype._flush = function () {
+    if (this._bufferedBytes && this._zeroPadding) {
+        var zeroes = new Buffer(this.size - this._bufferedBytes);
+        zeroes.fill(0);
+        this._buffered.push(zeroes);
+        this.push(Buffer.concat(this._buffered));
+        this._buffered = null;
+    }
+    else if (this._bufferedBytes) {
+        this.push(Buffer.concat(this._buffered));
+        this._buffered = null;
+    }
+    this.push(null);
+};
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":120,"defined":41,"inherits":48,"readable-stream":83}],33:[function(require,module,exports){
 /*
  * JavaScript MD5
  * https://github.com/blueimp/JavaScript-MD5
@@ -2672,231 +7813,7 @@ if(typeof module !== "undefined") module.exports = BitField;
   }
 }(this))
 
-},{}],16:[function(require,module,exports){
-var concatMap = require('concat-map');
-var balanced = require('balanced-match');
-
-module.exports = expandTop;
-
-var escSlash = '\0SLASH'+Math.random()+'\0';
-var escOpen = '\0OPEN'+Math.random()+'\0';
-var escClose = '\0CLOSE'+Math.random()+'\0';
-var escComma = '\0COMMA'+Math.random()+'\0';
-var escPeriod = '\0PERIOD'+Math.random()+'\0';
-
-function numeric(str) {
-  return parseInt(str, 10) == str
-    ? parseInt(str, 10)
-    : str.charCodeAt(0);
-}
-
-function escapeBraces(str) {
-  return str.split('\\\\').join(escSlash)
-            .split('\\{').join(escOpen)
-            .split('\\}').join(escClose)
-            .split('\\,').join(escComma)
-            .split('\\.').join(escPeriod);
-}
-
-function unescapeBraces(str) {
-  return str.split(escSlash).join('\\')
-            .split(escOpen).join('{')
-            .split(escClose).join('}')
-            .split(escComma).join(',')
-            .split(escPeriod).join('.');
-}
-
-
-// Basically just str.split(","), but handling cases
-// where we have nested braced sections, which should be
-// treated as individual members, like {a,{b,c},d}
-function parseCommaParts(str) {
-  if (!str)
-    return [''];
-
-  var parts = [];
-  var m = balanced('{', '}', str);
-
-  if (!m)
-    return str.split(',');
-
-  var pre = m.pre;
-  var body = m.body;
-  var post = m.post;
-  var p = pre.split(',');
-
-  p[p.length-1] += '{' + body + '}';
-  var postParts = parseCommaParts(post);
-  if (post.length) {
-    p[p.length-1] += postParts.shift();
-    p.push.apply(p, postParts);
-  }
-
-  parts.push.apply(parts, p);
-
-  return parts;
-}
-
-function expandTop(str) {
-  if (!str)
-    return [];
-
-  // I don't know why Bash 4.3 does this, but it does.
-  // Anything starting with {} will have the first two bytes preserved
-  // but *only* at the top level, so {},a}b will not expand to anything,
-  // but a{},b}c will be expanded to [a}c,abc].
-  // One could argue that this is a bug in Bash, but since the goal of
-  // this module is to match Bash's rules, we escape a leading {}
-  if (str.substr(0, 2) === '{}') {
-    str = '\\{\\}' + str.substr(2);
-  }
-
-  return expand(escapeBraces(str), true).map(unescapeBraces);
-}
-
-function identity(e) {
-  return e;
-}
-
-function embrace(str) {
-  return '{' + str + '}';
-}
-function isPadded(el) {
-  return /^-?0\d/.test(el);
-}
-
-function lte(i, y) {
-  return i <= y;
-}
-function gte(i, y) {
-  return i >= y;
-}
-
-function expand(str, isTop) {
-  var expansions = [];
-
-  var m = balanced('{', '}', str);
-  if (!m || /\$$/.test(m.pre)) return [str];
-
-  var isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m.body);
-  var isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m.body);
-  var isSequence = isNumericSequence || isAlphaSequence;
-  var isOptions = m.body.indexOf(',') >= 0;
-  if (!isSequence && !isOptions) {
-    // {a},b}
-    if (m.post.match(/,.*\}/)) {
-      str = m.pre + '{' + m.body + escClose + m.post;
-      return expand(str);
-    }
-    return [str];
-  }
-
-  var n;
-  if (isSequence) {
-    n = m.body.split(/\.\./);
-  } else {
-    n = parseCommaParts(m.body);
-    if (n.length === 1) {
-      // x{{a,b}}y ==> x{a}y x{b}y
-      n = expand(n[0], false).map(embrace);
-      if (n.length === 1) {
-        var post = m.post.length
-          ? expand(m.post, false)
-          : [''];
-        return post.map(function(p) {
-          return m.pre + n[0] + p;
-        });
-      }
-    }
-  }
-
-  // at this point, n is the parts, and we know it's not a comma set
-  // with a single entry.
-
-  // no need to expand pre, since it is guaranteed to be free of brace-sets
-  var pre = m.pre;
-  var post = m.post.length
-    ? expand(m.post, false)
-    : [''];
-
-  var N;
-
-  if (isSequence) {
-    var x = numeric(n[0]);
-    var y = numeric(n[1]);
-    var width = Math.max(n[0].length, n[1].length)
-    var incr = n.length == 3
-      ? Math.abs(numeric(n[2]))
-      : 1;
-    var test = lte;
-    var reverse = y < x;
-    if (reverse) {
-      incr *= -1;
-      test = gte;
-    }
-    var pad = n.some(isPadded);
-
-    N = [];
-
-    for (var i = x; test(i, y); i += incr) {
-      var c;
-      if (isAlphaSequence) {
-        c = String.fromCharCode(i);
-        if (c === '\\')
-          c = '';
-      } else {
-        c = String(i);
-        if (pad) {
-          var need = width - c.length;
-          if (need > 0) {
-            var z = new Array(need + 1).join('0');
-            if (i < 0)
-              c = '-' + z + c.slice(1);
-            else
-              c = z + c;
-          }
-        }
-      }
-      N.push(c);
-    }
-  } else {
-    N = concatMap(n, function(el) { return expand(el, false) });
-  }
-
-  for (var j = 0; j < N.length; j++) {
-    for (var k = 0; k < post.length; k++) {
-      var expansion = pre + N[j] + post[k];
-      if (!isTop || isSequence || expansion)
-        expansions.push(expansion);
-    }
-  }
-
-  return expansions;
-}
-
-
-},{"balanced-match":11,"concat-map":19}],17:[function(require,module,exports){
-(function (Buffer){
-function allocUnsafe (size) {
-  if (typeof size !== 'number') {
-    throw new TypeError('"size" argument must be a number')
-  }
-
-  if (size < 0) {
-    throw new RangeError('"size" argument must not be negative')
-  }
-
-  if (Buffer.allocUnsafe) {
-    return Buffer.allocUnsafe(size)
-  } else {
-    return new Buffer(size)
-  }
-}
-
-module.exports = allocUnsafe
-
-}).call(this,require("buffer").Buffer)
-},{"buffer":82}],18:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 /*!
  * The buffer module from node.js, for the browser.
  *
@@ -4604,22 +9521,78 @@ function numberIsNaN (obj) {
   return obj !== obj // eslint-disable-line no-self-compare
 }
 
-},{"base64-js":12,"ieee754":30}],19:[function(require,module,exports){
-module.exports = function (xs, fn) {
-    var res = [];
-    for (var i = 0; i < xs.length; i++) {
-        var x = fn(xs[i], i);
-        if (isArray(x)) res.push.apply(res, x);
-        else res.push(x);
-    }
-    return res;
-};
+},{"base64-js":20,"ieee754":46}],35:[function(require,module,exports){
+module.exports = ChunkStoreWriteStream
 
-var isArray = Array.isArray || function (xs) {
-    return Object.prototype.toString.call(xs) === '[object Array]';
-};
+var BlockStream = require('block-stream2')
+var inherits = require('inherits')
+var stream = require('readable-stream')
 
-},{}],20:[function(require,module,exports){
+inherits(ChunkStoreWriteStream, stream.Writable)
+
+function ChunkStoreWriteStream (store, chunkLength, opts) {
+  var self = this
+  if (!(self instanceof ChunkStoreWriteStream)) {
+    return new ChunkStoreWriteStream(store, chunkLength, opts)
+  }
+  stream.Writable.call(self, opts)
+  if (!opts) opts = {}
+
+  if (!store || !store.put || !store.get) {
+    throw new Error('First argument must be an abstract-chunk-store compliant store')
+  }
+  chunkLength = Number(chunkLength)
+  if (!chunkLength) throw new Error('Second argument must be a chunk length')
+
+  self._blockstream = new BlockStream(chunkLength, { zeroPadding: false })
+
+  self._blockstream
+    .on('data', onData)
+    .on('error', function (err) { self.destroy(err) })
+
+  var index = 0
+  function onData (chunk) {
+    if (self.destroyed) return
+    store.put(index, chunk)
+    index += 1
+  }
+
+  self.on('finish', function () { this._blockstream.end() })
+}
+
+ChunkStoreWriteStream.prototype._write = function (chunk, encoding, callback) {
+  this._blockstream.write(chunk, encoding, callback)
+}
+
+ChunkStoreWriteStream.prototype.destroy = function (err) {
+  if (this.destroyed) return
+  this.destroyed = true
+
+  if (err) this.emit('error', err)
+  this.emit('close')
+}
+
+},{"block-stream2":32,"inherits":48,"readable-stream":83}],36:[function(require,module,exports){
+var abs = Math.abs
+
+module.exports = closest
+
+function closest (n, arr, rndx) {
+  var i, ndx, diff, best = Infinity
+  var low = 0, high = arr.length - 1
+  while (low <= high) {
+    i = low + (high - low >> 1)
+    diff = arr[i] - n
+    diff < 0 ? low = i + 1 :
+    diff > 0 ? high = i - 1 : void 0
+    diff = abs(diff)
+    if (diff < best) best = diff, ndx = i
+    if (arr[i] === n) break
+  }
+  return rndx ? ndx : arr[ndx]
+}
+
+},{}],37:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -4730,7 +9703,502 @@ function objectToString(o) {
 }
 
 }).call(this,{"isBuffer":require("../../../../../../../../usr/local/lib/node_modules/browserify/node_modules/is-buffer/index.js")})
-},{"../../../../../../../../usr/local/lib/node_modules/browserify/node_modules/is-buffer/index.js":86}],21:[function(require,module,exports){
+},{"../../../../../../../../usr/local/lib/node_modules/browserify/node_modules/is-buffer/index.js":127}],38:[function(require,module,exports){
+(function (process,global,Buffer){
+module.exports = createTorrent
+module.exports.parseInput = parseInput
+
+module.exports.announceList = [
+  [ 'udp://tracker.leechers-paradise.org:6969' ],
+  [ 'udp://tracker.coppersurfer.tk:6969' ],
+  [ 'udp://tracker.opentrackr.org:1337' ],
+  [ 'udp://explodie.org:6969' ],
+  [ 'udp://tracker.empire-js.us:1337' ],
+  [ 'wss://tracker.btorrent.xyz' ],
+  [ 'wss://tracker.openwebtorrent.com' ],
+  [ 'wss://tracker.fastcast.nz' ]
+]
+
+var bencode = require('bencode')
+var BlockStream = require('block-stream2')
+var calcPieceLength = require('piece-length')
+var corePath = require('path')
+var extend = require('xtend')
+var FileReadStream = require('filestream/read')
+var flatten = require('flatten')
+var fs = require('fs')
+var isFile = require('is-file')
+var junk = require('junk')
+var MultiStream = require('multistream')
+var once = require('once')
+var parallel = require('run-parallel')
+var sha1 = require('simple-sha1')
+var stream = require('readable-stream')
+
+/**
+ * Create a torrent.
+ * @param  {string|File|FileList|Buffer|Stream|Array.<string|File|Buffer|Stream>} input
+ * @param  {Object} opts
+ * @param  {string=} opts.name
+ * @param  {Date=} opts.creationDate
+ * @param  {string=} opts.comment
+ * @param  {string=} opts.createdBy
+ * @param  {boolean|number=} opts.private
+ * @param  {number=} opts.pieceLength
+ * @param  {Array.<Array.<string>>=} opts.announceList
+ * @param  {Array.<string>=} opts.urlList
+ * @param  {function} cb
+ * @return {Buffer} buffer of .torrent file data
+ */
+function createTorrent (input, opts, cb) {
+  if (typeof opts === 'function') return createTorrent(input, null, opts)
+  opts = opts ? extend(opts) : {}
+
+  _parseInput(input, opts, function (err, files, singleFileTorrent) {
+    if (err) return cb(err)
+    opts.singleFileTorrent = singleFileTorrent
+    onFiles(files, opts, cb)
+  })
+}
+
+function parseInput (input, opts, cb) {
+  if (typeof opts === 'function') return parseInput(input, null, opts)
+  opts = opts ? extend(opts) : {}
+  _parseInput(input, opts, cb)
+}
+
+/**
+ * Parse input file and return file information.
+ */
+function _parseInput (input, opts, cb) {
+  if (Array.isArray(input) && input.length === 0) throw new Error('invalid input type')
+
+  if (isFileList(input)) input = Array.prototype.slice.call(input)
+  if (!Array.isArray(input)) input = [ input ]
+
+  // In Electron, use the true file path
+  input = input.map(function (item) {
+    if (isBlob(item) && typeof item.path === 'string' && typeof fs.stat === 'function') return item.path
+    return item
+  })
+
+  // If there's just one file, allow the name to be set by `opts.name`
+  if (input.length === 1 && typeof input[0] !== 'string' && !input[0].name) input[0].name = opts.name
+
+  var commonPrefix = null
+  input.forEach(function (item, i) {
+    if (typeof item === 'string') {
+      return
+    }
+
+    var path = item.fullPath || item.name
+    if (!path) {
+      path = 'Unknown File ' + (i + 1)
+      item.unknownName = true
+    }
+
+    item.path = path.split('/')
+
+    // Remove initial slash
+    if (!item.path[0]) {
+      item.path.shift()
+    }
+
+    if (item.path.length < 2) { // No real prefix
+      commonPrefix = null
+    } else if (i === 0 && input.length > 1) { // The first file has a prefix
+      commonPrefix = item.path[0]
+    } else if (item.path[0] !== commonPrefix) { // The prefix doesn't match
+      commonPrefix = null
+    }
+  })
+
+  // remove junk files
+  input = input.filter(function (item) {
+    if (typeof item === 'string') {
+      return true
+    }
+    var filename = item.path[item.path.length - 1]
+    return notHidden(filename) && junk.not(filename)
+  })
+
+  if (commonPrefix) {
+    input.forEach(function (item) {
+      var pathless = (Buffer.isBuffer(item) || isReadable(item)) && !item.path
+      if (typeof item === 'string' || pathless) return
+      item.path.shift()
+    })
+  }
+
+  if (!opts.name && commonPrefix) {
+    opts.name = commonPrefix
+  }
+
+  if (!opts.name) {
+    // use first user-set file name
+    input.some(function (item) {
+      if (typeof item === 'string') {
+        opts.name = corePath.basename(item)
+        return true
+      } else if (!item.unknownName) {
+        opts.name = item.path[item.path.length - 1]
+        return true
+      }
+    })
+  }
+
+  if (!opts.name) {
+    opts.name = 'Unnamed Torrent ' + Date.now()
+  }
+
+  var numPaths = input.reduce(function (sum, item) {
+    return sum + Number(typeof item === 'string')
+  }, 0)
+
+  var isSingleFileTorrent = (input.length === 1)
+
+  if (input.length === 1 && typeof input[0] === 'string') {
+    if (typeof fs.stat !== 'function') {
+      throw new Error('filesystem paths do not work in the browser')
+    }
+    // If there's a single path, verify it's a file before deciding this is a single
+    // file torrent
+    isFile(input[0], function (err, pathIsFile) {
+      if (err) return cb(err)
+      isSingleFileTorrent = pathIsFile
+      processInput()
+    })
+  } else {
+    process.nextTick(function () {
+      processInput()
+    })
+  }
+
+  function processInput () {
+    parallel(input.map(function (item) {
+      return function (cb) {
+        var file = {}
+
+        if (isBlob(item)) {
+          file.getStream = getBlobStream(item)
+          file.length = item.size
+        } else if (Buffer.isBuffer(item)) {
+          file.getStream = getBufferStream(item)
+          file.length = item.length
+        } else if (isReadable(item)) {
+          file.getStream = getStreamStream(item, file)
+          file.length = 0
+        } else if (typeof item === 'string') {
+          if (typeof fs.stat !== 'function') {
+            throw new Error('filesystem paths do not work in the browser')
+          }
+          var keepRoot = numPaths > 1 || isSingleFileTorrent
+          getFiles(item, keepRoot, cb)
+          return // early return!
+        } else {
+          throw new Error('invalid input type')
+        }
+        file.path = item.path
+        cb(null, file)
+      }
+    }), function (err, files) {
+      if (err) return cb(err)
+      files = flatten(files)
+      cb(null, files, isSingleFileTorrent)
+    })
+  }
+}
+
+function getFiles (path, keepRoot, cb) {
+  traversePath(path, getFileInfo, function (err, files) {
+    if (err) return cb(err)
+
+    if (Array.isArray(files)) files = flatten(files)
+    else files = [ files ]
+
+    path = corePath.normalize(path)
+    if (keepRoot) {
+      path = path.slice(0, path.lastIndexOf(corePath.sep) + 1)
+    }
+    if (path[path.length - 1] !== corePath.sep) path += corePath.sep
+
+    files.forEach(function (file) {
+      file.getStream = getFilePathStream(file.path)
+      file.path = file.path.replace(path, '').split(corePath.sep)
+    })
+    cb(null, files)
+  })
+}
+
+function getFileInfo (path, cb) {
+  cb = once(cb)
+  fs.stat(path, function (err, stat) {
+    if (err) return cb(err)
+    var info = {
+      length: stat.size,
+      path: path
+    }
+    cb(null, info)
+  })
+}
+
+function traversePath (path, fn, cb) {
+  fs.stat(path, function (err, stats) {
+    if (err) return cb(err)
+    if (stats.isDirectory()) {
+      fs.readdir(path, function (err, entries) {
+        if (err) return cb(err)
+        parallel(entries.filter(notHidden).filter(junk.not).map(function (entry) {
+          return function (cb) {
+            traversePath(corePath.join(path, entry), fn, cb)
+          }
+        }), cb)
+      })
+    } else if (stats.isFile()) {
+      fn(path, cb)
+    }
+    // Ignore other types (not a file or directory)
+  })
+}
+
+function notHidden (file) {
+  return file[0] !== '.'
+}
+
+function getPieceList (files, pieceLength, cb) {
+  cb = once(cb)
+  var pieces = []
+  var length = 0
+
+  var streams = files.map(function (file) {
+    return file.getStream
+  })
+
+  var remainingHashes = 0
+  var pieceNum = 0
+  var ended = false
+
+  var multistream = new MultiStream(streams)
+  var blockstream = new BlockStream(pieceLength, { zeroPadding: false })
+
+  multistream.on('error', onError)
+
+  multistream
+    .pipe(blockstream)
+    .on('data', onData)
+    .on('end', onEnd)
+    .on('error', onError)
+
+  function onData (chunk) {
+    length += chunk.length
+
+    var i = pieceNum
+    sha1(chunk, function (hash) {
+      pieces[i] = hash
+      remainingHashes -= 1
+      maybeDone()
+    })
+    remainingHashes += 1
+    pieceNum += 1
+  }
+
+  function onEnd () {
+    ended = true
+    maybeDone()
+  }
+
+  function onError (err) {
+    cleanup()
+    cb(err)
+  }
+
+  function cleanup () {
+    multistream.removeListener('error', onError)
+    blockstream.removeListener('data', onData)
+    blockstream.removeListener('end', onEnd)
+    blockstream.removeListener('error', onError)
+  }
+
+  function maybeDone () {
+    if (ended && remainingHashes === 0) {
+      cleanup()
+      cb(null, Buffer.from(pieces.join(''), 'hex'), length)
+    }
+  }
+}
+
+function onFiles (files, opts, cb) {
+  var announceList = opts.announceList
+
+  if (!announceList) {
+    if (typeof opts.announce === 'string') announceList = [ [ opts.announce ] ]
+    else if (Array.isArray(opts.announce)) {
+      announceList = opts.announce.map(function (u) { return [ u ] })
+    }
+  }
+
+  if (!announceList) announceList = []
+
+  if (global.WEBTORRENT_ANNOUNCE) {
+    if (typeof global.WEBTORRENT_ANNOUNCE === 'string') {
+      announceList.push([ [ global.WEBTORRENT_ANNOUNCE ] ])
+    } else if (Array.isArray(global.WEBTORRENT_ANNOUNCE)) {
+      announceList = announceList.concat(global.WEBTORRENT_ANNOUNCE.map(function (u) {
+        return [ u ]
+      }))
+    }
+  }
+
+  // When no trackers specified, use some reasonable defaults
+  if (opts.announce === undefined && opts.announceList === undefined) {
+    announceList = announceList.concat(module.exports.announceList)
+  }
+
+  if (typeof opts.urlList === 'string') opts.urlList = [ opts.urlList ]
+
+  var torrent = {
+    info: {
+      name: opts.name
+    },
+    'creation date': Math.ceil((Number(opts.creationDate) || Date.now()) / 1000),
+    encoding: 'UTF-8'
+  }
+
+  if (announceList.length !== 0) {
+    torrent.announce = announceList[0][0]
+    torrent['announce-list'] = announceList
+  }
+
+  if (opts.comment !== undefined) torrent.comment = opts.comment
+
+  if (opts.createdBy !== undefined) torrent['created by'] = opts.createdBy
+
+  if (opts.private !== undefined) torrent.info.private = Number(opts.private)
+
+  // "ssl-cert" key is for SSL torrents, see:
+  //   - http://blog.libtorrent.org/2012/01/bittorrent-over-ssl/
+  //   - http://www.libtorrent.org/manual-ref.html#ssl-torrents
+  //   - http://www.libtorrent.org/reference-Create_Torrents.html
+  if (opts.sslCert !== undefined) torrent.info['ssl-cert'] = opts.sslCert
+
+  if (opts.urlList !== undefined) torrent['url-list'] = opts.urlList
+
+  var pieceLength = opts.pieceLength || calcPieceLength(files.reduce(sumLength, 0))
+  torrent.info['piece length'] = pieceLength
+
+  getPieceList(files, pieceLength, function (err, pieces, torrentLength) {
+    if (err) return cb(err)
+    torrent.info.pieces = pieces
+
+    files.forEach(function (file) {
+      delete file.getStream
+    })
+
+    if (opts.singleFileTorrent) {
+      torrent.info.length = torrentLength
+    } else {
+      torrent.info.files = files
+    }
+
+    cb(null, bencode.encode(torrent))
+  })
+}
+
+/**
+ * Accumulator to sum file lengths
+ * @param  {number} sum
+ * @param  {Object} file
+ * @return {number}
+ */
+function sumLength (sum, file) {
+  return sum + file.length
+}
+
+/**
+ * Check if `obj` is a W3C `Blob` object (which `File` inherits from)
+ * @param  {*} obj
+ * @return {boolean}
+ */
+function isBlob (obj) {
+  return typeof Blob !== 'undefined' && obj instanceof Blob
+}
+
+/**
+ * Check if `obj` is a W3C `FileList` object
+ * @param  {*} obj
+ * @return {boolean}
+ */
+function isFileList (obj) {
+  return typeof FileList !== 'undefined' && obj instanceof FileList
+}
+
+/**
+ * Check if `obj` is a node Readable stream
+ * @param  {*} obj
+ * @return {boolean}
+ */
+function isReadable (obj) {
+  return typeof obj === 'object' && obj != null && typeof obj.pipe === 'function'
+}
+
+/**
+ * Convert a `File` to a lazy readable stream.
+ * @param  {File|Blob} file
+ * @return {function}
+ */
+function getBlobStream (file) {
+  return function () {
+    return new FileReadStream(file)
+  }
+}
+
+/**
+ * Convert a `Buffer` to a lazy readable stream.
+ * @param  {Buffer} buffer
+ * @return {function}
+ */
+function getBufferStream (buffer) {
+  return function () {
+    var s = new stream.PassThrough()
+    s.end(buffer)
+    return s
+  }
+}
+
+/**
+ * Convert a file path to a lazy readable stream.
+ * @param  {string} path
+ * @return {function}
+ */
+function getFilePathStream (path) {
+  return function () {
+    return fs.createReadStream(path)
+  }
+}
+
+/**
+ * Convert a readable stream to a lazy readable stream. Adds instrumentation to track
+ * the number of bytes in the stream and set `file.length`.
+ *
+ * @param  {Stream} stream
+ * @param  {Object} file
+ * @return {function}
+ */
+function getStreamStream (readable, file) {
+  return function () {
+    var counter = new stream.Transform()
+    counter._transform = function (buf, enc, done) {
+      file.length += buf.length
+      this.push(buf)
+      done()
+    }
+    readable.pipe(counter)
+    return counter
+  }
+}
+
+}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},require("buffer").Buffer)
+},{"_process":131,"bencode":23,"block-stream2":32,"buffer":120,"filestream/read":43,"flatten":44,"fs":117,"is-file":50,"junk":53,"multistream":64,"once":66,"path":129,"piece-length":69,"readable-stream":83,"run-parallel":87,"simple-sha1":93,"xtend":114}],39:[function(require,module,exports){
 (function (process){
 /**
  * This is the web browser implementation of `debug()`.
@@ -4919,7 +10387,7 @@ function localstorage() {
 }
 
 }).call(this,require('_process'))
-},{"./debug":22,"_process":89}],22:[function(require,module,exports){
+},{"./debug":40,"_process":131}],40:[function(require,module,exports){
 
 /**
  * This is the common logic for both the Node.js and web browser
@@ -5123,7 +10591,14 @@ function coerce(val) {
   return val;
 }
 
-},{"ms":45}],23:[function(require,module,exports){
+},{"ms":63}],41:[function(require,module,exports){
+module.exports = function () {
+    for (var i = 0; i < arguments.length; i++) {
+        if (arguments[i] !== undefined) return arguments[i];
+    }
+};
+
+},{}],42:[function(require,module,exports){
 var once = require('once');
 
 var noop = function() {};
@@ -5208,2156 +10683,143 @@ var eos = function(stream, opts, callback) {
 
 module.exports = eos;
 
-},{"once":47}],24:[function(require,module,exports){
-(function (process,Buffer){
-module.exports = Storage
+},{"once":66}],43:[function(require,module,exports){
+var Readable = require('readable-stream').Readable;
+var inherits = require('inherits');
+var reExtension = /^.*\.(\w+)$/;
+var toBuffer = require('typedarray-to-buffer');
 
-var fs = require('fs')
-var mkdirp = require('mkdirp')
-var os = require('os')
-var parallel = require('run-parallel')
-var path = require('path')
-var raf = require('random-access-file')
-var randombytes = require('randombytes')
-var rimraf = require('rimraf')
-var thunky = require('thunky')
-
-var TMP
-try {
-  TMP = fs.statSync('/tmp') && '/tmp'
-} catch (err) {
-  TMP = os.tmpdir()
-}
-
-function Storage (chunkLength, opts) {
-  var self = this
-  if (!(self instanceof Storage)) return new Storage(chunkLength, opts)
-  if (!opts) opts = {}
-
-  self.chunkLength = Number(chunkLength)
-  if (!self.chunkLength) throw new Error('First argument must be a chunk length')
-
-  if (opts.files) {
-    if (!Array.isArray(opts.files)) {
-      throw new Error('`files` option must be an array')
-    }
-    self.files = opts.files.slice(0).map(function (file, i, files) {
-      if (file.path == null) throw new Error('File is missing `path` property')
-      if (file.length == null) throw new Error('File is missing `length` property')
-      if (file.offset == null) {
-        if (i === 0) {
-          file.offset = 0
-        } else {
-          var prevFile = files[i - 1]
-          file.offset = prevFile.offset + prevFile.length
-        }
-      }
-      return file
-    })
-    self.length = self.files.reduce(function (sum, file) { return sum + file.length }, 0)
-    if (opts.length != null && opts.length !== self.length) {
-      throw new Error('total `files` length is not equal to explicit `length` option')
-    }
-  } else {
-    var len = Number(opts.length) || Infinity
-    self.files = [{
-      offset: 0,
-      path: path.resolve(opts.path || path.join(TMP, 'fs-chunk-store', randombytes(20).toString('hex'))),
-      length: len
-    }]
-    self.length = len
+function FileReadStream(file, opts) {
+  var readStream = this;
+  if (! (this instanceof FileReadStream)) {
+    return new FileReadStream(file, opts);
   }
+  opts = opts || {};
 
-  self.chunkMap = []
-  self.closed = false
+  // inherit readable
+  Readable.call(this, opts);
 
-  self.files.forEach(function (file) {
-    file.open = thunky(function (cb) {
-      if (self.closed) return cb(new Error('Storage is closed'))
-      mkdirp(path.dirname(file.path), function (err) {
-        if (err) return cb(err)
-        if (self.closed) return cb(new Error('Storage is closed'))
-        cb(null, raf(file.path))
-      })
-    })
-  })
+  // save the read offset
+  this._offset = 0;
+  this._ready = false;
+  this._file = file;
+  this._size = file.size;
+  this._chunkSize = opts.chunkSize || Math.max(this._size / 1000, 200 * 1024);
 
-  // If the length is Infinity (i.e. a length was not specified) then the store will
-  // automatically grow.
+  // create the reader
+  this.reader = new FileReader();
 
-  if (self.length !== Infinity) {
-    self.lastChunkLength = (self.length % self.chunkLength) || self.chunkLength
-    self.lastChunkIndex = Math.ceil(self.length / self.chunkLength) - 1
-
-    self.files.forEach(function (file) {
-      var fileStart = file.offset
-      var fileEnd = file.offset + file.length
-
-      var firstChunk = Math.floor(fileStart / self.chunkLength)
-      var lastChunk = Math.floor((fileEnd - 1) / self.chunkLength)
-
-      for (var p = firstChunk; p <= lastChunk; ++p) {
-        var chunkStart = p * self.chunkLength
-        var chunkEnd = chunkStart + self.chunkLength
-
-        var from = (fileStart < chunkStart) ? 0 : fileStart - chunkStart
-        var to = (fileEnd > chunkEnd) ? self.chunkLength : fileEnd - chunkStart
-        var offset = (fileStart > chunkStart) ? 0 : chunkStart - fileStart
-
-        if (!self.chunkMap[p]) self.chunkMap[p] = []
-
-        self.chunkMap[p].push({
-          from: from,
-          to: to,
-          offset: offset,
-          file: file
-        })
-      }
-    })
-  }
-}
-
-Storage.prototype.put = function (index, buf, cb) {
-  var self = this
-  if (typeof cb !== 'function') cb = noop
-  if (self.closed) return nextTick(cb, new Error('Storage is closed'))
-
-  var isLastChunk = (index === self.lastChunkIndex)
-  if (isLastChunk && buf.length !== self.lastChunkLength) {
-    return nextTick(cb, new Error('Last chunk length must be ' + self.lastChunkLength))
-  }
-  if (!isLastChunk && buf.length !== self.chunkLength) {
-    return nextTick(cb, new Error('Chunk length must be ' + self.chunkLength))
-  }
-
-  if (self.length === Infinity) {
-    self.files[0].open(function (err, file) {
-      if (err) return cb(err)
-      file.write(index * self.chunkLength, buf, cb)
-    })
-  } else {
-    var targets = self.chunkMap[index]
-    if (!targets) return nextTick(cb, new Error('no files matching the request range'))
-    var tasks = targets.map(function (target) {
-      return function (cb) {
-        target.file.open(function (err, file) {
-          if (err) return cb(err)
-          file.write(target.offset, buf.slice(target.from, target.to), cb)
-        })
-      }
-    })
-    parallel(tasks, cb)
-  }
-}
-
-Storage.prototype.get = function (index, opts, cb) {
-  var self = this
-  if (typeof opts === 'function') return self.get(index, null, opts)
-  if (self.closed) return nextTick(cb, new Error('Storage is closed'))
-
-  var chunkLength = (index === self.lastChunkIndex)
-    ? self.lastChunkLength
-    : self.chunkLength
-
-  var rangeFrom = (opts && opts.offset) || 0
-  var rangeTo = (opts && opts.length) ? rangeFrom + opts.length : chunkLength
-
-  if (rangeFrom < 0 || rangeFrom < 0 || rangeTo > chunkLength) {
-    return nextTick(cb, new Error('Invalid offset and/or length'))
-  }
-
-  if (self.length === Infinity) {
-    if (rangeFrom === rangeTo) return nextTick(cb, null, Buffer.from(0))
-    self.files[0].open(function (err, file) {
-      if (err) return cb(err)
-      var offset = (index * self.chunkLength) + rangeFrom
-      file.read(offset, rangeTo - rangeFrom, cb)
-    })
-  } else {
-    var targets = self.chunkMap[index]
-    if (!targets) return nextTick(cb, new Error('no files matching the request range'))
-    if (opts) {
-      targets = targets.filter(function (target) {
-        return target.to > rangeFrom && target.from < rangeTo
-      })
-      if (targets.length === 0) {
-        return nextTick(cb, new Error('no files matching the requested range'))
-      }
-    }
-    if (rangeFrom === rangeTo) return nextTick(cb, null, Buffer.from(0))
-
-    var tasks = targets.map(function (target) {
-      return function (cb) {
-        var from = target.from
-        var to = target.to
-        var offset = target.offset
-
-        if (opts) {
-          if (to > rangeTo) to = rangeTo
-          if (from < rangeFrom) {
-            offset += (rangeFrom - from)
-            from = rangeFrom
-          }
-        }
-
-        target.file.open(function (err, file) {
-          if (err) return cb(err)
-          file.read(offset, to - from, cb)
-        })
-      }
-    })
-
-    parallel(tasks, function (err, buffers) {
-      if (err) return cb(err)
-      cb(null, Buffer.concat(buffers))
-    })
-  }
-}
-
-Storage.prototype.close = function (cb) {
-  var self = this
-  if (self.closed) return nextTick(cb, new Error('Storage is closed'))
-  self.closed = true
-
-  var tasks = self.files.map(function (file) {
-    return function (cb) {
-      file.open(function (err, file) {
-        // an open error is okay because that means the file is not open
-        if (err) return cb(null)
-        file.close(cb)
-      })
-    }
-  })
-  parallel(tasks, cb)
-}
-
-Storage.prototype.destroy = function (cb) {
-  var self = this
-  self.close(function () {
-    var tasks = self.files.map(function (file) {
-      return function (cb) {
-        rimraf(file.path, { maxBusyTries: 10 }, cb)
-      }
-    })
-    parallel(tasks, cb)
-  })
-}
-
-function nextTick (cb, err, val) {
-  process.nextTick(function () {
-    if (cb) cb(err, val)
-  })
-}
-
-function noop () {}
-
-}).call(this,require('_process'),require("buffer").Buffer)
-},{"_process":89,"buffer":82,"fs":78,"mkdirp":38,"os":87,"path":88,"random-access-file":51,"randombytes":52,"rimraf":65,"run-parallel":66,"thunky":71}],25:[function(require,module,exports){
-(function (process){
-module.exports = realpath
-realpath.realpath = realpath
-realpath.sync = realpathSync
-realpath.realpathSync = realpathSync
-realpath.monkeypatch = monkeypatch
-realpath.unmonkeypatch = unmonkeypatch
-
-var fs = require('fs')
-var origRealpath = fs.realpath
-var origRealpathSync = fs.realpathSync
-
-var version = process.version
-var ok = /^v[0-5]\./.test(version)
-var old = require('./old.js')
-
-function newError (er) {
-  return er && er.syscall === 'realpath' && (
-    er.code === 'ELOOP' ||
-    er.code === 'ENOMEM' ||
-    er.code === 'ENAMETOOLONG'
-  )
-}
-
-function realpath (p, cache, cb) {
-  if (ok) {
-    return origRealpath(p, cache, cb)
-  }
-
-  if (typeof cache === 'function') {
-    cb = cache
-    cache = null
-  }
-  origRealpath(p, cache, function (er, result) {
-    if (newError(er)) {
-      old.realpath(p, cache, cb)
-    } else {
-      cb(er, result)
-    }
-  })
-}
-
-function realpathSync (p, cache) {
-  if (ok) {
-    return origRealpathSync(p, cache)
-  }
-
-  try {
-    return origRealpathSync(p, cache)
-  } catch (er) {
-    if (newError(er)) {
-      return old.realpathSync(p, cache)
-    } else {
-      throw er
-    }
-  }
-}
-
-function monkeypatch () {
-  fs.realpath = realpath
-  fs.realpathSync = realpathSync
-}
-
-function unmonkeypatch () {
-  fs.realpath = origRealpath
-  fs.realpathSync = origRealpathSync
-}
-
-}).call(this,require('_process'))
-},{"./old.js":26,"_process":89,"fs":78}],26:[function(require,module,exports){
-(function (process){
-// Copyright Joyent, Inc. and other Node contributors.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to permit
-// persons to whom the Software is furnished to do so, subject to the
-// following conditions:
-//
-// The above copyright notice and this permission notice shall be included
-// in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-// USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-var pathModule = require('path');
-var isWindows = process.platform === 'win32';
-var fs = require('fs');
-
-// JavaScript implementation of realpath, ported from node pre-v6
-
-var DEBUG = process.env.NODE_DEBUG && /fs/.test(process.env.NODE_DEBUG);
-
-function rethrow() {
-  // Only enable in debug mode. A backtrace uses ~1000 bytes of heap space and
-  // is fairly slow to generate.
-  var callback;
-  if (DEBUG) {
-    var backtrace = new Error;
-    callback = debugCallback;
-  } else
-    callback = missingCallback;
-
-  return callback;
-
-  function debugCallback(err) {
+  // generate the header blocks that we will send as part of the initial payload
+  this._generateHeaderBlocks(file, opts, function(err, blocks) {
+    // if we encountered an error, emit it
     if (err) {
-      backtrace.message = err.message;
-      err = backtrace;
-      missingCallback(err);
+      return readStream.emit('error', err);
     }
-  }
 
-  function missingCallback(err) {
-    if (err) {
-      if (process.throwDeprecation)
-        throw err;  // Forgot a callback but don't know where? Use NODE_DEBUG=fs
-      else if (!process.noDeprecation) {
-        var msg = 'fs: missing callback ' + (err.stack || err.message);
-        if (process.traceDeprecation)
-          console.trace(msg);
-        else
-          console.error(msg);
-      }
+    // push the header blocks out to the stream
+    if (Array.isArray(blocks)) {
+      blocks.forEach(function (block) {
+        readStream.push(block);
+      });
     }
-  }
+
+    readStream._ready = true;
+    readStream.emit('_ready');
+  });
 }
 
-function maybeCallback(cb) {
-  return typeof cb === 'function' ? cb : rethrow();
-}
+inherits(FileReadStream, Readable);
+module.exports = FileReadStream;
 
-var normalize = pathModule.normalize;
-
-// Regexp that finds the next partion of a (partial) path
-// result is [base_with_slash, base], e.g. ['somedir/', 'somedir']
-if (isWindows) {
-  var nextPartRe = /(.*?)(?:[\/\\]+|$)/g;
-} else {
-  var nextPartRe = /(.*?)(?:[\/]+|$)/g;
-}
-
-// Regex to find the device root, including trailing slash. E.g. 'c:\\'.
-if (isWindows) {
-  var splitRootRe = /^(?:[a-zA-Z]:|[\\\/]{2}[^\\\/]+[\\\/][^\\\/]+)?[\\\/]*/;
-} else {
-  var splitRootRe = /^[\/]*/;
-}
-
-exports.realpathSync = function realpathSync(p, cache) {
-  // make p is absolute
-  p = pathModule.resolve(p);
-
-  if (cache && Object.prototype.hasOwnProperty.call(cache, p)) {
-    return cache[p];
-  }
-
-  var original = p,
-      seenLinks = {},
-      knownHard = {};
-
-  // current character position in p
-  var pos;
-  // the partial path so far, including a trailing slash if any
-  var current;
-  // the partial path without a trailing slash (except when pointing at a root)
-  var base;
-  // the partial path scanned in the previous round, with slash
-  var previous;
-
-  start();
-
-  function start() {
-    // Skip over roots
-    var m = splitRootRe.exec(p);
-    pos = m[0].length;
-    current = m[0];
-    base = m[0];
-    previous = '';
-
-    // On windows, check that the root exists. On unix there is no need.
-    if (isWindows && !knownHard[base]) {
-      fs.lstatSync(base);
-      knownHard[base] = true;
-    }
-  }
-
-  // walk down the path, swapping out linked pathparts for their real
-  // values
-  // NB: p.length changes.
-  while (pos < p.length) {
-    // find the next part
-    nextPartRe.lastIndex = pos;
-    var result = nextPartRe.exec(p);
-    previous = current;
-    current += result[0];
-    base = previous + result[1];
-    pos = nextPartRe.lastIndex;
-
-    // continue if not a symlink
-    if (knownHard[base] || (cache && cache[base] === base)) {
-      continue;
-    }
-
-    var resolvedLink;
-    if (cache && Object.prototype.hasOwnProperty.call(cache, base)) {
-      // some known symbolic link.  no need to stat again.
-      resolvedLink = cache[base];
-    } else {
-      var stat = fs.lstatSync(base);
-      if (!stat.isSymbolicLink()) {
-        knownHard[base] = true;
-        if (cache) cache[base] = base;
-        continue;
-      }
-
-      // read the link if it wasn't read before
-      // dev/ino always return 0 on windows, so skip the check.
-      var linkTarget = null;
-      if (!isWindows) {
-        var id = stat.dev.toString(32) + ':' + stat.ino.toString(32);
-        if (seenLinks.hasOwnProperty(id)) {
-          linkTarget = seenLinks[id];
-        }
-      }
-      if (linkTarget === null) {
-        fs.statSync(base);
-        linkTarget = fs.readlinkSync(base);
-      }
-      resolvedLink = pathModule.resolve(previous, linkTarget);
-      // track this, if given a cache.
-      if (cache) cache[base] = resolvedLink;
-      if (!isWindows) seenLinks[id] = linkTarget;
-    }
-
-    // resolve the link, then start over
-    p = pathModule.resolve(resolvedLink, p.slice(pos));
-    start();
-  }
-
-  if (cache) cache[original] = p;
-
-  return p;
+FileReadStream.prototype._generateHeaderBlocks = function(file, opts, callback) {
+  callback(null, []);
 };
 
+FileReadStream.prototype._read = function() {
+  if (!this._ready) {
+    this.once('_ready', this._read.bind(this));
+    return;
+  }
+  var readStream = this;
+  var reader = this.reader;
 
-exports.realpath = function realpath(p, cache, cb) {
-  if (typeof cb !== 'function') {
-    cb = maybeCallback(cache);
-    cache = null;
+  var startOffset = this._offset;
+  var endOffset = this._offset + this._chunkSize;
+  if (endOffset > this._size) endOffset = this._size;
+
+  if (startOffset === this._size) {
+    this.destroy();
+    this.push(null);
+    return;
   }
 
-  // make p is absolute
-  p = pathModule.resolve(p);
+  reader.onload = function() {
+    // update the stream offset
+    readStream._offset = endOffset;
 
-  if (cache && Object.prototype.hasOwnProperty.call(cache, p)) {
-    return process.nextTick(cb.bind(null, null, cache[p]));
+    // get the data chunk
+    readStream.push(toBuffer(reader.result));
+  }
+  reader.onerror = function() {
+    readStream.emit('error', reader.error);
   }
 
-  var original = p,
-      seenLinks = {},
-      knownHard = {};
+  reader.readAsArrayBuffer(this._file.slice(startOffset, endOffset));
+};
 
-  // current character position in p
-  var pos;
-  // the partial path so far, including a trailing slash if any
-  var current;
-  // the partial path without a trailing slash (except when pointing at a root)
-  var base;
-  // the partial path scanned in the previous round, with slash
-  var previous;
+FileReadStream.prototype.destroy = function() {
+  this._file = null;
+  if (this.reader) {
+    this.reader.onload = null;
+    this.reader.onerror = null;
+    try { this.reader.abort(); } catch (e) {};
+  }
+  this.reader = null;
+}
 
-  start();
+},{"inherits":48,"readable-stream":83,"typedarray-to-buffer":105}],44:[function(require,module,exports){
+module.exports = function flatten(list, depth) {
+  depth = (typeof depth == 'number') ? depth : Infinity;
 
-  function start() {
-    // Skip over roots
-    var m = splitRootRe.exec(p);
-    pos = m[0].length;
-    current = m[0];
-    base = m[0];
-    previous = '';
-
-    // On windows, check that the root exists. On unix there is no need.
-    if (isWindows && !knownHard[base]) {
-      fs.lstat(base, function(err) {
-        if (err) return cb(err);
-        knownHard[base] = true;
-        LOOP();
-      });
-    } else {
-      process.nextTick(LOOP);
+  if (!depth) {
+    if (Array.isArray(list)) {
+      return list.map(function(i) { return i; });
     }
+    return list;
   }
 
-  // walk down the path, swapping out linked pathparts for their real
-  // values
-  function LOOP() {
-    // stop if scanned past end of path
-    if (pos >= p.length) {
-      if (cache) cache[original] = p;
-      return cb(null, p);
-    }
+  return _flatten(list, 1);
 
-    // find the next part
-    nextPartRe.lastIndex = pos;
-    var result = nextPartRe.exec(p);
-    previous = current;
-    current += result[0];
-    base = previous + result[1];
-    pos = nextPartRe.lastIndex;
-
-    // continue if not a symlink
-    if (knownHard[base] || (cache && cache[base] === base)) {
-      return process.nextTick(LOOP);
-    }
-
-    if (cache && Object.prototype.hasOwnProperty.call(cache, base)) {
-      // known symbolic link.  no need to stat again.
-      return gotResolvedLink(cache[base]);
-    }
-
-    return fs.lstat(base, gotStat);
-  }
-
-  function gotStat(err, stat) {
-    if (err) return cb(err);
-
-    // if not a symlink, skip to the next path part
-    if (!stat.isSymbolicLink()) {
-      knownHard[base] = true;
-      if (cache) cache[base] = base;
-      return process.nextTick(LOOP);
-    }
-
-    // stat & read the link if not read before
-    // call gotTarget as soon as the link target is known
-    // dev/ino always return 0 on windows, so skip the check.
-    if (!isWindows) {
-      var id = stat.dev.toString(32) + ':' + stat.ino.toString(32);
-      if (seenLinks.hasOwnProperty(id)) {
-        return gotTarget(null, seenLinks[id], base);
+  function _flatten(list, d) {
+    return list.reduce(function (acc, item) {
+      if (Array.isArray(item) && d < depth) {
+        return acc.concat(_flatten(item, d + 1));
       }
-    }
-    fs.stat(base, function(err) {
-      if (err) return cb(err);
-
-      fs.readlink(base, function(err, target) {
-        if (!isWindows) seenLinks[id] = target;
-        gotTarget(err, target);
-      });
-    });
-  }
-
-  function gotTarget(err, target, base) {
-    if (err) return cb(err);
-
-    var resolvedLink = pathModule.resolve(previous, target);
-    if (cache) cache[base] = resolvedLink;
-    gotResolvedLink(resolvedLink);
-  }
-
-  function gotResolvedLink(resolvedLink) {
-    // resolve the link, then start over
-    p = pathModule.resolve(resolvedLink, p.slice(pos));
-    start();
+      else {
+        return acc.concat(item);
+      }
+    }, []);
   }
 };
 
-}).call(this,require('_process'))
-},{"_process":89,"fs":78,"path":88}],27:[function(require,module,exports){
-(function (process){
-exports.alphasort = alphasort
-exports.alphasorti = alphasorti
-exports.setopts = setopts
-exports.ownProp = ownProp
-exports.makeAbs = makeAbs
-exports.finish = finish
-exports.mark = mark
-exports.isIgnored = isIgnored
-exports.childrenIgnored = childrenIgnored
+},{}],45:[function(require,module,exports){
+// originally pulled out of simple-peer
 
-function ownProp (obj, field) {
-  return Object.prototype.hasOwnProperty.call(obj, field)
+module.exports = function getBrowserRTC () {
+  if (typeof window === 'undefined') return null
+  var wrtc = {
+    RTCPeerConnection: window.RTCPeerConnection || window.mozRTCPeerConnection ||
+      window.webkitRTCPeerConnection,
+    RTCSessionDescription: window.RTCSessionDescription ||
+      window.mozRTCSessionDescription || window.webkitRTCSessionDescription,
+    RTCIceCandidate: window.RTCIceCandidate || window.mozRTCIceCandidate ||
+      window.webkitRTCIceCandidate
+  }
+  if (!wrtc.RTCPeerConnection) return null
+  return wrtc
 }
 
-var path = require("path")
-var minimatch = require("minimatch")
-var isAbsolute = require("path-is-absolute")
-var Minimatch = minimatch.Minimatch
-
-function alphasorti (a, b) {
-  return a.toLowerCase().localeCompare(b.toLowerCase())
-}
-
-function alphasort (a, b) {
-  return a.localeCompare(b)
-}
-
-function setupIgnores (self, options) {
-  self.ignore = options.ignore || []
-
-  if (!Array.isArray(self.ignore))
-    self.ignore = [self.ignore]
-
-  if (self.ignore.length) {
-    self.ignore = self.ignore.map(ignoreMap)
-  }
-}
-
-// ignore patterns are always in dot:true mode.
-function ignoreMap (pattern) {
-  var gmatcher = null
-  if (pattern.slice(-3) === '/**') {
-    var gpattern = pattern.replace(/(\/\*\*)+$/, '')
-    gmatcher = new Minimatch(gpattern, { dot: true })
-  }
-
-  return {
-    matcher: new Minimatch(pattern, { dot: true }),
-    gmatcher: gmatcher
-  }
-}
-
-function setopts (self, pattern, options) {
-  if (!options)
-    options = {}
-
-  // base-matching: just use globstar for that.
-  if (options.matchBase && -1 === pattern.indexOf("/")) {
-    if (options.noglobstar) {
-      throw new Error("base matching requires globstar")
-    }
-    pattern = "**/" + pattern
-  }
-
-  self.silent = !!options.silent
-  self.pattern = pattern
-  self.strict = options.strict !== false
-  self.realpath = !!options.realpath
-  self.realpathCache = options.realpathCache || Object.create(null)
-  self.follow = !!options.follow
-  self.dot = !!options.dot
-  self.mark = !!options.mark
-  self.nodir = !!options.nodir
-  if (self.nodir)
-    self.mark = true
-  self.sync = !!options.sync
-  self.nounique = !!options.nounique
-  self.nonull = !!options.nonull
-  self.nosort = !!options.nosort
-  self.nocase = !!options.nocase
-  self.stat = !!options.stat
-  self.noprocess = !!options.noprocess
-  self.absolute = !!options.absolute
-
-  self.maxLength = options.maxLength || Infinity
-  self.cache = options.cache || Object.create(null)
-  self.statCache = options.statCache || Object.create(null)
-  self.symlinks = options.symlinks || Object.create(null)
-
-  setupIgnores(self, options)
-
-  self.changedCwd = false
-  var cwd = process.cwd()
-  if (!ownProp(options, "cwd"))
-    self.cwd = cwd
-  else {
-    self.cwd = path.resolve(options.cwd)
-    self.changedCwd = self.cwd !== cwd
-  }
-
-  self.root = options.root || path.resolve(self.cwd, "/")
-  self.root = path.resolve(self.root)
-  if (process.platform === "win32")
-    self.root = self.root.replace(/\\/g, "/")
-
-  // TODO: is an absolute `cwd` supposed to be resolved against `root`?
-  // e.g. { cwd: '/test', root: __dirname } === path.join(__dirname, '/test')
-  self.cwdAbs = isAbsolute(self.cwd) ? self.cwd : makeAbs(self, self.cwd)
-  if (process.platform === "win32")
-    self.cwdAbs = self.cwdAbs.replace(/\\/g, "/")
-  self.nomount = !!options.nomount
-
-  // disable comments and negation in Minimatch.
-  // Note that they are not supported in Glob itself anyway.
-  options.nonegate = true
-  options.nocomment = true
-
-  self.minimatch = new Minimatch(pattern, options)
-  self.options = self.minimatch.options
-}
-
-function finish (self) {
-  var nou = self.nounique
-  var all = nou ? [] : Object.create(null)
-
-  for (var i = 0, l = self.matches.length; i < l; i ++) {
-    var matches = self.matches[i]
-    if (!matches || Object.keys(matches).length === 0) {
-      if (self.nonull) {
-        // do like the shell, and spit out the literal glob
-        var literal = self.minimatch.globSet[i]
-        if (nou)
-          all.push(literal)
-        else
-          all[literal] = true
-      }
-    } else {
-      // had matches
-      var m = Object.keys(matches)
-      if (nou)
-        all.push.apply(all, m)
-      else
-        m.forEach(function (m) {
-          all[m] = true
-        })
-    }
-  }
-
-  if (!nou)
-    all = Object.keys(all)
-
-  if (!self.nosort)
-    all = all.sort(self.nocase ? alphasorti : alphasort)
-
-  // at *some* point we statted all of these
-  if (self.mark) {
-    for (var i = 0; i < all.length; i++) {
-      all[i] = self._mark(all[i])
-    }
-    if (self.nodir) {
-      all = all.filter(function (e) {
-        var notDir = !(/\/$/.test(e))
-        var c = self.cache[e] || self.cache[makeAbs(self, e)]
-        if (notDir && c)
-          notDir = c !== 'DIR' && !Array.isArray(c)
-        return notDir
-      })
-    }
-  }
-
-  if (self.ignore.length)
-    all = all.filter(function(m) {
-      return !isIgnored(self, m)
-    })
-
-  self.found = all
-}
-
-function mark (self, p) {
-  var abs = makeAbs(self, p)
-  var c = self.cache[abs]
-  var m = p
-  if (c) {
-    var isDir = c === 'DIR' || Array.isArray(c)
-    var slash = p.slice(-1) === '/'
-
-    if (isDir && !slash)
-      m += '/'
-    else if (!isDir && slash)
-      m = m.slice(0, -1)
-
-    if (m !== p) {
-      var mabs = makeAbs(self, m)
-      self.statCache[mabs] = self.statCache[abs]
-      self.cache[mabs] = self.cache[abs]
-    }
-  }
-
-  return m
-}
-
-// lotta situps...
-function makeAbs (self, f) {
-  var abs = f
-  if (f.charAt(0) === '/') {
-    abs = path.join(self.root, f)
-  } else if (isAbsolute(f) || f === '') {
-    abs = f
-  } else if (self.changedCwd) {
-    abs = path.resolve(self.cwd, f)
-  } else {
-    abs = path.resolve(f)
-  }
-
-  if (process.platform === 'win32')
-    abs = abs.replace(/\\/g, '/')
-
-  return abs
-}
-
-
-// Return true, if pattern ends with globstar '**', for the accompanying parent directory.
-// Ex:- If node_modules/** is the pattern, add 'node_modules' to ignore list along with it's contents
-function isIgnored (self, path) {
-  if (!self.ignore.length)
-    return false
-
-  return self.ignore.some(function(item) {
-    return item.matcher.match(path) || !!(item.gmatcher && item.gmatcher.match(path))
-  })
-}
-
-function childrenIgnored (self, path) {
-  if (!self.ignore.length)
-    return false
-
-  return self.ignore.some(function(item) {
-    return !!(item.gmatcher && item.gmatcher.match(path))
-  })
-}
-
-}).call(this,require('_process'))
-},{"_process":89,"minimatch":37,"path":88,"path-is-absolute":48}],28:[function(require,module,exports){
-(function (process){
-// Approach:
-//
-// 1. Get the minimatch set
-// 2. For each pattern in the set, PROCESS(pattern, false)
-// 3. Store matches per-set, then uniq them
-//
-// PROCESS(pattern, inGlobStar)
-// Get the first [n] items from pattern that are all strings
-// Join these together.  This is PREFIX.
-//   If there is no more remaining, then stat(PREFIX) and
-//   add to matches if it succeeds.  END.
-//
-// If inGlobStar and PREFIX is symlink and points to dir
-//   set ENTRIES = []
-// else readdir(PREFIX) as ENTRIES
-//   If fail, END
-//
-// with ENTRIES
-//   If pattern[n] is GLOBSTAR
-//     // handle the case where the globstar match is empty
-//     // by pruning it out, and testing the resulting pattern
-//     PROCESS(pattern[0..n] + pattern[n+1 .. $], false)
-//     // handle other cases.
-//     for ENTRY in ENTRIES (not dotfiles)
-//       // attach globstar + tail onto the entry
-//       // Mark that this entry is a globstar match
-//       PROCESS(pattern[0..n] + ENTRY + pattern[n .. $], true)
-//
-//   else // not globstar
-//     for ENTRY in ENTRIES (not dotfiles, unless pattern[n] is dot)
-//       Test ENTRY against pattern[n]
-//       If fails, continue
-//       If passes, PROCESS(pattern[0..n] + item + pattern[n+1 .. $])
-//
-// Caveat:
-//   Cache all stats and readdirs results to minimize syscall.  Since all
-//   we ever care about is existence and directory-ness, we can just keep
-//   `true` for files, and [children,...] for directories, or `false` for
-//   things that don't exist.
-
-module.exports = glob
-
-var fs = require('fs')
-var rp = require('fs.realpath')
-var minimatch = require('minimatch')
-var Minimatch = minimatch.Minimatch
-var inherits = require('inherits')
-var EE = require('events').EventEmitter
-var path = require('path')
-var assert = require('assert')
-var isAbsolute = require('path-is-absolute')
-var globSync = require('./sync.js')
-var common = require('./common.js')
-var alphasort = common.alphasort
-var alphasorti = common.alphasorti
-var setopts = common.setopts
-var ownProp = common.ownProp
-var inflight = require('inflight')
-var util = require('util')
-var childrenIgnored = common.childrenIgnored
-var isIgnored = common.isIgnored
-
-var once = require('once')
-
-function glob (pattern, options, cb) {
-  if (typeof options === 'function') cb = options, options = {}
-  if (!options) options = {}
-
-  if (options.sync) {
-    if (cb)
-      throw new TypeError('callback provided to sync glob')
-    return globSync(pattern, options)
-  }
-
-  return new Glob(pattern, options, cb)
-}
-
-glob.sync = globSync
-var GlobSync = glob.GlobSync = globSync.GlobSync
-
-// old api surface
-glob.glob = glob
-
-function extend (origin, add) {
-  if (add === null || typeof add !== 'object') {
-    return origin
-  }
-
-  var keys = Object.keys(add)
-  var i = keys.length
-  while (i--) {
-    origin[keys[i]] = add[keys[i]]
-  }
-  return origin
-}
-
-glob.hasMagic = function (pattern, options_) {
-  var options = extend({}, options_)
-  options.noprocess = true
-
-  var g = new Glob(pattern, options)
-  var set = g.minimatch.set
-
-  if (!pattern)
-    return false
-
-  if (set.length > 1)
-    return true
-
-  for (var j = 0; j < set[0].length; j++) {
-    if (typeof set[0][j] !== 'string')
-      return true
-  }
-
-  return false
-}
-
-glob.Glob = Glob
-inherits(Glob, EE)
-function Glob (pattern, options, cb) {
-  if (typeof options === 'function') {
-    cb = options
-    options = null
-  }
-
-  if (options && options.sync) {
-    if (cb)
-      throw new TypeError('callback provided to sync glob')
-    return new GlobSync(pattern, options)
-  }
-
-  if (!(this instanceof Glob))
-    return new Glob(pattern, options, cb)
-
-  setopts(this, pattern, options)
-  this._didRealPath = false
-
-  // process each pattern in the minimatch set
-  var n = this.minimatch.set.length
-
-  // The matches are stored as {<filename>: true,...} so that
-  // duplicates are automagically pruned.
-  // Later, we do an Object.keys() on these.
-  // Keep them as a list so we can fill in when nonull is set.
-  this.matches = new Array(n)
-
-  if (typeof cb === 'function') {
-    cb = once(cb)
-    this.on('error', cb)
-    this.on('end', function (matches) {
-      cb(null, matches)
-    })
-  }
-
-  var self = this
-  this._processing = 0
-
-  this._emitQueue = []
-  this._processQueue = []
-  this.paused = false
-
-  if (this.noprocess)
-    return this
-
-  if (n === 0)
-    return done()
-
-  var sync = true
-  for (var i = 0; i < n; i ++) {
-    this._process(this.minimatch.set[i], i, false, done)
-  }
-  sync = false
-
-  function done () {
-    --self._processing
-    if (self._processing <= 0) {
-      if (sync) {
-        process.nextTick(function () {
-          self._finish()
-        })
-      } else {
-        self._finish()
-      }
-    }
-  }
-}
-
-Glob.prototype._finish = function () {
-  assert(this instanceof Glob)
-  if (this.aborted)
-    return
-
-  if (this.realpath && !this._didRealpath)
-    return this._realpath()
-
-  common.finish(this)
-  this.emit('end', this.found)
-}
-
-Glob.prototype._realpath = function () {
-  if (this._didRealpath)
-    return
-
-  this._didRealpath = true
-
-  var n = this.matches.length
-  if (n === 0)
-    return this._finish()
-
-  var self = this
-  for (var i = 0; i < this.matches.length; i++)
-    this._realpathSet(i, next)
-
-  function next () {
-    if (--n === 0)
-      self._finish()
-  }
-}
-
-Glob.prototype._realpathSet = function (index, cb) {
-  var matchset = this.matches[index]
-  if (!matchset)
-    return cb()
-
-  var found = Object.keys(matchset)
-  var self = this
-  var n = found.length
-
-  if (n === 0)
-    return cb()
-
-  var set = this.matches[index] = Object.create(null)
-  found.forEach(function (p, i) {
-    // If there's a problem with the stat, then it means that
-    // one or more of the links in the realpath couldn't be
-    // resolved.  just return the abs value in that case.
-    p = self._makeAbs(p)
-    rp.realpath(p, self.realpathCache, function (er, real) {
-      if (!er)
-        set[real] = true
-      else if (er.syscall === 'stat')
-        set[p] = true
-      else
-        self.emit('error', er) // srsly wtf right here
-
-      if (--n === 0) {
-        self.matches[index] = set
-        cb()
-      }
-    })
-  })
-}
-
-Glob.prototype._mark = function (p) {
-  return common.mark(this, p)
-}
-
-Glob.prototype._makeAbs = function (f) {
-  return common.makeAbs(this, f)
-}
-
-Glob.prototype.abort = function () {
-  this.aborted = true
-  this.emit('abort')
-}
-
-Glob.prototype.pause = function () {
-  if (!this.paused) {
-    this.paused = true
-    this.emit('pause')
-  }
-}
-
-Glob.prototype.resume = function () {
-  if (this.paused) {
-    this.emit('resume')
-    this.paused = false
-    if (this._emitQueue.length) {
-      var eq = this._emitQueue.slice(0)
-      this._emitQueue.length = 0
-      for (var i = 0; i < eq.length; i ++) {
-        var e = eq[i]
-        this._emitMatch(e[0], e[1])
-      }
-    }
-    if (this._processQueue.length) {
-      var pq = this._processQueue.slice(0)
-      this._processQueue.length = 0
-      for (var i = 0; i < pq.length; i ++) {
-        var p = pq[i]
-        this._processing--
-        this._process(p[0], p[1], p[2], p[3])
-      }
-    }
-  }
-}
-
-Glob.prototype._process = function (pattern, index, inGlobStar, cb) {
-  assert(this instanceof Glob)
-  assert(typeof cb === 'function')
-
-  if (this.aborted)
-    return
-
-  this._processing++
-  if (this.paused) {
-    this._processQueue.push([pattern, index, inGlobStar, cb])
-    return
-  }
-
-  //console.error('PROCESS %d', this._processing, pattern)
-
-  // Get the first [n] parts of pattern that are all strings.
-  var n = 0
-  while (typeof pattern[n] === 'string') {
-    n ++
-  }
-  // now n is the index of the first one that is *not* a string.
-
-  // see if there's anything else
-  var prefix
-  switch (n) {
-    // if not, then this is rather simple
-    case pattern.length:
-      this._processSimple(pattern.join('/'), index, cb)
-      return
-
-    case 0:
-      // pattern *starts* with some non-trivial item.
-      // going to readdir(cwd), but not include the prefix in matches.
-      prefix = null
-      break
-
-    default:
-      // pattern has some string bits in the front.
-      // whatever it starts with, whether that's 'absolute' like /foo/bar,
-      // or 'relative' like '../baz'
-      prefix = pattern.slice(0, n).join('/')
-      break
-  }
-
-  var remain = pattern.slice(n)
-
-  // get the list of entries.
-  var read
-  if (prefix === null)
-    read = '.'
-  else if (isAbsolute(prefix) || isAbsolute(pattern.join('/'))) {
-    if (!prefix || !isAbsolute(prefix))
-      prefix = '/' + prefix
-    read = prefix
-  } else
-    read = prefix
-
-  var abs = this._makeAbs(read)
-
-  //if ignored, skip _processing
-  if (childrenIgnored(this, read))
-    return cb()
-
-  var isGlobStar = remain[0] === minimatch.GLOBSTAR
-  if (isGlobStar)
-    this._processGlobStar(prefix, read, abs, remain, index, inGlobStar, cb)
-  else
-    this._processReaddir(prefix, read, abs, remain, index, inGlobStar, cb)
-}
-
-Glob.prototype._processReaddir = function (prefix, read, abs, remain, index, inGlobStar, cb) {
-  var self = this
-  this._readdir(abs, inGlobStar, function (er, entries) {
-    return self._processReaddir2(prefix, read, abs, remain, index, inGlobStar, entries, cb)
-  })
-}
-
-Glob.prototype._processReaddir2 = function (prefix, read, abs, remain, index, inGlobStar, entries, cb) {
-
-  // if the abs isn't a dir, then nothing can match!
-  if (!entries)
-    return cb()
-
-  // It will only match dot entries if it starts with a dot, or if
-  // dot is set.  Stuff like @(.foo|.bar) isn't allowed.
-  var pn = remain[0]
-  var negate = !!this.minimatch.negate
-  var rawGlob = pn._glob
-  var dotOk = this.dot || rawGlob.charAt(0) === '.'
-
-  var matchedEntries = []
-  for (var i = 0; i < entries.length; i++) {
-    var e = entries[i]
-    if (e.charAt(0) !== '.' || dotOk) {
-      var m
-      if (negate && !prefix) {
-        m = !e.match(pn)
-      } else {
-        m = e.match(pn)
-      }
-      if (m)
-        matchedEntries.push(e)
-    }
-  }
-
-  //console.error('prd2', prefix, entries, remain[0]._glob, matchedEntries)
-
-  var len = matchedEntries.length
-  // If there are no matched entries, then nothing matches.
-  if (len === 0)
-    return cb()
-
-  // if this is the last remaining pattern bit, then no need for
-  // an additional stat *unless* the user has specified mark or
-  // stat explicitly.  We know they exist, since readdir returned
-  // them.
-
-  if (remain.length === 1 && !this.mark && !this.stat) {
-    if (!this.matches[index])
-      this.matches[index] = Object.create(null)
-
-    for (var i = 0; i < len; i ++) {
-      var e = matchedEntries[i]
-      if (prefix) {
-        if (prefix !== '/')
-          e = prefix + '/' + e
-        else
-          e = prefix + e
-      }
-
-      if (e.charAt(0) === '/' && !this.nomount) {
-        e = path.join(this.root, e)
-      }
-      this._emitMatch(index, e)
-    }
-    // This was the last one, and no stats were needed
-    return cb()
-  }
-
-  // now test all matched entries as stand-ins for that part
-  // of the pattern.
-  remain.shift()
-  for (var i = 0; i < len; i ++) {
-    var e = matchedEntries[i]
-    var newPattern
-    if (prefix) {
-      if (prefix !== '/')
-        e = prefix + '/' + e
-      else
-        e = prefix + e
-    }
-    this._process([e].concat(remain), index, inGlobStar, cb)
-  }
-  cb()
-}
-
-Glob.prototype._emitMatch = function (index, e) {
-  if (this.aborted)
-    return
-
-  if (isIgnored(this, e))
-    return
-
-  if (this.paused) {
-    this._emitQueue.push([index, e])
-    return
-  }
-
-  var abs = isAbsolute(e) ? e : this._makeAbs(e)
-
-  if (this.mark)
-    e = this._mark(e)
-
-  if (this.absolute)
-    e = abs
-
-  if (this.matches[index][e])
-    return
-
-  if (this.nodir) {
-    var c = this.cache[abs]
-    if (c === 'DIR' || Array.isArray(c))
-      return
-  }
-
-  this.matches[index][e] = true
-
-  var st = this.statCache[abs]
-  if (st)
-    this.emit('stat', e, st)
-
-  this.emit('match', e)
-}
-
-Glob.prototype._readdirInGlobStar = function (abs, cb) {
-  if (this.aborted)
-    return
-
-  // follow all symlinked directories forever
-  // just proceed as if this is a non-globstar situation
-  if (this.follow)
-    return this._readdir(abs, false, cb)
-
-  var lstatkey = 'lstat\0' + abs
-  var self = this
-  var lstatcb = inflight(lstatkey, lstatcb_)
-
-  if (lstatcb)
-    fs.lstat(abs, lstatcb)
-
-  function lstatcb_ (er, lstat) {
-    if (er && er.code === 'ENOENT')
-      return cb()
-
-    var isSym = lstat && lstat.isSymbolicLink()
-    self.symlinks[abs] = isSym
-
-    // If it's not a symlink or a dir, then it's definitely a regular file.
-    // don't bother doing a readdir in that case.
-    if (!isSym && lstat && !lstat.isDirectory()) {
-      self.cache[abs] = 'FILE'
-      cb()
-    } else
-      self._readdir(abs, false, cb)
-  }
-}
-
-Glob.prototype._readdir = function (abs, inGlobStar, cb) {
-  if (this.aborted)
-    return
-
-  cb = inflight('readdir\0'+abs+'\0'+inGlobStar, cb)
-  if (!cb)
-    return
-
-  //console.error('RD %j %j', +inGlobStar, abs)
-  if (inGlobStar && !ownProp(this.symlinks, abs))
-    return this._readdirInGlobStar(abs, cb)
-
-  if (ownProp(this.cache, abs)) {
-    var c = this.cache[abs]
-    if (!c || c === 'FILE')
-      return cb()
-
-    if (Array.isArray(c))
-      return cb(null, c)
-  }
-
-  var self = this
-  fs.readdir(abs, readdirCb(this, abs, cb))
-}
-
-function readdirCb (self, abs, cb) {
-  return function (er, entries) {
-    if (er)
-      self._readdirError(abs, er, cb)
-    else
-      self._readdirEntries(abs, entries, cb)
-  }
-}
-
-Glob.prototype._readdirEntries = function (abs, entries, cb) {
-  if (this.aborted)
-    return
-
-  // if we haven't asked to stat everything, then just
-  // assume that everything in there exists, so we can avoid
-  // having to stat it a second time.
-  if (!this.mark && !this.stat) {
-    for (var i = 0; i < entries.length; i ++) {
-      var e = entries[i]
-      if (abs === '/')
-        e = abs + e
-      else
-        e = abs + '/' + e
-      this.cache[e] = true
-    }
-  }
-
-  this.cache[abs] = entries
-  return cb(null, entries)
-}
-
-Glob.prototype._readdirError = function (f, er, cb) {
-  if (this.aborted)
-    return
-
-  // handle errors, and cache the information
-  switch (er.code) {
-    case 'ENOTSUP': // https://github.com/isaacs/node-glob/issues/205
-    case 'ENOTDIR': // totally normal. means it *does* exist.
-      var abs = this._makeAbs(f)
-      this.cache[abs] = 'FILE'
-      if (abs === this.cwdAbs) {
-        var error = new Error(er.code + ' invalid cwd ' + this.cwd)
-        error.path = this.cwd
-        error.code = er.code
-        this.emit('error', error)
-        this.abort()
-      }
-      break
-
-    case 'ENOENT': // not terribly unusual
-    case 'ELOOP':
-    case 'ENAMETOOLONG':
-    case 'UNKNOWN':
-      this.cache[this._makeAbs(f)] = false
-      break
-
-    default: // some unusual error.  Treat as failure.
-      this.cache[this._makeAbs(f)] = false
-      if (this.strict) {
-        this.emit('error', er)
-        // If the error is handled, then we abort
-        // if not, we threw out of here
-        this.abort()
-      }
-      if (!this.silent)
-        console.error('glob error', er)
-      break
-  }
-
-  return cb()
-}
-
-Glob.prototype._processGlobStar = function (prefix, read, abs, remain, index, inGlobStar, cb) {
-  var self = this
-  this._readdir(abs, inGlobStar, function (er, entries) {
-    self._processGlobStar2(prefix, read, abs, remain, index, inGlobStar, entries, cb)
-  })
-}
-
-
-Glob.prototype._processGlobStar2 = function (prefix, read, abs, remain, index, inGlobStar, entries, cb) {
-  //console.error('pgs2', prefix, remain[0], entries)
-
-  // no entries means not a dir, so it can never have matches
-  // foo.txt/** doesn't match foo.txt
-  if (!entries)
-    return cb()
-
-  // test without the globstar, and with every child both below
-  // and replacing the globstar.
-  var remainWithoutGlobStar = remain.slice(1)
-  var gspref = prefix ? [ prefix ] : []
-  var noGlobStar = gspref.concat(remainWithoutGlobStar)
-
-  // the noGlobStar pattern exits the inGlobStar state
-  this._process(noGlobStar, index, false, cb)
-
-  var isSym = this.symlinks[abs]
-  var len = entries.length
-
-  // If it's a symlink, and we're in a globstar, then stop
-  if (isSym && inGlobStar)
-    return cb()
-
-  for (var i = 0; i < len; i++) {
-    var e = entries[i]
-    if (e.charAt(0) === '.' && !this.dot)
-      continue
-
-    // these two cases enter the inGlobStar state
-    var instead = gspref.concat(entries[i], remainWithoutGlobStar)
-    this._process(instead, index, true, cb)
-
-    var below = gspref.concat(entries[i], remain)
-    this._process(below, index, true, cb)
-  }
-
-  cb()
-}
-
-Glob.prototype._processSimple = function (prefix, index, cb) {
-  // XXX review this.  Shouldn't it be doing the mounting etc
-  // before doing stat?  kinda weird?
-  var self = this
-  this._stat(prefix, function (er, exists) {
-    self._processSimple2(prefix, index, er, exists, cb)
-  })
-}
-Glob.prototype._processSimple2 = function (prefix, index, er, exists, cb) {
-
-  //console.error('ps2', prefix, exists)
-
-  if (!this.matches[index])
-    this.matches[index] = Object.create(null)
-
-  // If it doesn't exist, then just mark the lack of results
-  if (!exists)
-    return cb()
-
-  if (prefix && isAbsolute(prefix) && !this.nomount) {
-    var trail = /[\/\\]$/.test(prefix)
-    if (prefix.charAt(0) === '/') {
-      prefix = path.join(this.root, prefix)
-    } else {
-      prefix = path.resolve(this.root, prefix)
-      if (trail)
-        prefix += '/'
-    }
-  }
-
-  if (process.platform === 'win32')
-    prefix = prefix.replace(/\\/g, '/')
-
-  // Mark this as a match
-  this._emitMatch(index, prefix)
-  cb()
-}
-
-// Returns either 'DIR', 'FILE', or false
-Glob.prototype._stat = function (f, cb) {
-  var abs = this._makeAbs(f)
-  var needDir = f.slice(-1) === '/'
-
-  if (f.length > this.maxLength)
-    return cb()
-
-  if (!this.stat && ownProp(this.cache, abs)) {
-    var c = this.cache[abs]
-
-    if (Array.isArray(c))
-      c = 'DIR'
-
-    // It exists, but maybe not how we need it
-    if (!needDir || c === 'DIR')
-      return cb(null, c)
-
-    if (needDir && c === 'FILE')
-      return cb()
-
-    // otherwise we have to stat, because maybe c=true
-    // if we know it exists, but not what it is.
-  }
-
-  var exists
-  var stat = this.statCache[abs]
-  if (stat !== undefined) {
-    if (stat === false)
-      return cb(null, stat)
-    else {
-      var type = stat.isDirectory() ? 'DIR' : 'FILE'
-      if (needDir && type === 'FILE')
-        return cb()
-      else
-        return cb(null, type, stat)
-    }
-  }
-
-  var self = this
-  var statcb = inflight('stat\0' + abs, lstatcb_)
-  if (statcb)
-    fs.lstat(abs, statcb)
-
-  function lstatcb_ (er, lstat) {
-    if (lstat && lstat.isSymbolicLink()) {
-      // If it's a symlink, then treat it as the target, unless
-      // the target does not exist, then treat it as a file.
-      return fs.stat(abs, function (er, stat) {
-        if (er)
-          self._stat2(f, abs, null, lstat, cb)
-        else
-          self._stat2(f, abs, er, stat, cb)
-      })
-    } else {
-      self._stat2(f, abs, er, lstat, cb)
-    }
-  }
-}
-
-Glob.prototype._stat2 = function (f, abs, er, stat, cb) {
-  if (er && (er.code === 'ENOENT' || er.code === 'ENOTDIR')) {
-    this.statCache[abs] = false
-    return cb()
-  }
-
-  var needDir = f.slice(-1) === '/'
-  this.statCache[abs] = stat
-
-  if (abs.slice(-1) === '/' && stat && !stat.isDirectory())
-    return cb(null, false, stat)
-
-  var c = true
-  if (stat)
-    c = stat.isDirectory() ? 'DIR' : 'FILE'
-  this.cache[abs] = this.cache[abs] || c
-
-  if (needDir && c === 'FILE')
-    return cb()
-
-  return cb(null, c, stat)
-}
-
-}).call(this,require('_process'))
-},{"./common.js":27,"./sync.js":29,"_process":89,"assert":79,"events":84,"fs":78,"fs.realpath":25,"inflight":32,"inherits":33,"minimatch":37,"once":47,"path":88,"path-is-absolute":48,"util":98}],29:[function(require,module,exports){
-(function (process){
-module.exports = globSync
-globSync.GlobSync = GlobSync
-
-var fs = require('fs')
-var rp = require('fs.realpath')
-var minimatch = require('minimatch')
-var Minimatch = minimatch.Minimatch
-var Glob = require('./glob.js').Glob
-var util = require('util')
-var path = require('path')
-var assert = require('assert')
-var isAbsolute = require('path-is-absolute')
-var common = require('./common.js')
-var alphasort = common.alphasort
-var alphasorti = common.alphasorti
-var setopts = common.setopts
-var ownProp = common.ownProp
-var childrenIgnored = common.childrenIgnored
-var isIgnored = common.isIgnored
-
-function globSync (pattern, options) {
-  if (typeof options === 'function' || arguments.length === 3)
-    throw new TypeError('callback provided to sync glob\n'+
-                        'See: https://github.com/isaacs/node-glob/issues/167')
-
-  return new GlobSync(pattern, options).found
-}
-
-function GlobSync (pattern, options) {
-  if (!pattern)
-    throw new Error('must provide pattern')
-
-  if (typeof options === 'function' || arguments.length === 3)
-    throw new TypeError('callback provided to sync glob\n'+
-                        'See: https://github.com/isaacs/node-glob/issues/167')
-
-  if (!(this instanceof GlobSync))
-    return new GlobSync(pattern, options)
-
-  setopts(this, pattern, options)
-
-  if (this.noprocess)
-    return this
-
-  var n = this.minimatch.set.length
-  this.matches = new Array(n)
-  for (var i = 0; i < n; i ++) {
-    this._process(this.minimatch.set[i], i, false)
-  }
-  this._finish()
-}
-
-GlobSync.prototype._finish = function () {
-  assert(this instanceof GlobSync)
-  if (this.realpath) {
-    var self = this
-    this.matches.forEach(function (matchset, index) {
-      var set = self.matches[index] = Object.create(null)
-      for (var p in matchset) {
-        try {
-          p = self._makeAbs(p)
-          var real = rp.realpathSync(p, self.realpathCache)
-          set[real] = true
-        } catch (er) {
-          if (er.syscall === 'stat')
-            set[self._makeAbs(p)] = true
-          else
-            throw er
-        }
-      }
-    })
-  }
-  common.finish(this)
-}
-
-
-GlobSync.prototype._process = function (pattern, index, inGlobStar) {
-  assert(this instanceof GlobSync)
-
-  // Get the first [n] parts of pattern that are all strings.
-  var n = 0
-  while (typeof pattern[n] === 'string') {
-    n ++
-  }
-  // now n is the index of the first one that is *not* a string.
-
-  // See if there's anything else
-  var prefix
-  switch (n) {
-    // if not, then this is rather simple
-    case pattern.length:
-      this._processSimple(pattern.join('/'), index)
-      return
-
-    case 0:
-      // pattern *starts* with some non-trivial item.
-      // going to readdir(cwd), but not include the prefix in matches.
-      prefix = null
-      break
-
-    default:
-      // pattern has some string bits in the front.
-      // whatever it starts with, whether that's 'absolute' like /foo/bar,
-      // or 'relative' like '../baz'
-      prefix = pattern.slice(0, n).join('/')
-      break
-  }
-
-  var remain = pattern.slice(n)
-
-  // get the list of entries.
-  var read
-  if (prefix === null)
-    read = '.'
-  else if (isAbsolute(prefix) || isAbsolute(pattern.join('/'))) {
-    if (!prefix || !isAbsolute(prefix))
-      prefix = '/' + prefix
-    read = prefix
-  } else
-    read = prefix
-
-  var abs = this._makeAbs(read)
-
-  //if ignored, skip processing
-  if (childrenIgnored(this, read))
-    return
-
-  var isGlobStar = remain[0] === minimatch.GLOBSTAR
-  if (isGlobStar)
-    this._processGlobStar(prefix, read, abs, remain, index, inGlobStar)
-  else
-    this._processReaddir(prefix, read, abs, remain, index, inGlobStar)
-}
-
-
-GlobSync.prototype._processReaddir = function (prefix, read, abs, remain, index, inGlobStar) {
-  var entries = this._readdir(abs, inGlobStar)
-
-  // if the abs isn't a dir, then nothing can match!
-  if (!entries)
-    return
-
-  // It will only match dot entries if it starts with a dot, or if
-  // dot is set.  Stuff like @(.foo|.bar) isn't allowed.
-  var pn = remain[0]
-  var negate = !!this.minimatch.negate
-  var rawGlob = pn._glob
-  var dotOk = this.dot || rawGlob.charAt(0) === '.'
-
-  var matchedEntries = []
-  for (var i = 0; i < entries.length; i++) {
-    var e = entries[i]
-    if (e.charAt(0) !== '.' || dotOk) {
-      var m
-      if (negate && !prefix) {
-        m = !e.match(pn)
-      } else {
-        m = e.match(pn)
-      }
-      if (m)
-        matchedEntries.push(e)
-    }
-  }
-
-  var len = matchedEntries.length
-  // If there are no matched entries, then nothing matches.
-  if (len === 0)
-    return
-
-  // if this is the last remaining pattern bit, then no need for
-  // an additional stat *unless* the user has specified mark or
-  // stat explicitly.  We know they exist, since readdir returned
-  // them.
-
-  if (remain.length === 1 && !this.mark && !this.stat) {
-    if (!this.matches[index])
-      this.matches[index] = Object.create(null)
-
-    for (var i = 0; i < len; i ++) {
-      var e = matchedEntries[i]
-      if (prefix) {
-        if (prefix.slice(-1) !== '/')
-          e = prefix + '/' + e
-        else
-          e = prefix + e
-      }
-
-      if (e.charAt(0) === '/' && !this.nomount) {
-        e = path.join(this.root, e)
-      }
-      this._emitMatch(index, e)
-    }
-    // This was the last one, and no stats were needed
-    return
-  }
-
-  // now test all matched entries as stand-ins for that part
-  // of the pattern.
-  remain.shift()
-  for (var i = 0; i < len; i ++) {
-    var e = matchedEntries[i]
-    var newPattern
-    if (prefix)
-      newPattern = [prefix, e]
-    else
-      newPattern = [e]
-    this._process(newPattern.concat(remain), index, inGlobStar)
-  }
-}
-
-
-GlobSync.prototype._emitMatch = function (index, e) {
-  if (isIgnored(this, e))
-    return
-
-  var abs = this._makeAbs(e)
-
-  if (this.mark)
-    e = this._mark(e)
-
-  if (this.absolute) {
-    e = abs
-  }
-
-  if (this.matches[index][e])
-    return
-
-  if (this.nodir) {
-    var c = this.cache[abs]
-    if (c === 'DIR' || Array.isArray(c))
-      return
-  }
-
-  this.matches[index][e] = true
-
-  if (this.stat)
-    this._stat(e)
-}
-
-
-GlobSync.prototype._readdirInGlobStar = function (abs) {
-  // follow all symlinked directories forever
-  // just proceed as if this is a non-globstar situation
-  if (this.follow)
-    return this._readdir(abs, false)
-
-  var entries
-  var lstat
-  var stat
-  try {
-    lstat = fs.lstatSync(abs)
-  } catch (er) {
-    if (er.code === 'ENOENT') {
-      // lstat failed, doesn't exist
-      return null
-    }
-  }
-
-  var isSym = lstat && lstat.isSymbolicLink()
-  this.symlinks[abs] = isSym
-
-  // If it's not a symlink or a dir, then it's definitely a regular file.
-  // don't bother doing a readdir in that case.
-  if (!isSym && lstat && !lstat.isDirectory())
-    this.cache[abs] = 'FILE'
-  else
-    entries = this._readdir(abs, false)
-
-  return entries
-}
-
-GlobSync.prototype._readdir = function (abs, inGlobStar) {
-  var entries
-
-  if (inGlobStar && !ownProp(this.symlinks, abs))
-    return this._readdirInGlobStar(abs)
-
-  if (ownProp(this.cache, abs)) {
-    var c = this.cache[abs]
-    if (!c || c === 'FILE')
-      return null
-
-    if (Array.isArray(c))
-      return c
-  }
-
-  try {
-    return this._readdirEntries(abs, fs.readdirSync(abs))
-  } catch (er) {
-    this._readdirError(abs, er)
-    return null
-  }
-}
-
-GlobSync.prototype._readdirEntries = function (abs, entries) {
-  // if we haven't asked to stat everything, then just
-  // assume that everything in there exists, so we can avoid
-  // having to stat it a second time.
-  if (!this.mark && !this.stat) {
-    for (var i = 0; i < entries.length; i ++) {
-      var e = entries[i]
-      if (abs === '/')
-        e = abs + e
-      else
-        e = abs + '/' + e
-      this.cache[e] = true
-    }
-  }
-
-  this.cache[abs] = entries
-
-  // mark and cache dir-ness
-  return entries
-}
-
-GlobSync.prototype._readdirError = function (f, er) {
-  // handle errors, and cache the information
-  switch (er.code) {
-    case 'ENOTSUP': // https://github.com/isaacs/node-glob/issues/205
-    case 'ENOTDIR': // totally normal. means it *does* exist.
-      var abs = this._makeAbs(f)
-      this.cache[abs] = 'FILE'
-      if (abs === this.cwdAbs) {
-        var error = new Error(er.code + ' invalid cwd ' + this.cwd)
-        error.path = this.cwd
-        error.code = er.code
-        throw error
-      }
-      break
-
-    case 'ENOENT': // not terribly unusual
-    case 'ELOOP':
-    case 'ENAMETOOLONG':
-    case 'UNKNOWN':
-      this.cache[this._makeAbs(f)] = false
-      break
-
-    default: // some unusual error.  Treat as failure.
-      this.cache[this._makeAbs(f)] = false
-      if (this.strict)
-        throw er
-      if (!this.silent)
-        console.error('glob error', er)
-      break
-  }
-}
-
-GlobSync.prototype._processGlobStar = function (prefix, read, abs, remain, index, inGlobStar) {
-
-  var entries = this._readdir(abs, inGlobStar)
-
-  // no entries means not a dir, so it can never have matches
-  // foo.txt/** doesn't match foo.txt
-  if (!entries)
-    return
-
-  // test without the globstar, and with every child both below
-  // and replacing the globstar.
-  var remainWithoutGlobStar = remain.slice(1)
-  var gspref = prefix ? [ prefix ] : []
-  var noGlobStar = gspref.concat(remainWithoutGlobStar)
-
-  // the noGlobStar pattern exits the inGlobStar state
-  this._process(noGlobStar, index, false)
-
-  var len = entries.length
-  var isSym = this.symlinks[abs]
-
-  // If it's a symlink, and we're in a globstar, then stop
-  if (isSym && inGlobStar)
-    return
-
-  for (var i = 0; i < len; i++) {
-    var e = entries[i]
-    if (e.charAt(0) === '.' && !this.dot)
-      continue
-
-    // these two cases enter the inGlobStar state
-    var instead = gspref.concat(entries[i], remainWithoutGlobStar)
-    this._process(instead, index, true)
-
-    var below = gspref.concat(entries[i], remain)
-    this._process(below, index, true)
-  }
-}
-
-GlobSync.prototype._processSimple = function (prefix, index) {
-  // XXX review this.  Shouldn't it be doing the mounting etc
-  // before doing stat?  kinda weird?
-  var exists = this._stat(prefix)
-
-  if (!this.matches[index])
-    this.matches[index] = Object.create(null)
-
-  // If it doesn't exist, then just mark the lack of results
-  if (!exists)
-    return
-
-  if (prefix && isAbsolute(prefix) && !this.nomount) {
-    var trail = /[\/\\]$/.test(prefix)
-    if (prefix.charAt(0) === '/') {
-      prefix = path.join(this.root, prefix)
-    } else {
-      prefix = path.resolve(this.root, prefix)
-      if (trail)
-        prefix += '/'
-    }
-  }
-
-  if (process.platform === 'win32')
-    prefix = prefix.replace(/\\/g, '/')
-
-  // Mark this as a match
-  this._emitMatch(index, prefix)
-}
-
-// Returns either 'DIR', 'FILE', or false
-GlobSync.prototype._stat = function (f) {
-  var abs = this._makeAbs(f)
-  var needDir = f.slice(-1) === '/'
-
-  if (f.length > this.maxLength)
-    return false
-
-  if (!this.stat && ownProp(this.cache, abs)) {
-    var c = this.cache[abs]
-
-    if (Array.isArray(c))
-      c = 'DIR'
-
-    // It exists, but maybe not how we need it
-    if (!needDir || c === 'DIR')
-      return c
-
-    if (needDir && c === 'FILE')
-      return false
-
-    // otherwise we have to stat, because maybe c=true
-    // if we know it exists, but not what it is.
-  }
-
-  var exists
-  var stat = this.statCache[abs]
-  if (!stat) {
-    var lstat
-    try {
-      lstat = fs.lstatSync(abs)
-    } catch (er) {
-      if (er && (er.code === 'ENOENT' || er.code === 'ENOTDIR')) {
-        this.statCache[abs] = false
-        return false
-      }
-    }
-
-    if (lstat && lstat.isSymbolicLink()) {
-      try {
-        stat = fs.statSync(abs)
-      } catch (er) {
-        stat = lstat
-      }
-    } else {
-      stat = lstat
-    }
-  }
-
-  this.statCache[abs] = stat
-
-  var c = true
-  if (stat)
-    c = stat.isDirectory() ? 'DIR' : 'FILE'
-
-  this.cache[abs] = this.cache[abs] || c
-
-  if (needDir && c === 'FILE')
-    return false
-
-  return c
-}
-
-GlobSync.prototype._mark = function (p) {
-  return common.mark(this, p)
-}
-
-GlobSync.prototype._makeAbs = function (f) {
-  return common.makeAbs(this, f)
-}
-
-}).call(this,require('_process'))
-},{"./common.js":27,"./glob.js":28,"_process":89,"assert":79,"fs":78,"fs.realpath":25,"minimatch":37,"path":88,"path-is-absolute":48,"util":98}],30:[function(require,module,exports){
+},{}],46:[function(require,module,exports){
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
   var eLen = nBytes * 8 - mLen - 1
@@ -7443,7 +10905,7 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128
 }
 
-},{}],31:[function(require,module,exports){
+},{}],47:[function(require,module,exports){
 (function (process){
 module.exports = ImmediateStore
 
@@ -7496,65 +10958,7 @@ function nextTick (cb, err, val) {
 }
 
 }).call(this,require('_process'))
-},{"_process":89}],32:[function(require,module,exports){
-(function (process){
-var wrappy = require('wrappy')
-var reqs = Object.create(null)
-var once = require('once')
-
-module.exports = wrappy(inflight)
-
-function inflight (key, cb) {
-  if (reqs[key]) {
-    reqs[key].push(cb)
-    return null
-  } else {
-    reqs[key] = [cb]
-    return makeres(key)
-  }
-}
-
-function makeres (key) {
-  return once(function RES () {
-    var cbs = reqs[key]
-    var len = cbs.length
-    var args = slice(arguments)
-
-    // XXX It's somewhat ambiguous whether a new callback added in this
-    // pass should be queued for later execution if something in the
-    // list of callbacks throws, or if it should just be discarded.
-    // However, it's such an edge case that it hardly matters, and either
-    // choice is likely as surprising as the other.
-    // As it happens, we do go ahead and schedule it for later execution.
-    try {
-      for (var i = 0; i < len; i++) {
-        cbs[i].apply(null, args)
-      }
-    } finally {
-      if (cbs.length > len) {
-        // added more in the interim.
-        // de-zalgo, just in case, but don't call again.
-        cbs.splice(0, len)
-        process.nextTick(function () {
-          RES.apply(null, args)
-        })
-      } else {
-        delete reqs[key]
-      }
-    }
-  })
-}
-
-function slice (args) {
-  var length = args.length
-  var array = []
-
-  for (var i = 0; i < length; i++) array[i] = args[i]
-  return array
-}
-
-}).call(this,require('_process'))
-},{"_process":89,"once":47,"wrappy":77}],33:[function(require,module,exports){
+},{"_process":131}],48:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -7579,7 +10983,7 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],34:[function(require,module,exports){
+},{}],49:[function(require,module,exports){
 /* (c) 2016 Ari Porad (@ariporad) <http://ariporad.com>. License: ariporad.mit-license.org */
 
 // Partially from http://stackoverflow.com/a/94049/1928484, and from another SO answer, which told me that the highest
@@ -7594,14 +10998,247 @@ module.exports = function isAscii(str) {
   return true;
 };
 
-},{}],35:[function(require,module,exports){
+},{}],50:[function(require,module,exports){
+'use strict';
+
+var fs = require('fs');
+
+module.exports = function isFile(path, cb){
+  if(!cb)return isFileSync(path);
+
+  fs.stat(path, function(err, stats){
+    if(err)return cb(err);
+    return cb(null, stats.isFile());
+  });
+};
+
+module.exports.sync = isFileSync;
+
+function isFileSync(path){
+  return fs.existsSync(path) && fs.statSync(path).isFile();
+}
+
+},{"fs":117}],51:[function(require,module,exports){
+module.exports      = isTypedArray
+isTypedArray.strict = isStrictTypedArray
+isTypedArray.loose  = isLooseTypedArray
+
+var toString = Object.prototype.toString
+var names = {
+    '[object Int8Array]': true
+  , '[object Int16Array]': true
+  , '[object Int32Array]': true
+  , '[object Uint8Array]': true
+  , '[object Uint8ClampedArray]': true
+  , '[object Uint16Array]': true
+  , '[object Uint32Array]': true
+  , '[object Float32Array]': true
+  , '[object Float64Array]': true
+}
+
+function isTypedArray(arr) {
+  return (
+       isStrictTypedArray(arr)
+    || isLooseTypedArray(arr)
+  )
+}
+
+function isStrictTypedArray(arr) {
+  return (
+       arr instanceof Int8Array
+    || arr instanceof Int16Array
+    || arr instanceof Int32Array
+    || arr instanceof Uint8Array
+    || arr instanceof Uint8ClampedArray
+    || arr instanceof Uint16Array
+    || arr instanceof Uint32Array
+    || arr instanceof Float32Array
+    || arr instanceof Float64Array
+  )
+}
+
+function isLooseTypedArray(arr) {
+  return names[toString.call(arr)]
+}
+
+},{}],52:[function(require,module,exports){
 var toString = {}.toString;
 
 module.exports = Array.isArray || function (arr) {
   return toString.call(arr) == '[object Array]';
 };
 
-},{}],36:[function(require,module,exports){
+},{}],53:[function(require,module,exports){
+'use strict';
+
+// # All
+// /^npm-debug\.log$/,           // npm error log
+// /^\..*\.swp$/,                // Vim state
+
+// # macOS
+// /^\.DS_Store$/,               // Stores custom folder attributes
+// /^\.AppleDouble$/,            // Stores additional file resources
+// /^\.LSOverride$/,             // Contains the absolute path to the app to be used
+// /^Icon\r$/,                   // Custom Finder icon: http://superuser.com/questions/298785/icon-file-on-os-x-desktop
+// /^\._.*/,                     // Thumbnail
+// /^\.Spotlight-V100(?:$|\/)/,  // Directory that might appear on external disk
+// /\.Trashes/,                  // File that might appear on external disk
+// /^__MACOSX$/,                 // Resource fork
+
+// # Linux
+// /~$/,                         // Backup file
+
+// # Windows
+// /^Thumbs\.db$/,               // Image file cache
+// /^ehthumbs\.db$/,             // Folder config file
+// /^Desktop\.ini$/              // Stores custom folder attributes
+// /^@eaDir$/                    // Synology Diskstation "hidden" folder where the server stores thumbnails
+
+exports.regex = exports.re = /^npm-debug\.log$|^\..*\.swp$|^\.DS_Store$|^\.AppleDouble$|^\.LSOverride$|^Icon\r$|^\._.*|^\.Spotlight-V100(?:$|\/)|\.Trashes|^__MACOSX$|~$|^Thumbs\.db$|^ehthumbs\.db$|^Desktop\.ini$|^@eaDir$/;
+
+exports.is = filename => exports.re.test(filename);
+
+exports.not = filename => !exports.is(filename);
+
+},{}],54:[function(require,module,exports){
+module.exports = magnetURIDecode
+module.exports.decode = magnetURIDecode
+module.exports.encode = magnetURIEncode
+
+var base32 = require('thirty-two')
+var Buffer = require('safe-buffer').Buffer
+var extend = require('xtend')
+var uniq = require('uniq')
+
+/**
+ * Parse a magnet URI and return an object of keys/values
+ *
+ * @param  {string} uri
+ * @return {Object} parsed uri
+ */
+function magnetURIDecode (uri) {
+  var result = {}
+
+  // Support 'magnet:' and 'stream-magnet:' uris
+  var data = uri.split('magnet:?')[1]
+
+  var params = (data && data.length >= 0)
+    ? data.split('&')
+    : []
+
+  params.forEach(function (param) {
+    var keyval = param.split('=')
+
+    // This keyval is invalid, skip it
+    if (keyval.length !== 2) return
+
+    var key = keyval[0]
+    var val = keyval[1]
+
+    // Clean up torrent name
+    if (key === 'dn') val = decodeURIComponent(val).replace(/\+/g, ' ')
+
+    // Address tracker (tr), exact source (xs), and acceptable source (as) are encoded
+    // URIs, so decode them
+    if (key === 'tr' || key === 'xs' || key === 'as' || key === 'ws') {
+      val = decodeURIComponent(val)
+    }
+
+    // Return keywords as an array
+    if (key === 'kt') val = decodeURIComponent(val).split('+')
+
+    // Cast file index (ix) to a number
+    if (key === 'ix') val = Number(val)
+
+    // If there are repeated parameters, return an array of values
+    if (result[key]) {
+      if (Array.isArray(result[key])) {
+        result[key].push(val)
+      } else {
+        var old = result[key]
+        result[key] = [old, val]
+      }
+    } else {
+      result[key] = val
+    }
+  })
+
+  // Convenience properties for parity with `parse-torrent-file` module
+  var m
+  if (result.xt) {
+    var xts = Array.isArray(result.xt) ? result.xt : [ result.xt ]
+    xts.forEach(function (xt) {
+      if ((m = xt.match(/^urn:btih:(.{40})/))) {
+        result.infoHash = m[1].toLowerCase()
+      } else if ((m = xt.match(/^urn:btih:(.{32})/))) {
+        var decodedStr = base32.decode(m[1])
+        result.infoHash = Buffer.from(decodedStr, 'binary').toString('hex')
+      }
+    })
+  }
+  if (result.infoHash) result.infoHashBuffer = Buffer.from(result.infoHash, 'hex')
+
+  if (result.dn) result.name = result.dn
+  if (result.kt) result.keywords = result.kt
+
+  if (typeof result.tr === 'string') result.announce = [ result.tr ]
+  else if (Array.isArray(result.tr)) result.announce = result.tr
+  else result.announce = []
+
+  result.urlList = []
+  if (typeof result.as === 'string' || Array.isArray(result.as)) {
+    result.urlList = result.urlList.concat(result.as)
+  }
+  if (typeof result.ws === 'string' || Array.isArray(result.ws)) {
+    result.urlList = result.urlList.concat(result.ws)
+  }
+
+  uniq(result.announce)
+  uniq(result.urlList)
+
+  return result
+}
+
+function magnetURIEncode (obj) {
+  obj = extend(obj) // clone obj, so we can mutate it
+
+  // support using convenience names, in addition to spec names
+  // (example: `infoHash` for `xt`, `name` for `dn`)
+  if (obj.infoHashBuffer) obj.xt = 'urn:btih:' + obj.infoHashBuffer.toString('hex')
+  if (obj.infoHash) obj.xt = 'urn:btih:' + obj.infoHash
+  if (obj.name) obj.dn = obj.name
+  if (obj.keywords) obj.kt = obj.keywords
+  if (obj.announce) obj.tr = obj.announce
+  if (obj.urlList) {
+    obj.ws = obj.urlList
+    delete obj.as
+  }
+
+  var result = 'magnet:?'
+  Object.keys(obj)
+    .filter(function (key) {
+      return key.length === 2
+    })
+    .forEach(function (key, i) {
+      var values = Array.isArray(obj[key]) ? obj[key] : [ obj[key] ]
+      values.forEach(function (val, j) {
+        if ((i > 0 || j > 0) && (key !== 'kt' || j === 0)) result += '&'
+
+        if (key === 'dn') val = encodeURIComponent(val).replace(/%20/g, '+')
+        if (key === 'tr' || key === 'xs' || key === 'as' || key === 'ws') {
+          val = encodeURIComponent(val)
+        }
+        if (key === 'kt') val = encodeURIComponent(val)
+
+        if (key === 'kt' && j > 0) result += '+' + val
+        else result += key + '=' + val
+      })
+    })
+
+  return result
+}
+
+},{"safe-buffer":89,"thirty-two":100,"uniq":107,"xtend":114}],55:[function(require,module,exports){
 module.exports = MediaElementWrapper
 
 var inherits = require('inherits')
@@ -7848,1034 +11485,67 @@ MediaSourceStream.prototype._getBufferDuration = function () {
   return bufferedTime
 }
 
-},{"inherits":33,"readable-stream":62,"to-arraybuffer":72}],37:[function(require,module,exports){
-module.exports = minimatch
-minimatch.Minimatch = Minimatch
-
-var path = { sep: '/' }
-try {
-  path = require('path')
-} catch (er) {}
-
-var GLOBSTAR = minimatch.GLOBSTAR = Minimatch.GLOBSTAR = {}
-var expand = require('brace-expansion')
-
-var plTypes = {
-  '!': { open: '(?:(?!(?:', close: '))[^/]*?)'},
-  '?': { open: '(?:', close: ')?' },
-  '+': { open: '(?:', close: ')+' },
-  '*': { open: '(?:', close: ')*' },
-  '@': { open: '(?:', close: ')' }
-}
-
-// any single thing other than /
-// don't need to escape / when using new RegExp()
-var qmark = '[^/]'
-
-// * => any number of characters
-var star = qmark + '*?'
-
-// ** when dots are allowed.  Anything goes, except .. and .
-// not (^ or / followed by one or two dots followed by $ or /),
-// followed by anything, any number of times.
-var twoStarDot = '(?:(?!(?:\\\/|^)(?:\\.{1,2})($|\\\/)).)*?'
-
-// not a ^ or / followed by a dot,
-// followed by anything, any number of times.
-var twoStarNoDot = '(?:(?!(?:\\\/|^)\\.).)*?'
-
-// characters that need to be escaped in RegExp.
-var reSpecials = charSet('().*{}+?[]^$\\!')
-
-// "abc" -> { a:true, b:true, c:true }
-function charSet (s) {
-  return s.split('').reduce(function (set, c) {
-    set[c] = true
-    return set
-  }, {})
-}
-
-// normalizes slashes.
-var slashSplit = /\/+/
-
-minimatch.filter = filter
-function filter (pattern, options) {
-  options = options || {}
-  return function (p, i, list) {
-    return minimatch(p, pattern, options)
-  }
-}
-
-function ext (a, b) {
-  a = a || {}
-  b = b || {}
-  var t = {}
-  Object.keys(b).forEach(function (k) {
-    t[k] = b[k]
-  })
-  Object.keys(a).forEach(function (k) {
-    t[k] = a[k]
-  })
-  return t
-}
-
-minimatch.defaults = function (def) {
-  if (!def || !Object.keys(def).length) return minimatch
-
-  var orig = minimatch
-
-  var m = function minimatch (p, pattern, options) {
-    return orig.minimatch(p, pattern, ext(def, options))
-  }
-
-  m.Minimatch = function Minimatch (pattern, options) {
-    return new orig.Minimatch(pattern, ext(def, options))
-  }
-
-  return m
-}
-
-Minimatch.defaults = function (def) {
-  if (!def || !Object.keys(def).length) return Minimatch
-  return minimatch.defaults(def).Minimatch
-}
-
-function minimatch (p, pattern, options) {
-  if (typeof pattern !== 'string') {
-    throw new TypeError('glob pattern string required')
-  }
-
-  if (!options) options = {}
-
-  // shortcut: comments match nothing.
-  if (!options.nocomment && pattern.charAt(0) === '#') {
-    return false
-  }
-
-  // "" only matches ""
-  if (pattern.trim() === '') return p === ''
-
-  return new Minimatch(pattern, options).match(p)
-}
-
-function Minimatch (pattern, options) {
-  if (!(this instanceof Minimatch)) {
-    return new Minimatch(pattern, options)
-  }
-
-  if (typeof pattern !== 'string') {
-    throw new TypeError('glob pattern string required')
-  }
-
-  if (!options) options = {}
-  pattern = pattern.trim()
-
-  // windows support: need to use /, not \
-  if (path.sep !== '/') {
-    pattern = pattern.split(path.sep).join('/')
-  }
-
-  this.options = options
-  this.set = []
-  this.pattern = pattern
-  this.regexp = null
-  this.negate = false
-  this.comment = false
-  this.empty = false
-
-  // make the set of regexps etc.
-  this.make()
-}
-
-Minimatch.prototype.debug = function () {}
-
-Minimatch.prototype.make = make
-function make () {
-  // don't do it more than once.
-  if (this._made) return
-
-  var pattern = this.pattern
-  var options = this.options
-
-  // empty patterns and comments match nothing.
-  if (!options.nocomment && pattern.charAt(0) === '#') {
-    this.comment = true
-    return
-  }
-  if (!pattern) {
-    this.empty = true
-    return
-  }
-
-  // step 1: figure out negation, etc.
-  this.parseNegate()
-
-  // step 2: expand braces
-  var set = this.globSet = this.braceExpand()
-
-  if (options.debug) this.debug = console.error
-
-  this.debug(this.pattern, set)
-
-  // step 3: now we have a set, so turn each one into a series of path-portion
-  // matching patterns.
-  // These will be regexps, except in the case of "**", which is
-  // set to the GLOBSTAR object for globstar behavior,
-  // and will not contain any / characters
-  set = this.globParts = set.map(function (s) {
-    return s.split(slashSplit)
-  })
-
-  this.debug(this.pattern, set)
-
-  // glob --> regexps
-  set = set.map(function (s, si, set) {
-    return s.map(this.parse, this)
-  }, this)
-
-  this.debug(this.pattern, set)
-
-  // filter out everything that didn't compile properly.
-  set = set.filter(function (s) {
-    return s.indexOf(false) === -1
-  })
-
-  this.debug(this.pattern, set)
-
-  this.set = set
-}
-
-Minimatch.prototype.parseNegate = parseNegate
-function parseNegate () {
-  var pattern = this.pattern
-  var negate = false
-  var options = this.options
-  var negateOffset = 0
-
-  if (options.nonegate) return
-
-  for (var i = 0, l = pattern.length
-    ; i < l && pattern.charAt(i) === '!'
-    ; i++) {
-    negate = !negate
-    negateOffset++
-  }
-
-  if (negateOffset) this.pattern = pattern.substr(negateOffset)
-  this.negate = negate
-}
-
-// Brace expansion:
-// a{b,c}d -> abd acd
-// a{b,}c -> abc ac
-// a{0..3}d -> a0d a1d a2d a3d
-// a{b,c{d,e}f}g -> abg acdfg acefg
-// a{b,c}d{e,f}g -> abdeg acdeg abdeg abdfg
-//
-// Invalid sets are not expanded.
-// a{2..}b -> a{2..}b
-// a{b}c -> a{b}c
-minimatch.braceExpand = function (pattern, options) {
-  return braceExpand(pattern, options)
-}
-
-Minimatch.prototype.braceExpand = braceExpand
-
-function braceExpand (pattern, options) {
-  if (!options) {
-    if (this instanceof Minimatch) {
-      options = this.options
-    } else {
-      options = {}
-    }
-  }
-
-  pattern = typeof pattern === 'undefined'
-    ? this.pattern : pattern
-
-  if (typeof pattern === 'undefined') {
-    throw new TypeError('undefined pattern')
-  }
-
-  if (options.nobrace ||
-    !pattern.match(/\{.*\}/)) {
-    // shortcut. no need to expand.
-    return [pattern]
-  }
-
-  return expand(pattern)
-}
-
-// parse a component of the expanded set.
-// At this point, no pattern may contain "/" in it
-// so we're going to return a 2d array, where each entry is the full
-// pattern, split on '/', and then turned into a regular expression.
-// A regexp is made at the end which joins each array with an
-// escaped /, and another full one which joins each regexp with |.
-//
-// Following the lead of Bash 4.1, note that "**" only has special meaning
-// when it is the *only* thing in a path portion.  Otherwise, any series
-// of * is equivalent to a single *.  Globstar behavior is enabled by
-// default, and can be disabled by setting options.noglobstar.
-Minimatch.prototype.parse = parse
-var SUBPARSE = {}
-function parse (pattern, isSub) {
-  if (pattern.length > 1024 * 64) {
-    throw new TypeError('pattern is too long')
-  }
-
-  var options = this.options
-
-  // shortcuts
-  if (!options.noglobstar && pattern === '**') return GLOBSTAR
-  if (pattern === '') return ''
-
-  var re = ''
-  var hasMagic = !!options.nocase
-  var escaping = false
-  // ? => one single character
-  var patternListStack = []
-  var negativeLists = []
-  var stateChar
-  var inClass = false
-  var reClassStart = -1
-  var classStart = -1
-  // . and .. never match anything that doesn't start with .,
-  // even when options.dot is set.
-  var patternStart = pattern.charAt(0) === '.' ? '' // anything
-  // not (start or / followed by . or .. followed by / or end)
-  : options.dot ? '(?!(?:^|\\\/)\\.{1,2}(?:$|\\\/))'
-  : '(?!\\.)'
-  var self = this
-
-  function clearStateChar () {
-    if (stateChar) {
-      // we had some state-tracking character
-      // that wasn't consumed by this pass.
-      switch (stateChar) {
-        case '*':
-          re += star
-          hasMagic = true
-        break
-        case '?':
-          re += qmark
-          hasMagic = true
-        break
-        default:
-          re += '\\' + stateChar
-        break
-      }
-      self.debug('clearStateChar %j %j', stateChar, re)
-      stateChar = false
-    }
-  }
-
-  for (var i = 0, len = pattern.length, c
-    ; (i < len) && (c = pattern.charAt(i))
-    ; i++) {
-    this.debug('%s\t%s %s %j', pattern, i, re, c)
-
-    // skip over any that are escaped.
-    if (escaping && reSpecials[c]) {
-      re += '\\' + c
-      escaping = false
-      continue
-    }
-
-    switch (c) {
-      case '/':
-        // completely not allowed, even escaped.
-        // Should already be path-split by now.
-        return false
-
-      case '\\':
-        clearStateChar()
-        escaping = true
-      continue
-
-      // the various stateChar values
-      // for the "extglob" stuff.
-      case '?':
-      case '*':
-      case '+':
-      case '@':
-      case '!':
-        this.debug('%s\t%s %s %j <-- stateChar', pattern, i, re, c)
-
-        // all of those are literals inside a class, except that
-        // the glob [!a] means [^a] in regexp
-        if (inClass) {
-          this.debug('  in class')
-          if (c === '!' && i === classStart + 1) c = '^'
-          re += c
-          continue
-        }
-
-        // if we already have a stateChar, then it means
-        // that there was something like ** or +? in there.
-        // Handle the stateChar, then proceed with this one.
-        self.debug('call clearStateChar %j', stateChar)
-        clearStateChar()
-        stateChar = c
-        // if extglob is disabled, then +(asdf|foo) isn't a thing.
-        // just clear the statechar *now*, rather than even diving into
-        // the patternList stuff.
-        if (options.noext) clearStateChar()
-      continue
-
-      case '(':
-        if (inClass) {
-          re += '('
-          continue
-        }
-
-        if (!stateChar) {
-          re += '\\('
-          continue
-        }
-
-        patternListStack.push({
-          type: stateChar,
-          start: i - 1,
-          reStart: re.length,
-          open: plTypes[stateChar].open,
-          close: plTypes[stateChar].close
-        })
-        // negation is (?:(?!js)[^/]*)
-        re += stateChar === '!' ? '(?:(?!(?:' : '(?:'
-        this.debug('plType %j %j', stateChar, re)
-        stateChar = false
-      continue
-
-      case ')':
-        if (inClass || !patternListStack.length) {
-          re += '\\)'
-          continue
-        }
-
-        clearStateChar()
-        hasMagic = true
-        var pl = patternListStack.pop()
-        // negation is (?:(?!js)[^/]*)
-        // The others are (?:<pattern>)<type>
-        re += pl.close
-        if (pl.type === '!') {
-          negativeLists.push(pl)
-        }
-        pl.reEnd = re.length
-      continue
-
-      case '|':
-        if (inClass || !patternListStack.length || escaping) {
-          re += '\\|'
-          escaping = false
-          continue
-        }
-
-        clearStateChar()
-        re += '|'
-      continue
-
-      // these are mostly the same in regexp and glob
-      case '[':
-        // swallow any state-tracking char before the [
-        clearStateChar()
-
-        if (inClass) {
-          re += '\\' + c
-          continue
-        }
-
-        inClass = true
-        classStart = i
-        reClassStart = re.length
-        re += c
-      continue
-
-      case ']':
-        //  a right bracket shall lose its special
-        //  meaning and represent itself in
-        //  a bracket expression if it occurs
-        //  first in the list.  -- POSIX.2 2.8.3.2
-        if (i === classStart + 1 || !inClass) {
-          re += '\\' + c
-          escaping = false
-          continue
-        }
-
-        // handle the case where we left a class open.
-        // "[z-a]" is valid, equivalent to "\[z-a\]"
-        if (inClass) {
-          // split where the last [ was, make sure we don't have
-          // an invalid re. if so, re-walk the contents of the
-          // would-be class to re-translate any characters that
-          // were passed through as-is
-          // TODO: It would probably be faster to determine this
-          // without a try/catch and a new RegExp, but it's tricky
-          // to do safely.  For now, this is safe and works.
-          var cs = pattern.substring(classStart + 1, i)
-          try {
-            RegExp('[' + cs + ']')
-          } catch (er) {
-            // not a valid class!
-            var sp = this.parse(cs, SUBPARSE)
-            re = re.substr(0, reClassStart) + '\\[' + sp[0] + '\\]'
-            hasMagic = hasMagic || sp[1]
-            inClass = false
-            continue
-          }
-        }
-
-        // finish up the class.
-        hasMagic = true
-        inClass = false
-        re += c
-      continue
-
-      default:
-        // swallow any state char that wasn't consumed
-        clearStateChar()
-
-        if (escaping) {
-          // no need
-          escaping = false
-        } else if (reSpecials[c]
-          && !(c === '^' && inClass)) {
-          re += '\\'
-        }
-
-        re += c
-
-    } // switch
-  } // for
-
-  // handle the case where we left a class open.
-  // "[abc" is valid, equivalent to "\[abc"
-  if (inClass) {
-    // split where the last [ was, and escape it
-    // this is a huge pita.  We now have to re-walk
-    // the contents of the would-be class to re-translate
-    // any characters that were passed through as-is
-    cs = pattern.substr(classStart + 1)
-    sp = this.parse(cs, SUBPARSE)
-    re = re.substr(0, reClassStart) + '\\[' + sp[0]
-    hasMagic = hasMagic || sp[1]
-  }
-
-  // handle the case where we had a +( thing at the *end*
-  // of the pattern.
-  // each pattern list stack adds 3 chars, and we need to go through
-  // and escape any | chars that were passed through as-is for the regexp.
-  // Go through and escape them, taking care not to double-escape any
-  // | chars that were already escaped.
-  for (pl = patternListStack.pop(); pl; pl = patternListStack.pop()) {
-    var tail = re.slice(pl.reStart + pl.open.length)
-    this.debug('setting tail', re, pl)
-    // maybe some even number of \, then maybe 1 \, followed by a |
-    tail = tail.replace(/((?:\\{2}){0,64})(\\?)\|/g, function (_, $1, $2) {
-      if (!$2) {
-        // the | isn't already escaped, so escape it.
-        $2 = '\\'
-      }
-
-      // need to escape all those slashes *again*, without escaping the
-      // one that we need for escaping the | character.  As it works out,
-      // escaping an even number of slashes can be done by simply repeating
-      // it exactly after itself.  That's why this trick works.
-      //
-      // I am sorry that you have to see this.
-      return $1 + $1 + $2 + '|'
-    })
-
-    this.debug('tail=%j\n   %s', tail, tail, pl, re)
-    var t = pl.type === '*' ? star
-      : pl.type === '?' ? qmark
-      : '\\' + pl.type
-
-    hasMagic = true
-    re = re.slice(0, pl.reStart) + t + '\\(' + tail
-  }
-
-  // handle trailing things that only matter at the very end.
-  clearStateChar()
-  if (escaping) {
-    // trailing \\
-    re += '\\\\'
-  }
-
-  // only need to apply the nodot start if the re starts with
-  // something that could conceivably capture a dot
-  var addPatternStart = false
-  switch (re.charAt(0)) {
-    case '.':
-    case '[':
-    case '(': addPatternStart = true
-  }
-
-  // Hack to work around lack of negative lookbehind in JS
-  // A pattern like: *.!(x).!(y|z) needs to ensure that a name
-  // like 'a.xyz.yz' doesn't match.  So, the first negative
-  // lookahead, has to look ALL the way ahead, to the end of
-  // the pattern.
-  for (var n = negativeLists.length - 1; n > -1; n--) {
-    var nl = negativeLists[n]
-
-    var nlBefore = re.slice(0, nl.reStart)
-    var nlFirst = re.slice(nl.reStart, nl.reEnd - 8)
-    var nlLast = re.slice(nl.reEnd - 8, nl.reEnd)
-    var nlAfter = re.slice(nl.reEnd)
-
-    nlLast += nlAfter
-
-    // Handle nested stuff like *(*.js|!(*.json)), where open parens
-    // mean that we should *not* include the ) in the bit that is considered
-    // "after" the negated section.
-    var openParensBefore = nlBefore.split('(').length - 1
-    var cleanAfter = nlAfter
-    for (i = 0; i < openParensBefore; i++) {
-      cleanAfter = cleanAfter.replace(/\)[+*?]?/, '')
-    }
-    nlAfter = cleanAfter
-
-    var dollar = ''
-    if (nlAfter === '' && isSub !== SUBPARSE) {
-      dollar = '$'
-    }
-    var newRe = nlBefore + nlFirst + nlAfter + dollar + nlLast
-    re = newRe
-  }
-
-  // if the re is not "" at this point, then we need to make sure
-  // it doesn't match against an empty path part.
-  // Otherwise a/* will match a/, which it should not.
-  if (re !== '' && hasMagic) {
-    re = '(?=.)' + re
-  }
-
-  if (addPatternStart) {
-    re = patternStart + re
-  }
-
-  // parsing just a piece of a larger pattern.
-  if (isSub === SUBPARSE) {
-    return [re, hasMagic]
-  }
-
-  // skip the regexp for non-magical patterns
-  // unescape anything in it, though, so that it'll be
-  // an exact match against a file etc.
-  if (!hasMagic) {
-    return globUnescape(pattern)
-  }
-
-  var flags = options.nocase ? 'i' : ''
-  try {
-    var regExp = new RegExp('^' + re + '$', flags)
-  } catch (er) {
-    // If it was an invalid regular expression, then it can't match
-    // anything.  This trick looks for a character after the end of
-    // the string, which is of course impossible, except in multi-line
-    // mode, but it's not a /m regex.
-    return new RegExp('$.')
-  }
-
-  regExp._glob = pattern
-  regExp._src = re
-
-  return regExp
-}
-
-minimatch.makeRe = function (pattern, options) {
-  return new Minimatch(pattern, options || {}).makeRe()
-}
-
-Minimatch.prototype.makeRe = makeRe
-function makeRe () {
-  if (this.regexp || this.regexp === false) return this.regexp
-
-  // at this point, this.set is a 2d array of partial
-  // pattern strings, or "**".
-  //
-  // It's better to use .match().  This function shouldn't
-  // be used, really, but it's pretty convenient sometimes,
-  // when you just want to work with a regex.
-  var set = this.set
-
-  if (!set.length) {
-    this.regexp = false
-    return this.regexp
-  }
-  var options = this.options
-
-  var twoStar = options.noglobstar ? star
-    : options.dot ? twoStarDot
-    : twoStarNoDot
-  var flags = options.nocase ? 'i' : ''
-
-  var re = set.map(function (pattern) {
-    return pattern.map(function (p) {
-      return (p === GLOBSTAR) ? twoStar
-      : (typeof p === 'string') ? regExpEscape(p)
-      : p._src
-    }).join('\\\/')
-  }).join('|')
-
-  // must match entire pattern
-  // ending in a * or ** will make it less strict.
-  re = '^(?:' + re + ')$'
-
-  // can match anything, as long as it's not this.
-  if (this.negate) re = '^(?!' + re + ').*$'
-
-  try {
-    this.regexp = new RegExp(re, flags)
-  } catch (ex) {
-    this.regexp = false
-  }
-  return this.regexp
-}
-
-minimatch.match = function (list, pattern, options) {
-  options = options || {}
-  var mm = new Minimatch(pattern, options)
-  list = list.filter(function (f) {
-    return mm.match(f)
-  })
-  if (mm.options.nonull && !list.length) {
-    list.push(pattern)
-  }
-  return list
-}
-
-Minimatch.prototype.match = match
-function match (f, partial) {
-  this.debug('match', f, this.pattern)
-  // short-circuit in the case of busted things.
-  // comments, etc.
-  if (this.comment) return false
-  if (this.empty) return f === ''
-
-  if (f === '/' && partial) return true
-
-  var options = this.options
-
-  // windows: need to use /, not \
-  if (path.sep !== '/') {
-    f = f.split(path.sep).join('/')
-  }
-
-  // treat the test path as a set of pathparts.
-  f = f.split(slashSplit)
-  this.debug(this.pattern, 'split', f)
-
-  // just ONE of the pattern sets in this.set needs to match
-  // in order for it to be valid.  If negating, then just one
-  // match means that we have failed.
-  // Either way, return on the first hit.
-
-  var set = this.set
-  this.debug(this.pattern, 'set', set)
-
-  // Find the basename of the path by looking for the last non-empty segment
-  var filename
-  var i
-  for (i = f.length - 1; i >= 0; i--) {
-    filename = f[i]
-    if (filename) break
-  }
-
-  for (i = 0; i < set.length; i++) {
-    var pattern = set[i]
-    var file = f
-    if (options.matchBase && pattern.length === 1) {
-      file = [filename]
-    }
-    var hit = this.matchOne(file, pattern, partial)
-    if (hit) {
-      if (options.flipNegate) return true
-      return !this.negate
-    }
-  }
-
-  // didn't get any hits.  this is success if it's a negative
-  // pattern, failure otherwise.
-  if (options.flipNegate) return false
-  return this.negate
-}
-
-// set partial to true to test if, for example,
-// "/a/b" matches the start of "/*/b/*/d"
-// Partial means, if you run out of file before you run
-// out of pattern, then that's fine, as long as all
-// the parts match.
-Minimatch.prototype.matchOne = function (file, pattern, partial) {
-  var options = this.options
-
-  this.debug('matchOne',
-    { 'this': this, file: file, pattern: pattern })
-
-  this.debug('matchOne', file.length, pattern.length)
-
-  for (var fi = 0,
-      pi = 0,
-      fl = file.length,
-      pl = pattern.length
-      ; (fi < fl) && (pi < pl)
-      ; fi++, pi++) {
-    this.debug('matchOne loop')
-    var p = pattern[pi]
-    var f = file[fi]
-
-    this.debug(pattern, p, f)
-
-    // should be impossible.
-    // some invalid regexp stuff in the set.
-    if (p === false) return false
-
-    if (p === GLOBSTAR) {
-      this.debug('GLOBSTAR', [pattern, p, f])
-
-      // "**"
-      // a/**/b/**/c would match the following:
-      // a/b/x/y/z/c
-      // a/x/y/z/b/c
-      // a/b/x/b/x/c
-      // a/b/c
-      // To do this, take the rest of the pattern after
-      // the **, and see if it would match the file remainder.
-      // If so, return success.
-      // If not, the ** "swallows" a segment, and try again.
-      // This is recursively awful.
-      //
-      // a/**/b/**/c matching a/b/x/y/z/c
-      // - a matches a
-      // - doublestar
-      //   - matchOne(b/x/y/z/c, b/**/c)
-      //     - b matches b
-      //     - doublestar
-      //       - matchOne(x/y/z/c, c) -> no
-      //       - matchOne(y/z/c, c) -> no
-      //       - matchOne(z/c, c) -> no
-      //       - matchOne(c, c) yes, hit
-      var fr = fi
-      var pr = pi + 1
-      if (pr === pl) {
-        this.debug('** at the end')
-        // a ** at the end will just swallow the rest.
-        // We have found a match.
-        // however, it will not swallow /.x, unless
-        // options.dot is set.
-        // . and .. are *never* matched by **, for explosively
-        // exponential reasons.
-        for (; fi < fl; fi++) {
-          if (file[fi] === '.' || file[fi] === '..' ||
-            (!options.dot && file[fi].charAt(0) === '.')) return false
-        }
-        return true
-      }
-
-      // ok, let's see if we can swallow whatever we can.
-      while (fr < fl) {
-        var swallowee = file[fr]
-
-        this.debug('\nglobstar while', file, fr, pattern, pr, swallowee)
-
-        // XXX remove this slice.  Just pass the start index.
-        if (this.matchOne(file.slice(fr), pattern.slice(pr), partial)) {
-          this.debug('globstar found match!', fr, fl, swallowee)
-          // found a match.
-          return true
-        } else {
-          // can't swallow "." or ".." ever.
-          // can only swallow ".foo" when explicitly asked.
-          if (swallowee === '.' || swallowee === '..' ||
-            (!options.dot && swallowee.charAt(0) === '.')) {
-            this.debug('dot detected!', file, fr, pattern, pr)
-            break
-          }
-
-          // ** swallows a segment, and continue.
-          this.debug('globstar swallow a segment, and continue')
-          fr++
-        }
-      }
-
-      // no match was found.
-      // However, in partial mode, we can't say this is necessarily over.
-      // If there's more *pattern* left, then
-      if (partial) {
-        // ran out of file
-        this.debug('\n>>> no match, partial?', file, fr, pattern, pr)
-        if (fr === fl) return true
-      }
-      return false
-    }
-
-    // something other than **
-    // non-magic patterns just have to match exactly
-    // patterns with magic have been turned into regexps.
-    var hit
-    if (typeof p === 'string') {
-      if (options.nocase) {
-        hit = f.toLowerCase() === p.toLowerCase()
-      } else {
-        hit = f === p
-      }
-      this.debug('string match', p, f, hit)
-    } else {
-      hit = f.match(p)
-      this.debug('pattern match', p, f, hit)
-    }
-
-    if (!hit) return false
-  }
-
-  // Note: ending in / means that we'll get a final ""
-  // at the end of the pattern.  This can only match a
-  // corresponding "" at the end of the file.
-  // If the file ends in /, then it can only match a
-  // a pattern that ends in /, unless the pattern just
-  // doesn't have any more for it. But, a/b/ should *not*
-  // match "a/b/*", even though "" matches against the
-  // [^/]*? pattern, except in partial mode, where it might
-  // simply not be reached yet.
-  // However, a/b/ should still satisfy a/*
-
-  // now either we fell off the end of the pattern, or we're done.
-  if (fi === fl && pi === pl) {
-    // ran out of pattern and filename at the same time.
-    // an exact hit!
-    return true
-  } else if (fi === fl) {
-    // ran out of file, but still had pattern left.
-    // this is ok if we're doing the match as part of
-    // a glob fs traversal.
-    return partial
-  } else if (pi === pl) {
-    // ran out of pattern, still have file left.
-    // this is only acceptable if we're on the very last
-    // empty segment of a file with a trailing slash.
-    // a/* should match a/b/
-    var emptyFileEnd = (fi === fl - 1) && (file[fi] === '')
-    return emptyFileEnd
-  }
-
-  // should be unreachable.
-  throw new Error('wtf?')
-}
-
-// replace stuff like \* with *
-function globUnescape (s) {
-  return s.replace(/\\(.)/g, '$1')
-}
-
-function regExpEscape (s) {
-  return s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
-}
-
-},{"brace-expansion":16,"path":88}],38:[function(require,module,exports){
+},{"inherits":48,"readable-stream":83,"to-arraybuffer":102}],56:[function(require,module,exports){
 (function (process){
-var path = require('path');
-var fs = require('fs');
-var _0777 = parseInt('0777', 8);
+module.exports = Storage
 
-module.exports = mkdirP.mkdirp = mkdirP.mkdirP = mkdirP;
+function Storage (chunkLength, opts) {
+  if (!(this instanceof Storage)) return new Storage(chunkLength, opts)
+  if (!opts) opts = {}
 
-function mkdirP (p, opts, f, made) {
-    if (typeof opts === 'function') {
-        f = opts;
-        opts = {};
-    }
-    else if (!opts || typeof opts !== 'object') {
-        opts = { mode: opts };
-    }
-    
-    var mode = opts.mode;
-    var xfs = opts.fs || fs;
-    
-    if (mode === undefined) {
-        mode = _0777 & (~process.umask());
-    }
-    if (!made) made = null;
-    
-    var cb = f || function () {};
-    p = path.resolve(p);
-    
-    xfs.mkdir(p, mode, function (er) {
-        if (!er) {
-            made = made || p;
-            return cb(null, made);
-        }
-        switch (er.code) {
-            case 'ENOENT':
-                mkdirP(path.dirname(p), opts, function (er, made) {
-                    if (er) cb(er, made);
-                    else mkdirP(p, opts, cb, made);
-                });
-                break;
+  this.chunkLength = Number(chunkLength)
+  if (!this.chunkLength) throw new Error('First argument must be a chunk length')
 
-            // In the case of any other error, just see if there's a dir
-            // there already.  If so, then hooray!  If not, then something
-            // is borked.
-            default:
-                xfs.stat(p, function (er2, stat) {
-                    // if the stat fails, then that's super weird.
-                    // let the original error be the failure reason.
-                    if (er2 || !stat.isDirectory()) cb(er, made)
-                    else cb(null, made);
-                });
-                break;
-        }
-    });
+  this.chunks = []
+  this.closed = false
+  this.length = Number(opts.length) || Infinity
+
+  if (this.length !== Infinity) {
+    this.lastChunkLength = (this.length % this.chunkLength) || this.chunkLength
+    this.lastChunkIndex = Math.ceil(this.length / this.chunkLength) - 1
+  }
 }
 
-mkdirP.sync = function sync (p, opts, made) {
-    if (!opts || typeof opts !== 'object') {
-        opts = { mode: opts };
-    }
-    
-    var mode = opts.mode;
-    var xfs = opts.fs || fs;
-    
-    if (mode === undefined) {
-        mode = _0777 & (~process.umask());
-    }
-    if (!made) made = null;
+Storage.prototype.put = function (index, buf, cb) {
+  if (this.closed) return nextTick(cb, new Error('Storage is closed'))
 
-    p = path.resolve(p);
+  var isLastChunk = (index === this.lastChunkIndex)
+  if (isLastChunk && buf.length !== this.lastChunkLength) {
+    return nextTick(cb, new Error('Last chunk length must be ' + this.lastChunkLength))
+  }
+  if (!isLastChunk && buf.length !== this.chunkLength) {
+    return nextTick(cb, new Error('Chunk length must be ' + this.chunkLength))
+  }
+  this.chunks[index] = buf
+  nextTick(cb, null)
+}
 
-    try {
-        xfs.mkdirSync(p, mode);
-        made = made || p;
-    }
-    catch (err0) {
-        switch (err0.code) {
-            case 'ENOENT' :
-                made = sync(path.dirname(p), opts, made);
-                sync(p, opts, made);
-                break;
+Storage.prototype.get = function (index, opts, cb) {
+  if (typeof opts === 'function') return this.get(index, null, opts)
+  if (this.closed) return nextTick(cb, new Error('Storage is closed'))
+  var buf = this.chunks[index]
+  if (!buf) return nextTick(cb, new Error('Chunk not found'))
+  if (!opts) return nextTick(cb, null, buf)
+  var offset = opts.offset || 0
+  var len = opts.length || (buf.length - offset)
+  nextTick(cb, null, buf.slice(offset, len + offset))
+}
 
-            // In the case of any other error, just see if there's a dir
-            // there already.  If so, then hooray!  If not, then something
-            // is borked.
-            default:
-                var stat;
-                try {
-                    stat = xfs.statSync(p);
-                }
-                catch (err1) {
-                    throw err0;
-                }
-                if (!stat.isDirectory()) throw err0;
-                break;
-        }
-    }
+Storage.prototype.close = Storage.prototype.destroy = function (cb) {
+  if (this.closed) return nextTick(cb, new Error('Storage is closed'))
+  this.closed = true
+  this.chunks = null
+  nextTick(cb, null)
+}
 
-    return made;
-};
+function nextTick (cb, err, val) {
+  process.nextTick(function () {
+    if (cb) cb(err, val)
+  })
+}
 
 }).call(this,require('_process'))
-},{"_process":89,"fs":78,"path":88}],39:[function(require,module,exports){
+},{"_process":131}],57:[function(require,module,exports){
 (function (Buffer){
 // This is an intentionally recursive require. I don't like it either.
 var Box = require('./index')
@@ -9808,7 +12478,7 @@ function readString (buf, offset, length) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./descriptor":40,"./index":41,"buffer":82}],40:[function(require,module,exports){
+},{"./descriptor":58,"./index":59,"buffer":120}],58:[function(require,module,exports){
 (function (Buffer){
 var tagToName = {
   0x03: 'ESDescriptor',
@@ -9884,7 +12554,7 @@ exports.DecoderConfigDescriptor.decode = function (buf, start, end) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":82}],41:[function(require,module,exports){
+},{"buffer":120}],59:[function(require,module,exports){
 (function (Buffer){
 // var assert = require('assert')
 var uint64be = require('uint64be')
@@ -10113,7 +12783,7 @@ Box.encodingLength = function (obj) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./boxes":39,"buffer":82,"uint64be":73}],42:[function(require,module,exports){
+},{"./boxes":57,"buffer":120,"uint64be":106}],60:[function(require,module,exports){
 (function (Buffer){
 var stream = require('readable-stream')
 var inherits = require('inherits')
@@ -10302,7 +12972,7 @@ MediaData.prototype.destroy = function (err) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":82,"inherits":33,"mp4-box-encoding":41,"next-event":46,"readable-stream":62}],43:[function(require,module,exports){
+},{"buffer":120,"inherits":48,"mp4-box-encoding":59,"next-event":65,"readable-stream":83}],61:[function(require,module,exports){
 (function (process,Buffer){
 var stream = require('readable-stream')
 var inherits = require('inherits')
@@ -10436,11 +13106,11 @@ MediaData.prototype.destroy = function (err) {
 }
 
 }).call(this,require('_process'),require("buffer").Buffer)
-},{"_process":89,"buffer":82,"inherits":33,"mp4-box-encoding":41,"readable-stream":62}],44:[function(require,module,exports){
+},{"_process":131,"buffer":120,"inherits":48,"mp4-box-encoding":59,"readable-stream":83}],62:[function(require,module,exports){
 exports.decode = require('./decode')
 exports.encode = require('./encode')
 
-},{"./decode":42,"./encode":43}],45:[function(require,module,exports){
+},{"./decode":60,"./encode":61}],63:[function(require,module,exports){
 /**
  * Helpers.
  */
@@ -10594,7 +13264,152 @@ function plural(ms, n, name) {
   return Math.ceil(ms / n) + ' ' + name + 's';
 }
 
-},{}],46:[function(require,module,exports){
+},{}],64:[function(require,module,exports){
+module.exports = MultiStream
+
+var inherits = require('inherits')
+var stream = require('readable-stream')
+
+inherits(MultiStream, stream.Readable)
+
+function MultiStream (streams, opts) {
+  var self = this
+  if (!(self instanceof MultiStream)) return new MultiStream(streams, opts)
+  stream.Readable.call(self, opts)
+
+  self.destroyed = false
+
+  self._drained = false
+  self._forwarding = false
+  self._current = null
+
+  if (typeof streams === 'function') {
+    self._queue = streams
+  } else {
+    self._queue = streams.map(toStreams2)
+    self._queue.forEach(function (stream) {
+      if (typeof stream !== 'function') self._attachErrorListener(stream)
+    })
+  }
+
+  self._next()
+}
+
+MultiStream.obj = function (streams) {
+  return new MultiStream(streams, { objectMode: true, highWaterMark: 16 })
+}
+
+MultiStream.prototype._read = function () {
+  this._drained = true
+  this._forward()
+}
+
+MultiStream.prototype._forward = function () {
+  if (this._forwarding || !this._drained || !this._current) return
+  this._forwarding = true
+
+  var chunk
+  while ((chunk = this._current.read()) !== null) {
+    this._drained = this.push(chunk)
+  }
+
+  this._forwarding = false
+}
+
+MultiStream.prototype.destroy = function (err) {
+  if (this.destroyed) return
+  this.destroyed = true
+
+  if (this._current && this._current.destroy) this._current.destroy()
+  if (typeof this._queue !== 'function') {
+    this._queue.forEach(function (stream) {
+      if (stream.destroy) stream.destroy()
+    })
+  }
+
+  if (err) this.emit('error', err)
+  this.emit('close')
+}
+
+MultiStream.prototype._next = function () {
+  var self = this
+  self._current = null
+
+  if (typeof self._queue === 'function') {
+    self._queue(function (err, stream) {
+      if (err) return self.destroy(err)
+      stream = toStreams2(stream)
+      self._attachErrorListener(stream)
+      self._gotNextStream(stream)
+    })
+  } else {
+    var stream = self._queue.shift()
+    if (typeof stream === 'function') {
+      stream = toStreams2(stream())
+      self._attachErrorListener(stream)
+    }
+    self._gotNextStream(stream)
+  }
+}
+
+MultiStream.prototype._gotNextStream = function (stream) {
+  var self = this
+
+  if (!stream) {
+    self.push(null)
+    self.destroy()
+    return
+  }
+
+  self._current = stream
+  self._forward()
+
+  stream.on('readable', onReadable)
+  stream.once('end', onEnd)
+  stream.once('close', onClose)
+
+  function onReadable () {
+    self._forward()
+  }
+
+  function onClose () {
+    if (!stream._readableState.ended) {
+      self.destroy()
+    }
+  }
+
+  function onEnd () {
+    self._current = null
+    stream.removeListener('readable', onReadable)
+    stream.removeListener('end', onEnd)
+    stream.removeListener('close', onClose)
+    self._next()
+  }
+}
+
+MultiStream.prototype._attachErrorListener = function (stream) {
+  var self = this
+  if (!stream) return
+
+  stream.once('error', onError)
+
+  function onError (err) {
+    stream.removeListener('error', onError)
+    self.destroy(err)
+  }
+}
+
+function toStreams2 (s) {
+  if (!s || typeof s === 'function' || s._readableState) return s
+
+  var wrap = new stream.Readable().wrap(s)
+  if (s.destroy) {
+    wrap.destroy = s.destroy.bind(s)
+  }
+  return wrap
+}
+
+},{"inherits":48,"readable-stream":83}],65:[function(require,module,exports){
 module.exports = nextEvent
 
 function nextEvent (emitter, name) {
@@ -10611,7 +13426,7 @@ function nextEvent (emitter, name) {
   }
 }
 
-},{}],47:[function(require,module,exports){
+},{}],66:[function(require,module,exports){
 var wrappy = require('wrappy')
 module.exports = wrappy(once)
 module.exports.strict = wrappy(onceStrict)
@@ -10655,31 +13470,284 @@ function onceStrict (fn) {
   return f
 }
 
-},{"wrappy":77}],48:[function(require,module,exports){
-(function (process){
-'use strict';
+},{"wrappy":113}],67:[function(require,module,exports){
+(function (Buffer){
+module.exports = decodeTorrentFile
+module.exports.decode = decodeTorrentFile
+module.exports.encode = encodeTorrentFile
 
-function posix(path) {
-	return path.charAt(0) === '/';
+var bencode = require('bencode')
+var path = require('path')
+var sha1 = require('simple-sha1')
+var uniq = require('uniq')
+
+/**
+ * Parse a torrent. Throws an exception if the torrent is missing required fields.
+ * @param  {Buffer|Object} torrent
+ * @return {Object}        parsed torrent
+ */
+function decodeTorrentFile (torrent) {
+  if (Buffer.isBuffer(torrent)) {
+    torrent = bencode.decode(torrent)
+  }
+
+  // sanity check
+  ensure(torrent.info, 'info')
+  ensure(torrent.info['name.utf-8'] || torrent.info.name, 'info.name')
+  ensure(torrent.info['piece length'], 'info[\'piece length\']')
+  ensure(torrent.info.pieces, 'info.pieces')
+
+  if (torrent.info.files) {
+    torrent.info.files.forEach(function (file) {
+      ensure(typeof file.length === 'number', 'info.files[0].length')
+      ensure(file['path.utf-8'] || file.path, 'info.files[0].path')
+    })
+  } else {
+    ensure(typeof torrent.info.length === 'number', 'info.length')
+  }
+
+  var result = {}
+  result.info = torrent.info
+  result.infoBuffer = bencode.encode(torrent.info)
+  result.infoHash = sha1.sync(result.infoBuffer)
+  result.infoHashBuffer = Buffer.from(result.infoHash, 'hex')
+
+  result.name = (torrent.info['name.utf-8'] || torrent.info.name).toString()
+
+  if (torrent.info.private !== undefined) result.private = !!torrent.info.private
+
+  if (torrent['creation date']) result.created = new Date(torrent['creation date'] * 1000)
+  if (torrent['created by']) result.createdBy = torrent['created by'].toString()
+
+  if (Buffer.isBuffer(torrent.comment)) result.comment = torrent.comment.toString()
+
+  // announce and announce-list will be missing if metadata fetched via ut_metadata
+  result.announce = []
+  if (torrent['announce-list'] && torrent['announce-list'].length) {
+    torrent['announce-list'].forEach(function (urls) {
+      urls.forEach(function (url) {
+        result.announce.push(url.toString())
+      })
+    })
+  } else if (torrent.announce) {
+    result.announce.push(torrent.announce.toString())
+  }
+
+  // handle url-list (BEP19 / web seeding)
+  if (Buffer.isBuffer(torrent['url-list'])) {
+    // some clients set url-list to empty string
+    torrent['url-list'] = torrent['url-list'].length > 0
+      ? [ torrent['url-list'] ]
+      : []
+  }
+  result.urlList = (torrent['url-list'] || []).map(function (url) {
+    return url.toString()
+  })
+
+  uniq(result.announce)
+  uniq(result.urlList)
+
+  var files = torrent.info.files || [ torrent.info ]
+  result.files = files.map(function (file, i) {
+    var parts = [].concat(result.name, file['path.utf-8'] || file.path || []).map(function (p) {
+      return p.toString()
+    })
+    return {
+      path: path.join.apply(null, [path.sep].concat(parts)).slice(1),
+      name: parts[parts.length - 1],
+      length: file.length,
+      offset: files.slice(0, i).reduce(sumLength, 0)
+    }
+  })
+
+  result.length = files.reduce(sumLength, 0)
+
+  var lastFile = result.files[result.files.length - 1]
+
+  result.pieceLength = torrent.info['piece length']
+  result.lastPieceLength = ((lastFile.offset + lastFile.length) % result.pieceLength) || result.pieceLength
+  result.pieces = splitPieces(torrent.info.pieces)
+
+  return result
 }
 
-function win32(path) {
-	// https://github.com/nodejs/node/blob/b3fcc245fb25539909ef1d5eaa01dbf92e168633/lib/path.js#L56
-	var splitDeviceRe = /^([a-zA-Z]:|[\\\/]{2}[^\\\/]+[\\\/]+[^\\\/]+)?([\\\/])?([\s\S]*?)$/;
-	var result = splitDeviceRe.exec(path);
-	var device = result[1] || '';
-	var isUnc = Boolean(device && device.charAt(1) !== ':');
+/**
+ * Convert a parsed torrent object back into a .torrent file buffer.
+ * @param  {Object} parsed parsed torrent
+ * @return {Buffer}
+ */
+function encodeTorrentFile (parsed) {
+  var torrent = {
+    info: parsed.info
+  }
 
-	// UNC paths are always absolute
-	return Boolean(result[2] || isUnc);
+  torrent['announce-list'] = (parsed.announce || []).map(function (url) {
+    if (!torrent.announce) torrent.announce = url
+    url = Buffer.from(url, 'utf8')
+    return [ url ]
+  })
+
+  torrent['url-list'] = parsed.urlList || []
+
+  if (parsed.created) {
+    torrent['creation date'] = (parsed.created.getTime() / 1000) | 0
+  }
+
+  if (parsed.createdBy) {
+    torrent['created by'] = parsed.createdBy
+  }
+
+  if (parsed.comment) {
+    torrent.comment = parsed.comment
+  }
+
+  return bencode.encode(torrent)
 }
 
-module.exports = process.platform === 'win32' ? win32 : posix;
-module.exports.posix = posix;
-module.exports.win32 = win32;
+function sumLength (sum, file) {
+  return sum + file.length
+}
 
-}).call(this,require('_process'))
-},{"_process":89}],49:[function(require,module,exports){
+function splitPieces (buf) {
+  var pieces = []
+  for (var i = 0; i < buf.length; i += 20) {
+    pieces.push(buf.slice(i, i + 20).toString('hex'))
+  }
+  return pieces
+}
+
+function ensure (bool, fieldName) {
+  if (!bool) throw new Error('Torrent is missing required field: ' + fieldName)
+}
+
+}).call(this,require("buffer").Buffer)
+},{"bencode":23,"buffer":120,"path":129,"simple-sha1":93,"uniq":107}],68:[function(require,module,exports){
+(function (process,Buffer){
+/* global Blob */
+
+module.exports = parseTorrent
+module.exports.remote = parseTorrentRemote
+
+var blobToBuffer = require('blob-to-buffer')
+var fs = require('fs') // browser exclude
+var get = require('simple-get')
+var magnet = require('magnet-uri')
+var parseTorrentFile = require('parse-torrent-file')
+
+module.exports.toMagnetURI = magnet.encode
+module.exports.toTorrentFile = parseTorrentFile.encode
+
+/**
+ * Parse a torrent identifier (magnet uri, .torrent file, info hash)
+ * @param  {string|Buffer|Object} torrentId
+ * @return {Object}
+ */
+function parseTorrent (torrentId) {
+  if (typeof torrentId === 'string' && /^(stream-)?magnet:/.test(torrentId)) {
+    // magnet uri (string)
+    return magnet(torrentId)
+  } else if (typeof torrentId === 'string' && (/^[a-f0-9]{40}$/i.test(torrentId) || /^[a-z2-7]{32}$/i.test(torrentId))) {
+    // info hash (hex/base-32 string)
+    return magnet('magnet:?xt=urn:btih:' + torrentId)
+  } else if (Buffer.isBuffer(torrentId) && torrentId.length === 20) {
+    // info hash (buffer)
+    return magnet('magnet:?xt=urn:btih:' + torrentId.toString('hex'))
+  } else if (Buffer.isBuffer(torrentId)) {
+    // .torrent file (buffer)
+    return parseTorrentFile(torrentId) // might throw
+  } else if (torrentId && torrentId.infoHash) {
+    // parsed torrent (from `parse-torrent`, `parse-torrent-file`, or `magnet-uri`)
+    if (!torrentId.announce) torrentId.announce = []
+    if (typeof torrentId.announce === 'string') {
+      torrentId.announce = [ torrentId.announce ]
+    }
+    if (!torrentId.urlList) torrentId.urlList = []
+    return torrentId
+  } else {
+    throw new Error('Invalid torrent identifier')
+  }
+}
+
+function parseTorrentRemote (torrentId, cb) {
+  var parsedTorrent
+  if (typeof cb !== 'function') throw new Error('second argument must be a Function')
+
+  try {
+    parsedTorrent = parseTorrent(torrentId)
+  } catch (err) {
+    // If torrent fails to parse, it could be a Blob, http/https URL or
+    // filesystem path, so don't consider it an error yet.
+  }
+
+  if (parsedTorrent && parsedTorrent.infoHash) {
+    process.nextTick(function () {
+      cb(null, parsedTorrent)
+    })
+  } else if (isBlob(torrentId)) {
+    blobToBuffer(torrentId, function (err, torrentBuf) {
+      if (err) return cb(new Error('Error converting Blob: ' + err.message))
+      parseOrThrow(torrentBuf)
+    })
+  } else if (typeof get === 'function' && /^https?:/.test(torrentId)) {
+    // http, or https url to torrent file
+    get.concat({
+      url: torrentId,
+      timeout: 30 * 1000,
+      headers: { 'user-agent': 'WebTorrent (http://webtorrent.io)' }
+    }, function (err, res, torrentBuf) {
+      if (err) return cb(new Error('Error downloading torrent: ' + err.message))
+      parseOrThrow(torrentBuf)
+    })
+  } else if (typeof fs.readFile === 'function' && typeof torrentId === 'string') {
+    // assume it's a filesystem path
+    fs.readFile(torrentId, function (err, torrentBuf) {
+      if (err) return cb(new Error('Invalid torrent identifier'))
+      parseOrThrow(torrentBuf)
+    })
+  } else {
+    process.nextTick(function () {
+      cb(new Error('Invalid torrent identifier'))
+    })
+  }
+
+  function parseOrThrow (torrentBuf) {
+    try {
+      parsedTorrent = parseTorrent(torrentBuf)
+    } catch (err) {
+      return cb(err)
+    }
+    if (parsedTorrent && parsedTorrent.infoHash) cb(null, parsedTorrent)
+    else cb(new Error('Invalid torrent identifier'))
+  }
+}
+
+/**
+ * Check if `obj` is a W3C `Blob` or `File` object
+ * @param  {*} obj
+ * @return {boolean}
+ */
+function isBlob (obj) {
+  return typeof Blob !== 'undefined' && obj instanceof Blob
+}
+
+// Workaround Browserify v13 bug
+// https://github.com/substack/node-browserify/issues/1483
+;(function () { Buffer.alloc(0) })()
+
+}).call(this,require('_process'),require("buffer").Buffer)
+},{"_process":131,"blob-to-buffer":31,"buffer":120,"fs":117,"magnet-uri":54,"parse-torrent-file":67,"simple-get":91}],69:[function(require,module,exports){
+var closest = require('closest-to')
+var kB = Math.pow(2, 10)
+
+// Create a range from 16kb–4mb
+var p = 13, range = []
+while (p++ < 22) range.push(Math.pow(2, p))
+
+module.exports = function (bytes) {
+  return closest(bytes / kB, range)
+}
+
+},{"closest-to":36}],70:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -10726,7 +13794,7 @@ function nextTick(fn, arg1, arg2, arg3) {
 }
 
 }).call(this,require('_process'))
-},{"_process":89}],50:[function(require,module,exports){
+},{"_process":131}],71:[function(require,module,exports){
 var once = require('once')
 var eos = require('end-of-stream')
 var fs = require('fs') // we only need fs to get the ReadStream and WriteStream prototypes
@@ -10808,334 +13876,28 @@ var pump = function () {
 
 module.exports = pump
 
-},{"end-of-stream":23,"fs":81,"once":47}],51:[function(require,module,exports){
-var thunky = require('thunky')
-var fs = require('fs')
-var path = require('path')
-var inherits = require('inherits')
-var mkdirp = require('mkdirp')
-var events = require('events')
-var alloc = require('buffer-alloc-unsafe')
-var c = require('constants')
-var debug = require('debug')('random-access-file')
+},{"end-of-stream":42,"fs":119,"once":66}],72:[function(require,module,exports){
+var iterate = function (list) {
+  var offset = 0
+  return function () {
+    if (offset === list.length) return null
 
-module.exports = RandomAccessFile
+    var len = list.length - offset
+    var i = (Math.random() * len) | 0
+    var el = list[offset + i]
 
-function RandomAccessFile (filename, opts) {
-  if (!(this instanceof RandomAccessFile)) return new RandomAccessFile(filename, opts)
-  if (!opts) opts = {}
+    var tmp = list[offset]
+    list[offset] = el
+    list[offset + i] = tmp
+    offset++
 
-  events.EventEmitter.call(this)
-  if (opts.directory) filename = path.join(opts.directory, filename)
-
-  var self = this
-
-  this.directory = opts.directory
-  this.filename = filename
-  this.fd = 0
-  this.queued = 0
-  this.readable = opts.readable !== false
-  this.writable = opts.writable !== false
-  this.mtime = opts.mtime
-  this.atime = opts.atime
-  this.length = opts.length || 0
-  this.opened = false
-  this.rmdir = !!opts.rmdir
-  this.open = thunky(open)
-  this.open()
-
-  function open (cb) {
-    var dir = path.dirname(filename)
-    debug('open() file=%s', filename)
-
-    if (dir) {
-      debug('creating containing directory %s', dir)
-      mkdirp(dir, ondir)
-    } else {
-      ondir()
-    }
-
-    function ondir (err) {
-      if (err) debug('failed to create directory %s - %s', dir, err)
-      fs.open(filename, mode(self), onopen)
-    }
-
-    function onopen (err, fd) {
-      if (err && err.code === 'EACCES' && self.writable) {
-        self.writable = false
-        debug('failed to open file for writing, trying again in read only mode (file=%s)', filename)
-        fs.open(filename, mode(self), onopen)
-        return
-      }
-
-      if (err) {
-        debug('failed to open file=%s err=%s', filename, err)
-        return cb(err)
-      }
-
-      self.opened = true
-      self.fd = fd
-      debug('opened file=%s', filename)
-      self.emit('open')
-
-      if (self.length || opts.truncate) return fs.ftruncate(fd, opts.truncate ? 0 : self.length, cb)
-
-      fs.fstat(fd, function (err, st) {
-        if (err) {
-          debug('failed to stat file after open, file=%s err=%s', filename, err)
-          return cb(err)
-        }
-        self.length = st.size
-        cb()
-      })
-    }
+    return el
   }
 }
 
-inherits(RandomAccessFile, events.EventEmitter)
+module.exports = iterate
 
-RandomAccessFile.prototype.read = function (offset, length, cb) {
-  this.queued++
-  if (!this.opened) return openAndRead(this, offset, length, cb)
-  this._read(offset, length, cb)
-}
-
-RandomAccessFile.prototype._read = function (offset, length, cb) {
-  var self = this
-
-  if (!this.fd) {
-    debug('read() failed: fd is closed file=%s', this.filename)
-    return onread(new Error('File is closed'), 0)
-  }
-
-  if (!this.readable) {
-    return onread(new Error('File is not readable'), 0)
-  }
-
-  var buf = alloc(length)
-
-  if (!length) {
-    this.queued--
-    return cb(null, buf)
-  }
-
-  fs.read(this.fd, buf, 0, length, offset, onread)
-
-  function onread (err, bytes) {
-    if (err) {
-      debug('read() failed file=%s err=%s', self.filename, err)
-      self.queued--
-      return cb(err)
-    }
-
-    if (!bytes) {
-      self.queued--
-      return cb(new Error('Could not satisfy length'))
-    }
-
-    offset += bytes
-    length -= bytes
-
-    if (!length) {
-      self.queued--
-      return cb(null, buf)
-    }
-
-    if (!self.fd) {
-      debug('read() failed: fd is closed file=%s', self.filename)
-      self.queued--
-      return cb(new Error('File is closed'))
-    }
-
-    fs.read(self.fd, buf, buf.length - length, length, offset, onread)
-  }
-}
-
-RandomAccessFile.prototype.write = function (offset, buf, cb) {
-  this.queued++
-  if (!cb) cb = noop
-  if (!this.opened) return openAndWrite(this, offset, buf, cb)
-  this._write(offset, buf, cb)
-}
-
-RandomAccessFile.prototype._write = function (offset, buf, cb) {
-  if (!this.fd) {
-    debug('write() failed: fd is closed file=%s', this.filename)
-    this.queued--
-    return cb(new Error('File is closed'))
-  }
-
-  if (!this.writable) {
-    debug('write() failed: fd is not writable file=%s', this.filename)
-    this.queued--
-    return cb(new Error('File is not writable'))
-  }
-
-  var self = this
-  var length = buf.length
-
-  fs.write(this.fd, buf, 0, length, offset, onwrite)
-
-  function onwrite (err, bytes) {
-    if (err) {
-      debug('write() failed file=%s err=%s', self.filename, err)
-      self.queued--
-      return cb(err)
-    }
-
-    offset += bytes
-    length -= bytes
-    if (offset > self.length) self.length = offset
-
-    if (!length) {
-      self.queued--
-      return cb(null)
-    }
-
-    if (!self.fd) {
-      debug('write() failed: fd is closed file=%s', self.filename)
-      self.queued--
-      return cb(new Error('File is closed'))
-    }
-    fs.write(self.fd, buf, buf.length - length, length, offset, onwrite)
-  }
-}
-
-RandomAccessFile.prototype.del = function (offset, length, cb) {
-  if (!cb) cb = noop
-  if (!this.opened) return openAndDel(this, offset, length, cb)
-  if (offset + length < this.length) return cb(null)
-  fs.ftruncate(this.fd, offset, cb)
-}
-
-RandomAccessFile.prototype.close = function (cb) {
-  if (!cb) cb = noop
-  if (this.opened && !this.fd) return cb()
-  debug('close() file=%s', this.filename)
-
-  var self = this
-  this.open(onopen)
-
-  function onopen (err) {
-    if (err) return cb()
-    if (self.queued) {
-      setTimeout(onopen, 500)
-      return
-    }
-    fs.close(self.fd, onclose)
-  }
-
-  function onclose (err) {
-    if (err) {
-      debug('failed to close file=%s err=%s', self.filename, err)
-      return cb(err)
-    }
-    debug('closed file=%s', self.filename)
-    self.fd = 0
-    self.emit('close')
-    cb()
-  }
-}
-
-RandomAccessFile.prototype.end = function (opts, cb) {
-  if (typeof opts === 'function') {
-    cb = opts
-    opts = {}
-  }
-
-  var atime = opts.atime || this.atime
-  var mtime = opts.mtime || this.mtime
-  var self = this
-
-  this.open(onopen)
-  debug('end() file=%s', this.filename)
-
-  function onopen (err) {
-    if (err) return cb(err)
-    if (!atime && !mtime) {
-      cb()
-    } else if (atime && mtime) {
-      end(atime, mtime)
-    } else {
-      fs.fstat(self.fd, function (err, stat) {
-        if (err) return cb(err)
-        end(atime || stat.atime, mtime || stat.mtime)
-      })
-    }
-  }
-
-  function end (atime, mtime) {
-    fs.futimes(self.fd, atime, mtime, cb)
-  }
-}
-
-RandomAccessFile.prototype.destroy = function (cb) {
-  if (!cb) cb = noop
-  var self = this
-
-  this.close(function () {
-    self.unlink(function (err) {
-      if (err) return cb(err)
-      if (!self.directory || !self.rmdir) return cb()
-
-      var root = path.resolve(path.join(self.directory, '.'))
-      var dir = path.resolve(path.dirname(self.filename))
-
-      loop()
-
-      function loop () {
-        if (dir.indexOf(root) !== 0) return cb()
-        if (dir === root) return cb()
-
-        fs.readdir(dir, function (_, names) {
-          if (names && names.length) return cb()
-
-          fs.rmdir(dir, function () {
-            dir = path.join(dir, '..')
-            loop()
-          })
-        })
-      }
-    })
-  })
-}
-
-RandomAccessFile.prototype.unlink = function (cb) {
-  if (!cb) cb = noop
-  debug('unlink() file=%s', this.filename)
-  fs.unlink(this.filename, cb)
-}
-
-function noop () {}
-
-function openAndDel (self, offset, length, cb) {
-  self.open(function (err) {
-    if (err) return cb(err)
-    self.del(offset, length, cb)
-  })
-}
-
-function openAndRead (self, offset, length, cb) {
-  self.open(function (err) {
-    if (err) return cb(err)
-    self._read(offset, length, cb)
-  })
-}
-
-function openAndWrite (self, offset, buf, cb) {
-  self.open(function (err) {
-    if (err) return cb(err)
-    self._write(offset, buf, cb)
-  })
-}
-
-function mode (self) {
-  if (self.readable && self.writable) return c.O_RDWR | c.O_CREAT
-  if (self.writable) return c.O_WRONLY | c.O_CREAT
-  return c.O_RDONLY
-}
-
-},{"buffer-alloc-unsafe":17,"constants":83,"debug":21,"events":84,"fs":78,"inherits":33,"mkdirp":38,"path":88,"thunky":71}],52:[function(require,module,exports){
+},{}],73:[function(require,module,exports){
 (function (process,global){
 'use strict'
 
@@ -11177,7 +13939,7 @@ function randomBytes (size, cb) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"_process":89,"safe-buffer":67}],53:[function(require,module,exports){
+},{"_process":131,"safe-buffer":89}],74:[function(require,module,exports){
 /*
 Instance of writable stream.
 
@@ -11304,7 +14066,7 @@ RangeSliceStream.prototype.destroy = function (err) {
 	if (err) self.emit('error', err)
 }
 
-},{"inherits":33,"readable-stream":62}],54:[function(require,module,exports){
+},{"inherits":48,"readable-stream":83}],75:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -11429,7 +14191,7 @@ function forEach(xs, f) {
     f(xs[i], i);
   }
 }
-},{"./_stream_readable":56,"./_stream_writable":58,"core-util-is":20,"inherits":33,"process-nextick-args":49}],55:[function(require,module,exports){
+},{"./_stream_readable":77,"./_stream_writable":79,"core-util-is":37,"inherits":48,"process-nextick-args":70}],76:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -11477,7 +14239,7 @@ function PassThrough(options) {
 PassThrough.prototype._transform = function (chunk, encoding, cb) {
   cb(null, chunk);
 };
-},{"./_stream_transform":57,"core-util-is":20,"inherits":33}],56:[function(require,module,exports){
+},{"./_stream_transform":78,"core-util-is":37,"inherits":48}],77:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -12487,7 +15249,7 @@ function indexOf(xs, x) {
   return -1;
 }
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./_stream_duplex":54,"./internal/streams/BufferList":59,"./internal/streams/destroy":60,"./internal/streams/stream":61,"_process":89,"core-util-is":20,"events":84,"inherits":33,"isarray":35,"process-nextick-args":49,"safe-buffer":67,"string_decoder/":70,"util":81}],57:[function(require,module,exports){
+},{"./_stream_duplex":75,"./internal/streams/BufferList":80,"./internal/streams/destroy":81,"./internal/streams/stream":82,"_process":131,"core-util-is":37,"events":123,"inherits":48,"isarray":52,"process-nextick-args":70,"safe-buffer":89,"string_decoder/":99,"util":119}],78:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -12702,7 +15464,7 @@ function done(stream, er, data) {
 
   return stream.push(null);
 }
-},{"./_stream_duplex":54,"core-util-is":20,"inherits":33}],58:[function(require,module,exports){
+},{"./_stream_duplex":75,"core-util-is":37,"inherits":48}],79:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -13369,7 +16131,7 @@ Writable.prototype._destroy = function (err, cb) {
   cb(err);
 };
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./_stream_duplex":54,"./internal/streams/destroy":60,"./internal/streams/stream":61,"_process":89,"core-util-is":20,"inherits":33,"process-nextick-args":49,"safe-buffer":67,"util-deprecate":74}],59:[function(require,module,exports){
+},{"./_stream_duplex":75,"./internal/streams/destroy":81,"./internal/streams/stream":82,"_process":131,"core-util-is":37,"inherits":48,"process-nextick-args":70,"safe-buffer":89,"util-deprecate":110}],80:[function(require,module,exports){
 'use strict';
 
 /*<replacement>*/
@@ -13444,7 +16206,7 @@ module.exports = function () {
 
   return BufferList;
 }();
-},{"safe-buffer":67}],60:[function(require,module,exports){
+},{"safe-buffer":89}],81:[function(require,module,exports){
 'use strict';
 
 /*<replacement>*/
@@ -13517,10 +16279,10 @@ module.exports = {
   destroy: destroy,
   undestroy: undestroy
 };
-},{"process-nextick-args":49}],61:[function(require,module,exports){
+},{"process-nextick-args":70}],82:[function(require,module,exports){
 module.exports = require('events').EventEmitter;
 
-},{"events":84}],62:[function(require,module,exports){
+},{"events":123}],83:[function(require,module,exports){
 exports = module.exports = require('./lib/_stream_readable.js');
 exports.Stream = exports;
 exports.Readable = exports;
@@ -13529,7 +16291,7 @@ exports.Duplex = require('./lib/_stream_duplex.js');
 exports.Transform = require('./lib/_stream_transform.js');
 exports.PassThrough = require('./lib/_stream_passthrough.js');
 
-},{"./lib/_stream_duplex.js":54,"./lib/_stream_passthrough.js":55,"./lib/_stream_readable.js":56,"./lib/_stream_transform.js":57,"./lib/_stream_writable.js":58}],63:[function(require,module,exports){
+},{"./lib/_stream_duplex.js":75,"./lib/_stream_passthrough.js":76,"./lib/_stream_readable.js":77,"./lib/_stream_transform.js":78,"./lib/_stream_writable.js":79}],84:[function(require,module,exports){
 exports.render = render
 exports.append = append
 exports.mime = require('./lib/mime.json')
@@ -13881,7 +16643,7 @@ function parseOpts (opts) {
   if (opts.maxBlobLength == null) opts.maxBlobLength = MAX_BLOB_LENGTH
 }
 
-},{"./lib/mime.json":64,"debug":21,"is-ascii":34,"mediasource":36,"path":88,"stream-to-blob-url":68,"videostream":76}],64:[function(require,module,exports){
+},{"./lib/mime.json":85,"debug":39,"is-ascii":49,"mediasource":55,"path":129,"stream-to-blob-url":96,"videostream":112}],85:[function(require,module,exports){
 module.exports={
   ".3gp": "video/3gpp",
   ".aac": "audio/aac",
@@ -13964,374 +16726,73 @@ module.exports={
   ".zip": "application/zip"
 }
 
-},{}],65:[function(require,module,exports){
+},{}],86:[function(require,module,exports){
 (function (process){
-module.exports = rimraf
-rimraf.sync = rimrafSync
+module.exports = function (tasks, limit, cb) {
+  if (typeof limit !== 'number') throw new Error('second argument must be a Number')
+  var results, len, pending, keys, isErrored
+  var isSync = true
 
-var assert = require("assert")
-var path = require("path")
-var fs = require("fs")
-var glob = require("glob")
-
-var defaultGlobOpts = {
-  nosort: true,
-  silent: true
-}
-
-// for EMFILE handling
-var timeout = 0
-
-var isWindows = (process.platform === "win32")
-
-function defaults (options) {
-  var methods = [
-    'unlink',
-    'chmod',
-    'stat',
-    'lstat',
-    'rmdir',
-    'readdir'
-  ]
-  methods.forEach(function(m) {
-    options[m] = options[m] || fs[m]
-    m = m + 'Sync'
-    options[m] = options[m] || fs[m]
-  })
-
-  options.maxBusyTries = options.maxBusyTries || 3
-  options.emfileWait = options.emfileWait || 1000
-  if (options.glob === false) {
-    options.disableGlob = true
-  }
-  options.disableGlob = options.disableGlob || false
-  options.glob = options.glob || defaultGlobOpts
-}
-
-function rimraf (p, options, cb) {
-  if (typeof options === 'function') {
-    cb = options
-    options = {}
-  }
-
-  assert(p, 'rimraf: missing path')
-  assert.equal(typeof p, 'string', 'rimraf: path should be a string')
-  assert.equal(typeof cb, 'function', 'rimraf: callback function required')
-  assert(options, 'rimraf: invalid options argument provided')
-  assert.equal(typeof options, 'object', 'rimraf: options should be object')
-
-  defaults(options)
-
-  var busyTries = 0
-  var errState = null
-  var n = 0
-
-  if (options.disableGlob || !glob.hasMagic(p))
-    return afterGlob(null, [p])
-
-  options.lstat(p, function (er, stat) {
-    if (!er)
-      return afterGlob(null, [p])
-
-    glob(p, options.glob, afterGlob)
-  })
-
-  function next (er) {
-    errState = errState || er
-    if (--n === 0)
-      cb(errState)
-  }
-
-  function afterGlob (er, results) {
-    if (er)
-      return cb(er)
-
-    n = results.length
-    if (n === 0)
-      return cb()
-
-    results.forEach(function (p) {
-      rimraf_(p, options, function CB (er) {
-        if (er) {
-          if ((er.code === "EBUSY" || er.code === "ENOTEMPTY" || er.code === "EPERM") &&
-              busyTries < options.maxBusyTries) {
-            busyTries ++
-            var time = busyTries * 100
-            // try again, with the same exact callback as this one.
-            return setTimeout(function () {
-              rimraf_(p, options, CB)
-            }, time)
-          }
-
-          // this one won't happen if graceful-fs is used.
-          if (er.code === "EMFILE" && timeout < options.emfileWait) {
-            return setTimeout(function () {
-              rimraf_(p, options, CB)
-            }, timeout ++)
-          }
-
-          // already gone
-          if (er.code === "ENOENT") er = null
-        }
-
-        timeout = 0
-        next(er)
-      })
-    })
-  }
-}
-
-// Two possible strategies.
-// 1. Assume it's a file.  unlink it, then do the dir stuff on EPERM or EISDIR
-// 2. Assume it's a directory.  readdir, then do the file stuff on ENOTDIR
-//
-// Both result in an extra syscall when you guess wrong.  However, there
-// are likely far more normal files in the world than directories.  This
-// is based on the assumption that a the average number of files per
-// directory is >= 1.
-//
-// If anyone ever complains about this, then I guess the strategy could
-// be made configurable somehow.  But until then, YAGNI.
-function rimraf_ (p, options, cb) {
-  assert(p)
-  assert(options)
-  assert(typeof cb === 'function')
-
-  // sunos lets the root user unlink directories, which is... weird.
-  // so we have to lstat here and make sure it's not a dir.
-  options.lstat(p, function (er, st) {
-    if (er && er.code === "ENOENT")
-      return cb(null)
-
-    // Windows can EPERM on stat.  Life is suffering.
-    if (er && er.code === "EPERM" && isWindows)
-      fixWinEPERM(p, options, er, cb)
-
-    if (st && st.isDirectory())
-      return rmdir(p, options, er, cb)
-
-    options.unlink(p, function (er) {
-      if (er) {
-        if (er.code === "ENOENT")
-          return cb(null)
-        if (er.code === "EPERM")
-          return (isWindows)
-            ? fixWinEPERM(p, options, er, cb)
-            : rmdir(p, options, er, cb)
-        if (er.code === "EISDIR")
-          return rmdir(p, options, er, cb)
-      }
-      return cb(er)
-    })
-  })
-}
-
-function fixWinEPERM (p, options, er, cb) {
-  assert(p)
-  assert(options)
-  assert(typeof cb === 'function')
-  if (er)
-    assert(er instanceof Error)
-
-  options.chmod(p, 666, function (er2) {
-    if (er2)
-      cb(er2.code === "ENOENT" ? null : er)
-    else
-      options.stat(p, function(er3, stats) {
-        if (er3)
-          cb(er3.code === "ENOENT" ? null : er)
-        else if (stats.isDirectory())
-          rmdir(p, options, er, cb)
-        else
-          options.unlink(p, cb)
-      })
-  })
-}
-
-function fixWinEPERMSync (p, options, er) {
-  assert(p)
-  assert(options)
-  if (er)
-    assert(er instanceof Error)
-
-  try {
-    options.chmodSync(p, 666)
-  } catch (er2) {
-    if (er2.code === "ENOENT")
-      return
-    else
-      throw er
-  }
-
-  try {
-    var stats = options.statSync(p)
-  } catch (er3) {
-    if (er3.code === "ENOENT")
-      return
-    else
-      throw er
-  }
-
-  if (stats.isDirectory())
-    rmdirSync(p, options, er)
-  else
-    options.unlinkSync(p)
-}
-
-function rmdir (p, options, originalEr, cb) {
-  assert(p)
-  assert(options)
-  if (originalEr)
-    assert(originalEr instanceof Error)
-  assert(typeof cb === 'function')
-
-  // try to rmdir first, and only readdir on ENOTEMPTY or EEXIST (SunOS)
-  // if we guessed wrong, and it's not a directory, then
-  // raise the original error.
-  options.rmdir(p, function (er) {
-    if (er && (er.code === "ENOTEMPTY" || er.code === "EEXIST" || er.code === "EPERM"))
-      rmkids(p, options, cb)
-    else if (er && er.code === "ENOTDIR")
-      cb(originalEr)
-    else
-      cb(er)
-  })
-}
-
-function rmkids(p, options, cb) {
-  assert(p)
-  assert(options)
-  assert(typeof cb === 'function')
-
-  options.readdir(p, function (er, files) {
-    if (er)
-      return cb(er)
-    var n = files.length
-    if (n === 0)
-      return options.rmdir(p, cb)
-    var errState
-    files.forEach(function (f) {
-      rimraf(path.join(p, f), options, function (er) {
-        if (errState)
-          return
-        if (er)
-          return cb(errState = er)
-        if (--n === 0)
-          options.rmdir(p, cb)
-      })
-    })
-  })
-}
-
-// this looks simpler, and is strictly *faster*, but will
-// tie up the JavaScript thread and fail on excessively
-// deep directory trees.
-function rimrafSync (p, options) {
-  options = options || {}
-  defaults(options)
-
-  assert(p, 'rimraf: missing path')
-  assert.equal(typeof p, 'string', 'rimraf: path should be a string')
-  assert(options, 'rimraf: missing options')
-  assert.equal(typeof options, 'object', 'rimraf: options should be object')
-
-  var results
-
-  if (options.disableGlob || !glob.hasMagic(p)) {
-    results = [p]
+  if (Array.isArray(tasks)) {
+    results = []
+    pending = len = tasks.length
   } else {
-    try {
-      options.lstatSync(p)
-      results = [p]
-    } catch (er) {
-      results = glob.sync(p, options.glob)
+    keys = Object.keys(tasks)
+    results = {}
+    pending = len = keys.length
+  }
+
+  function done (err) {
+    function end () {
+      if (cb) cb(err, results)
+      cb = null
+    }
+    if (isSync) process.nextTick(end)
+    else end()
+  }
+
+  function each (i, err, result) {
+    results[i] = result
+    if (err) isErrored = true
+    if (--pending === 0 || err) {
+      done(err)
+    } else if (!isErrored && next < len) {
+      var key
+      if (keys) {
+        key = keys[next]
+        next += 1
+        tasks[key](function (err, result) { each(key, err, result) })
+      } else {
+        key = next
+        next += 1
+        tasks[key](function (err, result) { each(key, err, result) })
+      }
     }
   }
 
-  if (!results.length)
-    return
-
-  for (var i = 0; i < results.length; i++) {
-    var p = results[i]
-
-    try {
-      var st = options.lstatSync(p)
-    } catch (er) {
-      if (er.code === "ENOENT")
-        return
-
-      // Windows can EPERM on stat.  Life is suffering.
-      if (er.code === "EPERM" && isWindows)
-        fixWinEPERMSync(p, options, er)
-    }
-
-    try {
-      // sunos lets the root user unlink directories, which is... weird.
-      if (st && st.isDirectory())
-        rmdirSync(p, options, null)
-      else
-        options.unlinkSync(p)
-    } catch (er) {
-      if (er.code === "ENOENT")
-        return
-      if (er.code === "EPERM")
-        return isWindows ? fixWinEPERMSync(p, options, er) : rmdirSync(p, options, er)
-      if (er.code !== "EISDIR")
-        throw er
-
-      rmdirSync(p, options, er)
-    }
+  var next = limit
+  if (!pending) {
+    // empty
+    done(null)
+  } else if (keys) {
+    // object
+    keys.some(function (key, i) {
+      tasks[key](function (err, result) { each(key, err, result) })
+      if (i === limit - 1) return true // early return
+    })
+  } else {
+    // array
+    tasks.some(function (task, i) {
+      task(function (err, result) { each(i, err, result) })
+      if (i === limit - 1) return true // early return
+    })
   }
-}
 
-function rmdirSync (p, options, originalEr) {
-  assert(p)
-  assert(options)
-  if (originalEr)
-    assert(originalEr instanceof Error)
-
-  try {
-    options.rmdirSync(p)
-  } catch (er) {
-    if (er.code === "ENOENT")
-      return
-    if (er.code === "ENOTDIR")
-      throw originalEr
-    if (er.code === "ENOTEMPTY" || er.code === "EEXIST" || er.code === "EPERM")
-      rmkidsSync(p, options)
-  }
-}
-
-function rmkidsSync (p, options) {
-  assert(p)
-  assert(options)
-  options.readdirSync(p).forEach(function (f) {
-    rimrafSync(path.join(p, f), options)
-  })
-
-  // We only end up here once we got ENOTEMPTY at least once, and
-  // at this point, we are guaranteed to have removed all the kids.
-  // So, we know that it won't be ENOENT or ENOTDIR or anything else.
-  // try really hard to delete stuff on windows, because it has a
-  // PROFOUNDLY annoying habit of not closing handles promptly when
-  // files are deleted, resulting in spurious ENOTEMPTY errors.
-  var retries = isWindows ? 100 : 1
-  var i = 0
-  do {
-    var threw = true
-    try {
-      var ret = options.rmdirSync(p, options)
-      threw = false
-      return ret
-    } finally {
-      if (++i < retries && threw)
-        continue
-    }
-  } while (true)
+  isSync = false
 }
 
 }).call(this,require('_process'))
-},{"_process":89,"assert":79,"fs":78,"glob":28,"path":88}],66:[function(require,module,exports){
+},{"_process":131}],87:[function(require,module,exports){
 (function (process){
 module.exports = function (tasks, cb) {
   var results, pending, keys
@@ -14381,7 +16842,542 @@ module.exports = function (tasks, cb) {
 }
 
 }).call(this,require('_process'))
-},{"_process":89}],67:[function(require,module,exports){
+},{"_process":131}],88:[function(require,module,exports){
+(function (global){
+(function () {
+    var /*
+ * Rusha, a JavaScript implementation of the Secure Hash Algorithm, SHA-1,
+ * as defined in FIPS PUB 180-1, tuned for high performance with large inputs.
+ * (http://github.com/srijs/rusha)
+ *
+ * Inspired by Paul Johnstons implementation (http://pajhome.org.uk/crypt/md5).
+ *
+ * Copyright (c) 2013 Sam Rijs (http://awesam.de).
+ * Released under the terms of the MIT license as follows:
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ */
+    util = {
+        getDataType: function (data) {
+            if (typeof data === 'string') {
+                return 'string';
+            }
+            if (data instanceof Array) {
+                return 'array';
+            }
+            if (typeof global !== 'undefined' && global.Buffer && global.Buffer.isBuffer(data)) {
+                return 'buffer';
+            }
+            if (data instanceof ArrayBuffer) {
+                return 'arraybuffer';
+            }
+            if (data.buffer instanceof ArrayBuffer) {
+                return 'view';
+            }
+            if (data instanceof Blob) {
+                return 'blob';
+            }
+            throw new Error('Unsupported data type.');
+        }
+    };
+    function Rusha(chunkSize) {
+        'use strict';
+        var // Private object structure.
+        self$2 = { fill: 0 };
+        var // Calculate the length of buffer that the sha1 routine uses
+        // including the padding.
+        padlen = function (len) {
+            for (len += 9; len % 64 > 0; len += 1);
+            return len;
+        };
+        var padZeroes = function (bin, len) {
+            var h8 = new Uint8Array(bin.buffer);
+            var om = len % 4, align = len - om;
+            switch (om) {
+            case 0:
+                h8[align + 3] = 0;
+            case 1:
+                h8[align + 2] = 0;
+            case 2:
+                h8[align + 1] = 0;
+            case 3:
+                h8[align + 0] = 0;
+            }
+            for (var i$2 = (len >> 2) + 1; i$2 < bin.length; i$2++)
+                bin[i$2] = 0;
+        };
+        var padData = function (bin, chunkLen, msgLen) {
+            bin[chunkLen >> 2] |= 128 << 24 - (chunkLen % 4 << 3);
+            // To support msgLen >= 2 GiB, use a float division when computing the
+            // high 32-bits of the big-endian message length in bits.
+            bin[((chunkLen >> 2) + 2 & ~15) + 14] = msgLen / (1 << 29) | 0;
+            bin[((chunkLen >> 2) + 2 & ~15) + 15] = msgLen << 3;
+        };
+        var // Convert a binary string and write it to the heap.
+        // A binary string is expected to only contain char codes < 256.
+        convStr = function (H8, H32, start, len, off) {
+            var str = this, i$2, om = off % 4, lm = (len + om) % 4, j = len - lm;
+            switch (om) {
+            case 0:
+                H8[off] = str.charCodeAt(start + 3);
+            case 1:
+                H8[off + 1 - (om << 1) | 0] = str.charCodeAt(start + 2);
+            case 2:
+                H8[off + 2 - (om << 1) | 0] = str.charCodeAt(start + 1);
+            case 3:
+                H8[off + 3 - (om << 1) | 0] = str.charCodeAt(start);
+            }
+            if (len < lm + om) {
+                return;
+            }
+            for (i$2 = 4 - om; i$2 < j; i$2 = i$2 + 4 | 0) {
+                H32[off + i$2 >> 2] = str.charCodeAt(start + i$2) << 24 | str.charCodeAt(start + i$2 + 1) << 16 | str.charCodeAt(start + i$2 + 2) << 8 | str.charCodeAt(start + i$2 + 3);
+            }
+            switch (lm) {
+            case 3:
+                H8[off + j + 1 | 0] = str.charCodeAt(start + j + 2);
+            case 2:
+                H8[off + j + 2 | 0] = str.charCodeAt(start + j + 1);
+            case 1:
+                H8[off + j + 3 | 0] = str.charCodeAt(start + j);
+            }
+        };
+        var // Convert a buffer or array and write it to the heap.
+        // The buffer or array is expected to only contain elements < 256.
+        convBuf = function (H8, H32, start, len, off) {
+            var buf = this, i$2, om = off % 4, lm = (len + om) % 4, j = len - lm;
+            switch (om) {
+            case 0:
+                H8[off] = buf[start + 3];
+            case 1:
+                H8[off + 1 - (om << 1) | 0] = buf[start + 2];
+            case 2:
+                H8[off + 2 - (om << 1) | 0] = buf[start + 1];
+            case 3:
+                H8[off + 3 - (om << 1) | 0] = buf[start];
+            }
+            if (len < lm + om) {
+                return;
+            }
+            for (i$2 = 4 - om; i$2 < j; i$2 = i$2 + 4 | 0) {
+                H32[off + i$2 >> 2 | 0] = buf[start + i$2] << 24 | buf[start + i$2 + 1] << 16 | buf[start + i$2 + 2] << 8 | buf[start + i$2 + 3];
+            }
+            switch (lm) {
+            case 3:
+                H8[off + j + 1 | 0] = buf[start + j + 2];
+            case 2:
+                H8[off + j + 2 | 0] = buf[start + j + 1];
+            case 1:
+                H8[off + j + 3 | 0] = buf[start + j];
+            }
+        };
+        var convBlob = function (H8, H32, start, len, off) {
+            var blob = this, i$2, om = off % 4, lm = (len + om) % 4, j = len - lm;
+            var buf = new Uint8Array(reader.readAsArrayBuffer(blob.slice(start, start + len)));
+            switch (om) {
+            case 0:
+                H8[off] = buf[3];
+            case 1:
+                H8[off + 1 - (om << 1) | 0] = buf[2];
+            case 2:
+                H8[off + 2 - (om << 1) | 0] = buf[1];
+            case 3:
+                H8[off + 3 - (om << 1) | 0] = buf[0];
+            }
+            if (len < lm + om) {
+                return;
+            }
+            for (i$2 = 4 - om; i$2 < j; i$2 = i$2 + 4 | 0) {
+                H32[off + i$2 >> 2 | 0] = buf[i$2] << 24 | buf[i$2 + 1] << 16 | buf[i$2 + 2] << 8 | buf[i$2 + 3];
+            }
+            switch (lm) {
+            case 3:
+                H8[off + j + 1 | 0] = buf[j + 2];
+            case 2:
+                H8[off + j + 2 | 0] = buf[j + 1];
+            case 1:
+                H8[off + j + 3 | 0] = buf[j];
+            }
+        };
+        var convFn = function (data) {
+            switch (util.getDataType(data)) {
+            case 'string':
+                return convStr.bind(data);
+            case 'array':
+                return convBuf.bind(data);
+            case 'buffer':
+                return convBuf.bind(data);
+            case 'arraybuffer':
+                return convBuf.bind(new Uint8Array(data));
+            case 'view':
+                return convBuf.bind(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+            case 'blob':
+                return convBlob.bind(data);
+            }
+        };
+        var slice = function (data, offset) {
+            switch (util.getDataType(data)) {
+            case 'string':
+                return data.slice(offset);
+            case 'array':
+                return data.slice(offset);
+            case 'buffer':
+                return data.slice(offset);
+            case 'arraybuffer':
+                return data.slice(offset);
+            case 'view':
+                return data.buffer.slice(offset);
+            }
+        };
+        var // Precompute 00 - ff strings
+        precomputedHex = new Array(256);
+        for (var i = 0; i < 256; i++) {
+            precomputedHex[i] = (i < 16 ? '0' : '') + i.toString(16);
+        }
+        var // Convert an ArrayBuffer into its hexadecimal string representation.
+        hex = function (arrayBuffer) {
+            var binarray = new Uint8Array(arrayBuffer);
+            var res = new Array(arrayBuffer.byteLength);
+            for (var i$2 = 0; i$2 < res.length; i$2++) {
+                res[i$2] = precomputedHex[binarray[i$2]];
+            }
+            return res.join('');
+        };
+        var ceilHeapSize = function (v) {
+            // The asm.js spec says:
+            // The heap object's byteLength must be either
+            // 2^n for n in [12, 24) or 2^24 * n for n ≥ 1.
+            // Also, byteLengths smaller than 2^16 are deprecated.
+            var p;
+            if (// If v is smaller than 2^16, the smallest possible solution
+                // is 2^16.
+                v <= 65536)
+                return 65536;
+            if (// If v < 2^24, we round up to 2^n,
+                // otherwise we round up to 2^24 * n.
+                v < 16777216) {
+                for (p = 1; p < v; p = p << 1);
+            } else {
+                for (p = 16777216; p < v; p += 16777216);
+            }
+            return p;
+        };
+        var // Initialize the internal data structures to a new capacity.
+        init = function (size) {
+            if (size % 64 > 0) {
+                throw new Error('Chunk size must be a multiple of 128 bit');
+            }
+            self$2.offset = 0;
+            self$2.maxChunkLen = size;
+            self$2.padMaxChunkLen = padlen(size);
+            // The size of the heap is the sum of:
+            // 1. The padded input message size
+            // 2. The extended space the algorithm needs (320 byte)
+            // 3. The 160 bit state the algoritm uses
+            self$2.heap = new ArrayBuffer(ceilHeapSize(self$2.padMaxChunkLen + 320 + 20));
+            self$2.h32 = new Int32Array(self$2.heap);
+            self$2.h8 = new Int8Array(self$2.heap);
+            self$2.core = new Rusha._core({
+                Int32Array: Int32Array,
+                DataView: DataView
+            }, {}, self$2.heap);
+            self$2.buffer = null;
+        };
+        // Iinitializethe datastructures according
+        // to a chunk siyze.
+        init(chunkSize || 64 * 1024);
+        var initState = function (heap, padMsgLen) {
+            self$2.offset = 0;
+            var io = new Int32Array(heap, padMsgLen + 320, 5);
+            io[0] = 1732584193;
+            io[1] = -271733879;
+            io[2] = -1732584194;
+            io[3] = 271733878;
+            io[4] = -1009589776;
+        };
+        var padChunk = function (chunkLen, msgLen) {
+            var padChunkLen = padlen(chunkLen);
+            var view = new Int32Array(self$2.heap, 0, padChunkLen >> 2);
+            padZeroes(view, chunkLen);
+            padData(view, chunkLen, msgLen);
+            return padChunkLen;
+        };
+        var // Write data to the heap.
+        write = function (data, chunkOffset, chunkLen, off) {
+            convFn(data)(self$2.h8, self$2.h32, chunkOffset, chunkLen, off || 0);
+        };
+        var // Initialize and call the RushaCore,
+        // assuming an input buffer of length len * 4.
+        coreCall = function (data, chunkOffset, chunkLen, msgLen, finalize) {
+            var padChunkLen = chunkLen;
+            write(data, chunkOffset, chunkLen);
+            if (finalize) {
+                padChunkLen = padChunk(chunkLen, msgLen);
+            }
+            self$2.core.hash(padChunkLen, self$2.padMaxChunkLen);
+        };
+        var getRawDigest = function (heap, padMaxChunkLen) {
+            var io = new Int32Array(heap, padMaxChunkLen + 320, 5);
+            var out = new Int32Array(5);
+            var arr = new DataView(out.buffer);
+            arr.setInt32(0, io[0], false);
+            arr.setInt32(4, io[1], false);
+            arr.setInt32(8, io[2], false);
+            arr.setInt32(12, io[3], false);
+            arr.setInt32(16, io[4], false);
+            return out;
+        };
+        var // Calculate the hash digest as an array of 5 32bit integers.
+        rawDigest = this.rawDigest = function (str) {
+            var msgLen = str.byteLength || str.length || str.size || 0;
+            initState(self$2.heap, self$2.padMaxChunkLen);
+            var chunkOffset = 0, chunkLen = self$2.maxChunkLen;
+            for (chunkOffset = 0; msgLen > chunkOffset + chunkLen; chunkOffset += chunkLen) {
+                coreCall(str, chunkOffset, chunkLen, msgLen, false);
+            }
+            coreCall(str, chunkOffset, msgLen - chunkOffset, msgLen, true);
+            return getRawDigest(self$2.heap, self$2.padMaxChunkLen);
+        };
+        // The digest and digestFrom* interface returns the hash digest
+        // as a hex string.
+        this.digest = this.digestFromString = this.digestFromBuffer = this.digestFromArrayBuffer = function (str) {
+            return hex(rawDigest(str).buffer);
+        };
+        this.resetState = function () {
+            initState(self$2.heap, self$2.padMaxChunkLen);
+            return this;
+        };
+        this.append = function (chunk) {
+            var chunkOffset = 0;
+            var chunkLen = chunk.byteLength || chunk.length || chunk.size || 0;
+            var turnOffset = self$2.offset % self$2.maxChunkLen;
+            var inputLen;
+            self$2.offset += chunkLen;
+            while (chunkOffset < chunkLen) {
+                inputLen = Math.min(chunkLen - chunkOffset, self$2.maxChunkLen - turnOffset);
+                write(chunk, chunkOffset, inputLen, turnOffset);
+                turnOffset += inputLen;
+                chunkOffset += inputLen;
+                if (turnOffset === self$2.maxChunkLen) {
+                    self$2.core.hash(self$2.maxChunkLen, self$2.padMaxChunkLen);
+                    turnOffset = 0;
+                }
+            }
+            return this;
+        };
+        this.getState = function () {
+            var turnOffset = self$2.offset % self$2.maxChunkLen;
+            var heap;
+            if (!turnOffset) {
+                var io = new Int32Array(self$2.heap, self$2.padMaxChunkLen + 320, 5);
+                heap = io.buffer.slice(io.byteOffset, io.byteOffset + io.byteLength);
+            } else {
+                heap = self$2.heap.slice(0);
+            }
+            return {
+                offset: self$2.offset,
+                heap: heap
+            };
+        };
+        this.setState = function (state) {
+            self$2.offset = state.offset;
+            if (state.heap.byteLength === 20) {
+                var io = new Int32Array(self$2.heap, self$2.padMaxChunkLen + 320, 5);
+                io.set(new Int32Array(state.heap));
+            } else {
+                self$2.h32.set(new Int32Array(state.heap));
+            }
+            return this;
+        };
+        var rawEnd = this.rawEnd = function () {
+            var msgLen = self$2.offset;
+            var chunkLen = msgLen % self$2.maxChunkLen;
+            var padChunkLen = padChunk(chunkLen, msgLen);
+            self$2.core.hash(padChunkLen, self$2.padMaxChunkLen);
+            var result = getRawDigest(self$2.heap, self$2.padMaxChunkLen);
+            initState(self$2.heap, self$2.padMaxChunkLen);
+            return result;
+        };
+        this.end = function () {
+            return hex(rawEnd().buffer);
+        };
+    }
+    ;
+    // The low-level RushCore module provides the heart of Rusha,
+    // a high-speed sha1 implementation working on an Int32Array heap.
+    // At first glance, the implementation seems complicated, however
+    // with the SHA1 spec at hand, it is obvious this almost a textbook
+    // implementation that has a few functions hand-inlined and a few loops
+    // hand-unrolled.
+    Rusha._core = function RushaCore(stdlib, foreign, heap) {
+        'use asm';
+        var H = new stdlib.Int32Array(heap);
+        function hash(k, x) {
+            // k in bytes
+            k = k | 0;
+            x = x | 0;
+            var i = 0, j = 0, y0 = 0, z0 = 0, y1 = 0, z1 = 0, y2 = 0, z2 = 0, y3 = 0, z3 = 0, y4 = 0, z4 = 0, t0 = 0, t1 = 0;
+            y0 = H[x + 320 >> 2] | 0;
+            y1 = H[x + 324 >> 2] | 0;
+            y2 = H[x + 328 >> 2] | 0;
+            y3 = H[x + 332 >> 2] | 0;
+            y4 = H[x + 336 >> 2] | 0;
+            for (i = 0; (i | 0) < (k | 0); i = i + 64 | 0) {
+                z0 = y0;
+                z1 = y1;
+                z2 = y2;
+                z3 = y3;
+                z4 = y4;
+                for (j = 0; (j | 0) < 64; j = j + 4 | 0) {
+                    t1 = H[i + j >> 2] | 0;
+                    t0 = ((y0 << 5 | y0 >>> 27) + (y1 & y2 | ~y1 & y3) | 0) + ((t1 + y4 | 0) + 1518500249 | 0) | 0;
+                    y4 = y3;
+                    y3 = y2;
+                    y2 = y1 << 30 | y1 >>> 2;
+                    y1 = y0;
+                    y0 = t0;
+                    H[k + j >> 2] = t1;
+                }
+                for (j = k + 64 | 0; (j | 0) < (k + 80 | 0); j = j + 4 | 0) {
+                    t1 = (H[j - 12 >> 2] ^ H[j - 32 >> 2] ^ H[j - 56 >> 2] ^ H[j - 64 >> 2]) << 1 | (H[j - 12 >> 2] ^ H[j - 32 >> 2] ^ H[j - 56 >> 2] ^ H[j - 64 >> 2]) >>> 31;
+                    t0 = ((y0 << 5 | y0 >>> 27) + (y1 & y2 | ~y1 & y3) | 0) + ((t1 + y4 | 0) + 1518500249 | 0) | 0;
+                    y4 = y3;
+                    y3 = y2;
+                    y2 = y1 << 30 | y1 >>> 2;
+                    y1 = y0;
+                    y0 = t0;
+                    H[j >> 2] = t1;
+                }
+                for (j = k + 80 | 0; (j | 0) < (k + 160 | 0); j = j + 4 | 0) {
+                    t1 = (H[j - 12 >> 2] ^ H[j - 32 >> 2] ^ H[j - 56 >> 2] ^ H[j - 64 >> 2]) << 1 | (H[j - 12 >> 2] ^ H[j - 32 >> 2] ^ H[j - 56 >> 2] ^ H[j - 64 >> 2]) >>> 31;
+                    t0 = ((y0 << 5 | y0 >>> 27) + (y1 ^ y2 ^ y3) | 0) + ((t1 + y4 | 0) + 1859775393 | 0) | 0;
+                    y4 = y3;
+                    y3 = y2;
+                    y2 = y1 << 30 | y1 >>> 2;
+                    y1 = y0;
+                    y0 = t0;
+                    H[j >> 2] = t1;
+                }
+                for (j = k + 160 | 0; (j | 0) < (k + 240 | 0); j = j + 4 | 0) {
+                    t1 = (H[j - 12 >> 2] ^ H[j - 32 >> 2] ^ H[j - 56 >> 2] ^ H[j - 64 >> 2]) << 1 | (H[j - 12 >> 2] ^ H[j - 32 >> 2] ^ H[j - 56 >> 2] ^ H[j - 64 >> 2]) >>> 31;
+                    t0 = ((y0 << 5 | y0 >>> 27) + (y1 & y2 | y1 & y3 | y2 & y3) | 0) + ((t1 + y4 | 0) - 1894007588 | 0) | 0;
+                    y4 = y3;
+                    y3 = y2;
+                    y2 = y1 << 30 | y1 >>> 2;
+                    y1 = y0;
+                    y0 = t0;
+                    H[j >> 2] = t1;
+                }
+                for (j = k + 240 | 0; (j | 0) < (k + 320 | 0); j = j + 4 | 0) {
+                    t1 = (H[j - 12 >> 2] ^ H[j - 32 >> 2] ^ H[j - 56 >> 2] ^ H[j - 64 >> 2]) << 1 | (H[j - 12 >> 2] ^ H[j - 32 >> 2] ^ H[j - 56 >> 2] ^ H[j - 64 >> 2]) >>> 31;
+                    t0 = ((y0 << 5 | y0 >>> 27) + (y1 ^ y2 ^ y3) | 0) + ((t1 + y4 | 0) - 899497514 | 0) | 0;
+                    y4 = y3;
+                    y3 = y2;
+                    y2 = y1 << 30 | y1 >>> 2;
+                    y1 = y0;
+                    y0 = t0;
+                    H[j >> 2] = t1;
+                }
+                y0 = y0 + z0 | 0;
+                y1 = y1 + z1 | 0;
+                y2 = y2 + z2 | 0;
+                y3 = y3 + z3 | 0;
+                y4 = y4 + z4 | 0;
+            }
+            H[x + 320 >> 2] = y0;
+            H[x + 324 >> 2] = y1;
+            H[x + 328 >> 2] = y2;
+            H[x + 332 >> 2] = y3;
+            H[x + 336 >> 2] = y4;
+        }
+        return { hash: hash };
+    };
+    if (// If we'e running in Node.JS, export a module.
+        typeof module !== 'undefined') {
+        module.exports = Rusha;
+    } else if (// If we're running in a DOM context, export
+        // the Rusha object to toplevel.
+        typeof window !== 'undefined') {
+        window.Rusha = Rusha;
+    }
+    if (// If we're running in a webworker, accept
+        // messages containing a jobid and a buffer
+        // or blob object, and return the hash result.
+        typeof FileReaderSync !== 'undefined') {
+        var reader = new FileReaderSync();
+        var hashData = function hash(hasher, data, cb) {
+            try {
+                return cb(null, hasher.digest(data));
+            } catch (e) {
+                return cb(e);
+            }
+        };
+        var hashFile = function hashArrayBuffer(hasher, readTotal, blockSize, file, cb) {
+            var reader$2 = new self.FileReader();
+            reader$2.onloadend = function onloadend() {
+                var buffer = reader$2.result;
+                readTotal += reader$2.result.byteLength;
+                try {
+                    hasher.append(buffer);
+                } catch (e) {
+                    cb(e);
+                    return;
+                }
+                if (readTotal < file.size) {
+                    hashFile(hasher, readTotal, blockSize, file, cb);
+                } else {
+                    cb(null, hasher.end());
+                }
+            };
+            reader$2.readAsArrayBuffer(file.slice(readTotal, readTotal + blockSize));
+        };
+        self.onmessage = function onMessage(event) {
+            var data = event.data.data, file = event.data.file, id = event.data.id;
+            if (typeof id === 'undefined')
+                return;
+            if (!file && !data)
+                return;
+            var blockSize = event.data.blockSize || 4 * 1024 * 1024;
+            var hasher = new Rusha(blockSize);
+            hasher.resetState();
+            var done = function done$2(err, hash) {
+                if (!err) {
+                    self.postMessage({
+                        id: id,
+                        hash: hash
+                    });
+                } else {
+                    self.postMessage({
+                        id: id,
+                        error: err.name
+                    });
+                }
+            };
+            if (data)
+                hashData(hasher, data, done);
+            if (file)
+                hashFile(hasher, 0, blockSize, file, done);
+        };
+    }
+}());
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{}],89:[function(require,module,exports){
 /* eslint-disable node/no-deprecated-api */
 var buffer = require('buffer')
 var Buffer = buffer.Buffer
@@ -14445,7 +17441,1308 @@ SafeBuffer.allocUnsafeSlow = function (size) {
   return buffer.SlowBuffer(size)
 }
 
-},{"buffer":82}],68:[function(require,module,exports){
+},{"buffer":120}],90:[function(require,module,exports){
+(function (Buffer){
+module.exports = function (stream, cb) {
+  var chunks = []
+  stream.on('data', function (chunk) {
+    chunks.push(chunk)
+  })
+  stream.once('end', function () {
+    if (cb) cb(null, Buffer.concat(chunks))
+    cb = null
+  })
+  stream.once('error', function (err) {
+    if (cb) cb(err)
+    cb = null
+  })
+}
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":120}],91:[function(require,module,exports){
+(function (Buffer){
+module.exports = simpleGet
+
+var concat = require('simple-concat')
+var http = require('http')
+var https = require('https')
+var once = require('once')
+var querystring = require('querystring')
+var unzipResponse = require('unzip-response') // excluded from browser build
+var url = require('url')
+
+function simpleGet (opts, cb) {
+  opts = typeof opts === 'string' ? {url: opts} : Object.assign({}, opts)
+  cb = once(cb)
+
+  if (opts.url) parseOptsUrl(opts)
+  if (opts.headers == null) opts.headers = {}
+  if (opts.maxRedirects == null) opts.maxRedirects = 10
+
+  var body
+  if (opts.form) body = typeof opts.form === 'string' ? opts.form : querystring.stringify(opts.form)
+  if (opts.body) body = opts.json ? JSON.stringify(opts.body) : opts.body
+
+  if (opts.json) opts.headers.accept = 'application/json'
+  if (opts.json && body) opts.headers['content-type'] = 'application/json'
+  if (opts.form) opts.headers['content-type'] = 'application/x-www-form-urlencoded'
+  if (body && !isStream(body)) opts.headers['content-length'] = Buffer.byteLength(body)
+  delete opts.body
+  delete opts.form
+
+  if (body && !opts.method) opts.method = 'POST'
+  if (opts.method) opts.method = opts.method.toUpperCase()
+
+  // Request gzip/deflate
+  var customAcceptEncoding = Object.keys(opts.headers).some(function (h) {
+    return h.toLowerCase() === 'accept-encoding'
+  })
+  if (!customAcceptEncoding) opts.headers['accept-encoding'] = 'gzip, deflate'
+
+  // Support http/https urls
+  var protocol = opts.protocol === 'https:' ? https : http
+  var req = protocol.request(opts, function (res) {
+    // Follow 3xx redirects
+    if (res.statusCode >= 300 && res.statusCode < 400 && 'location' in res.headers) {
+      opts.url = res.headers.location
+      res.resume() // Discard response
+
+      if (opts.maxRedirects > 0) {
+        opts.maxRedirects -= 1
+        simpleGet(opts, cb)
+      } else {
+        cb(new Error('too many redirects'))
+      }
+      return
+    }
+
+    var tryUnzip = typeof unzipResponse === 'function' && opts.method !== 'HEAD'
+    cb(null, tryUnzip ? unzipResponse(res) : res)
+  })
+  req.on('timeout', function () {
+    req.abort()
+    cb(new Error('Request timed out'))
+  })
+  req.on('error', cb)
+
+  if (body && isStream(body)) body.on('error', cb).pipe(req)
+  else req.end(body)
+
+  return req
+}
+
+simpleGet.concat = function (opts, cb) {
+  return simpleGet(opts, function (err, res) {
+    if (err) return cb(err)
+    concat(res, function (err, data) {
+      if (err) return cb(err)
+      if (opts.json) {
+        try {
+          data = JSON.parse(data.toString())
+        } catch (err) {
+          return cb(err, res, data)
+        }
+      }
+      cb(null, res, data)
+    })
+  })
+}
+
+;['get', 'post', 'put', 'patch', 'head', 'delete'].forEach(function (method) {
+  simpleGet[method] = function (opts, cb) {
+    if (typeof opts === 'string') opts = {url: opts}
+    opts.method = method.toUpperCase()
+    return simpleGet(opts, cb)
+  }
+})
+
+function parseOptsUrl (opts) {
+  var loc = url.parse(opts.url)
+  if (loc.hostname) opts.hostname = loc.hostname
+  if (loc.port) opts.port = loc.port
+  if (loc.protocol) opts.protocol = loc.protocol
+  if (loc.auth) opts.auth = loc.auth
+  opts.path = loc.path
+  delete opts.url
+}
+
+function isStream (obj) { return typeof obj.pipe === 'function' }
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":120,"http":146,"https":124,"once":66,"querystring":135,"simple-concat":90,"unzip-response":119,"url":152}],92:[function(require,module,exports){
+(function (Buffer){
+module.exports = Peer
+
+var debug = require('debug')('simple-peer')
+var getBrowserRTC = require('get-browser-rtc')
+var inherits = require('inherits')
+var randombytes = require('randombytes')
+var stream = require('readable-stream')
+
+var MAX_BUFFERED_AMOUNT = 64 * 1024
+
+inherits(Peer, stream.Duplex)
+
+/**
+ * WebRTC peer connection. Same API as node core `net.Socket`, plus a few extra methods.
+ * Duplex stream.
+ * @param {Object} opts
+ */
+function Peer (opts) {
+  var self = this
+  if (!(self instanceof Peer)) return new Peer(opts)
+
+  self._id = randombytes(4).toString('hex').slice(0, 7)
+  self._debug('new peer %o', opts)
+
+  opts = Object.assign({
+    allowHalfOpen: false
+  }, opts)
+
+  stream.Duplex.call(self, opts)
+
+  self.channelName = opts.initiator
+    ? opts.channelName || randombytes(20).toString('hex')
+    : null
+
+  // Needed by _transformConstraints, so set this early
+  self._isChromium = typeof window !== 'undefined' && !!window.webkitRTCPeerConnection
+
+  self.initiator = opts.initiator || false
+  self.channelConfig = opts.channelConfig || Peer.channelConfig
+  self.config = opts.config || Peer.config
+  self.constraints = self._transformConstraints(opts.constraints || Peer.constraints)
+  self.offerConstraints = self._transformConstraints(opts.offerConstraints || {})
+  self.answerConstraints = self._transformConstraints(opts.answerConstraints || {})
+  self.reconnectTimer = opts.reconnectTimer || false
+  self.sdpTransform = opts.sdpTransform || function (sdp) { return sdp }
+  self.stream = opts.stream || false
+  self.trickle = opts.trickle !== undefined ? opts.trickle : true
+  self._earlyMessage = null
+
+  self.destroyed = false
+  self.connected = false
+
+  self.remoteAddress = undefined
+  self.remoteFamily = undefined
+  self.remotePort = undefined
+  self.localAddress = undefined
+  self.localPort = undefined
+
+  self._wrtc = (opts.wrtc && typeof opts.wrtc === 'object')
+    ? opts.wrtc
+    : getBrowserRTC()
+
+  if (!self._wrtc) {
+    if (typeof window === 'undefined') {
+      throw new Error('No WebRTC support: Specify `opts.wrtc` option in this environment')
+    } else {
+      throw new Error('No WebRTC support: Not a supported browser')
+    }
+  }
+
+  self._pcReady = false
+  self._channelReady = false
+  self._iceComplete = false // ice candidate trickle done (got null candidate)
+  self._channel = null
+  self._pendingCandidates = []
+  self._previousStreams = []
+
+  self._chunk = null
+  self._cb = null
+  self._interval = null
+  self._reconnectTimeout = null
+
+  self._pc = new (self._wrtc.RTCPeerConnection)(self.config, self.constraints)
+
+  // We prefer feature detection whenever possible, but sometimes that's not
+  // possible for certain implementations.
+  self._isWrtc = Array.isArray(self._pc.RTCIceConnectionStates)
+  self._isReactNativeWebrtc = typeof self._pc._peerConnectionId === 'number'
+
+  self._pc.oniceconnectionstatechange = function () {
+    self._onIceStateChange()
+  }
+  self._pc.onicegatheringstatechange = function () {
+    self._onIceStateChange()
+  }
+  self._pc.onsignalingstatechange = function () {
+    self._onSignalingStateChange()
+  }
+  self._pc.onicecandidate = function (event) {
+    self._onIceCandidate(event)
+  }
+
+  // Other spec events, unused by this implementation:
+  // - onconnectionstatechange
+  // - onicecandidateerror
+  // - onfingerprintfailure
+
+  if (self.initiator) {
+    var createdOffer = false
+    self._pc.onnegotiationneeded = function () {
+      if (!createdOffer) self._createOffer()
+      createdOffer = true
+    }
+
+    self._setupData({
+      channel: self._pc.createDataChannel(self.channelName, self.channelConfig)
+    })
+  } else {
+    self._pc.ondatachannel = function (event) {
+      self._setupData(event)
+    }
+  }
+
+  if ('addTrack' in self._pc) {
+    // WebRTC Spec, Firefox
+    if (self.stream) {
+      self.stream.getTracks().forEach(function (track) {
+        self._pc.addTrack(track, self.stream)
+      })
+    }
+    self._pc.ontrack = function (event) {
+      self._onTrack(event)
+    }
+  } else {
+    // Chrome, etc. This can be removed once all browsers support `ontrack`
+    if (self.stream) self._pc.addStream(self.stream)
+    self._pc.onaddstream = function (event) {
+      self._onAddStream(event)
+    }
+  }
+
+  // HACK: wrtc doesn't fire the 'negotionneeded' event
+  if (self.initiator && self._isWrtc) {
+    self._pc.onnegotiationneeded()
+  }
+
+  self._onFinishBound = function () {
+    self._onFinish()
+  }
+  self.once('finish', self._onFinishBound)
+}
+
+Peer.WEBRTC_SUPPORT = !!getBrowserRTC()
+
+/**
+ * Expose config, constraints, and data channel config for overriding all Peer
+ * instances. Otherwise, just set opts.config, opts.constraints, or opts.channelConfig
+ * when constructing a Peer.
+ */
+Peer.config = {
+  iceServers: [
+    {
+      urls: 'stun:stun.l.google.com:19302'
+    },
+    {
+      urls: 'stun:global.stun.twilio.com:3478?transport=udp'
+    }
+  ]
+}
+Peer.constraints = {}
+Peer.channelConfig = {}
+
+Object.defineProperty(Peer.prototype, 'bufferSize', {
+  get: function () {
+    var self = this
+    return (self._channel && self._channel.bufferedAmount) || 0
+  }
+})
+
+Peer.prototype.address = function () {
+  var self = this
+  return { port: self.localPort, family: 'IPv4', address: self.localAddress }
+}
+
+Peer.prototype.signal = function (data) {
+  var self = this
+  if (self.destroyed) throw new Error('cannot signal after peer is destroyed')
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data)
+    } catch (err) {
+      data = {}
+    }
+  }
+  self._debug('signal()')
+
+  if (data.candidate) {
+    if (self._pc.remoteDescription) self._addIceCandidate(data.candidate)
+    else self._pendingCandidates.push(data.candidate)
+  }
+  if (data.sdp) {
+    self._pc.setRemoteDescription(new (self._wrtc.RTCSessionDescription)(data), function () {
+      if (self.destroyed) return
+
+      self._pendingCandidates.forEach(function (candidate) {
+        self._addIceCandidate(candidate)
+      })
+      self._pendingCandidates = []
+
+      if (self._pc.remoteDescription.type === 'offer') self._createAnswer()
+    }, function (err) { self._destroy(err) })
+  }
+  if (!data.sdp && !data.candidate) {
+    self._destroy(new Error('signal() called with invalid signal data'))
+  }
+}
+
+Peer.prototype._addIceCandidate = function (candidate) {
+  var self = this
+  try {
+    self._pc.addIceCandidate(
+      new self._wrtc.RTCIceCandidate(candidate),
+      noop,
+      function (err) { self._destroy(err) }
+    )
+  } catch (err) {
+    self._destroy(new Error('error adding candidate: ' + err.message))
+  }
+}
+
+/**
+ * Send text/binary data to the remote peer.
+ * @param {TypedArrayView|ArrayBuffer|Buffer|string|Blob|Object} chunk
+ */
+Peer.prototype.send = function (chunk) {
+  var self = this
+
+  // HACK: `wrtc` module crashes on Node.js Buffer, so convert to Uint8Array
+  // See: https://github.com/feross/simple-peer/issues/60
+  if (self._isWrtc && Buffer.isBuffer(chunk)) {
+    chunk = new Uint8Array(chunk)
+  }
+
+  self._channel.send(chunk)
+}
+
+Peer.prototype.destroy = function (onclose) {
+  var self = this
+  self._destroy(null, onclose)
+}
+
+Peer.prototype._destroy = function (err, onclose) {
+  var self = this
+  if (self.destroyed) return
+  if (onclose) self.once('close', onclose)
+
+  self._debug('destroy (error: %s)', err && (err.message || err))
+
+  self.readable = self.writable = false
+
+  if (!self._readableState.ended) self.push(null)
+  if (!self._writableState.finished) self.end()
+
+  self.destroyed = true
+  self.connected = false
+  self._pcReady = false
+  self._channelReady = false
+  self._previousStreams = null
+  self._earlyMessage = null
+
+  clearInterval(self._interval)
+  clearTimeout(self._reconnectTimeout)
+  self._interval = null
+  self._reconnectTimeout = null
+  self._chunk = null
+  self._cb = null
+
+  if (self._onFinishBound) self.removeListener('finish', self._onFinishBound)
+  self._onFinishBound = null
+
+  if (self._pc) {
+    try {
+      self._pc.close()
+    } catch (err) {}
+
+    self._pc.oniceconnectionstatechange = null
+    self._pc.onicegatheringstatechange = null
+    self._pc.onsignalingstatechange = null
+    self._pc.onicecandidate = null
+    if ('addTrack' in self._pc) {
+      self._pc.ontrack = null
+    } else {
+      self._pc.onaddstream = null
+    }
+    self._pc.onnegotiationneeded = null
+    self._pc.ondatachannel = null
+  }
+
+  if (self._channel) {
+    try {
+      self._channel.close()
+    } catch (err) {}
+
+    self._channel.onmessage = null
+    self._channel.onopen = null
+    self._channel.onclose = null
+    self._channel.onerror = null
+  }
+  self._pc = null
+  self._channel = null
+
+  if (err) self.emit('error', err)
+  self.emit('close')
+}
+
+Peer.prototype._setupData = function (event) {
+  var self = this
+  if (!event.channel) {
+    // In some situations `pc.createDataChannel()` returns `undefined` (in wrtc),
+    // which is invalid behavior. Handle it gracefully.
+    // See: https://github.com/feross/simple-peer/issues/163
+    return self._destroy(new Error('Data channel event is missing `channel` property'))
+  }
+
+  self._channel = event.channel
+  self._channel.binaryType = 'arraybuffer'
+
+  if (typeof self._channel.bufferedAmountLowThreshold === 'number') {
+    self._channel.bufferedAmountLowThreshold = MAX_BUFFERED_AMOUNT
+  }
+
+  self.channelName = self._channel.label
+
+  self._channel.onmessage = function (event) {
+    if (!self._channelReady) { // HACK: Workaround for Chrome not firing "open" between tabs
+      self._earlyMessage = event
+      self._onChannelOpen()
+    } else {
+      self._onChannelMessage(event)
+    }
+  }
+  self._channel.onbufferedamountlow = function () {
+    self._onChannelBufferedAmountLow()
+  }
+  self._channel.onopen = function () {
+    if (!self._channelReady) self._onChannelOpen()
+  }
+  self._channel.onclose = function () {
+    self._onChannelClose()
+  }
+  self._channel.onerror = function (err) {
+    self._destroy(err)
+  }
+}
+
+Peer.prototype._read = function () {}
+
+Peer.prototype._write = function (chunk, encoding, cb) {
+  var self = this
+  if (self.destroyed) return cb(new Error('cannot write after peer is destroyed'))
+
+  if (self.connected) {
+    try {
+      self.send(chunk)
+    } catch (err) {
+      return self._destroy(err)
+    }
+    if (self._channel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+      self._debug('start backpressure: bufferedAmount %d', self._channel.bufferedAmount)
+      self._cb = cb
+    } else {
+      cb(null)
+    }
+  } else {
+    self._debug('write before connect')
+    self._chunk = chunk
+    self._cb = cb
+  }
+}
+
+// When stream finishes writing, close socket. Half open connections are not
+// supported.
+Peer.prototype._onFinish = function () {
+  var self = this
+  if (self.destroyed) return
+
+  if (self.connected) {
+    destroySoon()
+  } else {
+    self.once('connect', destroySoon)
+  }
+
+  // Wait a bit before destroying so the socket flushes.
+  // TODO: is there a more reliable way to accomplish this?
+  function destroySoon () {
+    setTimeout(function () {
+      self._destroy()
+    }, 1000)
+  }
+}
+
+Peer.prototype._createOffer = function () {
+  var self = this
+  if (self.destroyed) return
+
+  self._pc.createOffer(function (offer) {
+    if (self.destroyed) return
+    offer.sdp = self.sdpTransform(offer.sdp)
+    self._pc.setLocalDescription(offer, onSuccess, onError)
+
+    function onSuccess () {
+      if (self.destroyed) return
+      if (self.trickle || self._iceComplete) sendOffer()
+      else self.once('_iceComplete', sendOffer) // wait for candidates
+    }
+
+    function onError (err) {
+      self._destroy(err)
+    }
+
+    function sendOffer () {
+      var signal = self._pc.localDescription || offer
+      self._debug('signal')
+      self.emit('signal', {
+        type: signal.type,
+        sdp: signal.sdp
+      })
+    }
+  }, function (err) { self._destroy(err) }, self.offerConstraints)
+}
+
+Peer.prototype._createAnswer = function () {
+  var self = this
+  if (self.destroyed) return
+
+  self._pc.createAnswer(function (answer) {
+    if (self.destroyed) return
+    answer.sdp = self.sdpTransform(answer.sdp)
+    self._pc.setLocalDescription(answer, onSuccess, onError)
+
+    function onSuccess () {
+      if (self.destroyed) return
+      if (self.trickle || self._iceComplete) sendAnswer()
+      else self.once('_iceComplete', sendAnswer)
+    }
+
+    function onError (err) {
+      self._destroy(err)
+    }
+
+    function sendAnswer () {
+      var signal = self._pc.localDescription || answer
+      self._debug('signal')
+      self.emit('signal', {
+        type: signal.type,
+        sdp: signal.sdp
+      })
+    }
+  }, function (err) { self._destroy(err) }, self.answerConstraints)
+}
+
+Peer.prototype._onIceStateChange = function () {
+  var self = this
+  if (self.destroyed) return
+  var iceConnectionState = self._pc.iceConnectionState
+  var iceGatheringState = self._pc.iceGatheringState
+
+  self._debug(
+    'iceStateChange (connection: %s) (gathering: %s)',
+    iceConnectionState,
+    iceGatheringState
+  )
+  self.emit('iceStateChange', iceConnectionState, iceGatheringState)
+
+  if (iceConnectionState === 'connected' || iceConnectionState === 'completed') {
+    clearTimeout(self._reconnectTimeout)
+    self._pcReady = true
+    self._maybeReady()
+  }
+  if (iceConnectionState === 'disconnected') {
+    if (self.reconnectTimer) {
+      // If user has set `opt.reconnectTimer`, allow time for ICE to attempt a reconnect
+      clearTimeout(self._reconnectTimeout)
+      self._reconnectTimeout = setTimeout(function () {
+        self._destroy()
+      }, self.reconnectTimer)
+    } else {
+      self._destroy()
+    }
+  }
+  if (iceConnectionState === 'failed') {
+    self._destroy(new Error('Ice connection failed.'))
+  }
+  if (iceConnectionState === 'closed') {
+    self._destroy()
+  }
+}
+
+Peer.prototype.getStats = function (cb) {
+  var self = this
+
+  // Promise-based getStats() (standard)
+  if (self._pc.getStats.length === 0) {
+    self._pc.getStats().then(function (res) {
+      var reports = []
+      res.forEach(function (report) {
+        reports.push(report)
+      })
+      cb(null, reports)
+    }, function (err) { cb(err) })
+
+  // Two-parameter callback-based getStats() (deprecated, former standard)
+  } else if (self._isReactNativeWebrtc) {
+    self._pc.getStats(null, function (res) {
+      var reports = []
+      res.forEach(function (report) {
+        reports.push(report)
+      })
+      cb(null, reports)
+    }, function (err) { cb(err) })
+
+  // Single-parameter callback-based getStats() (non-standard)
+  } else if (self._pc.getStats.length > 0) {
+    self._pc.getStats(function (res) {
+      var reports = []
+      res.result().forEach(function (result) {
+        var report = {}
+        result.names().forEach(function (name) {
+          report[name] = result.stat(name)
+        })
+        report.id = result.id
+        report.type = result.type
+        report.timestamp = result.timestamp
+        reports.push(report)
+      })
+      cb(null, reports)
+    }, function (err) { cb(err) })
+
+  // Unknown browser, skip getStats() since it's anyone's guess which style of
+  // getStats() they implement.
+  } else {
+    cb(null, [])
+  }
+}
+
+Peer.prototype._maybeReady = function () {
+  var self = this
+  self._debug('maybeReady pc %s channel %s', self._pcReady, self._channelReady)
+  if (self.connected || self._connecting || !self._pcReady || !self._channelReady) return
+  self._connecting = true
+
+  self.getStats(function (err, items) {
+    if (self.destroyed) return
+
+    // Treat getStats error as non-fatal. It's not essential.
+    if (err) items = []
+
+    self._connecting = false
+    self.connected = true
+
+    var remoteCandidates = {}
+    var localCandidates = {}
+    var candidatePairs = {}
+
+    items.forEach(function (item) {
+      // TODO: Once all browsers support the hyphenated stats report types, remove
+      // the non-hypenated ones
+      if (item.type === 'remotecandidate' || item.type === 'remote-candidate') {
+        remoteCandidates[item.id] = item
+      }
+      if (item.type === 'localcandidate' || item.type === 'local-candidate') {
+        localCandidates[item.id] = item
+      }
+      if (item.type === 'candidatepair' || item.type === 'candidate-pair') {
+        candidatePairs[item.id] = item
+      }
+    })
+
+    items.forEach(function (item) {
+      // Spec-compliant
+      if (item.type === 'transport') {
+        setSelectedCandidatePair(candidatePairs[item.selectedCandidatePairId])
+      }
+
+      // Old implementations
+      if (
+        (item.type === 'googCandidatePair' && item.googActiveConnection === 'true') ||
+        ((item.type === 'candidatepair' || item.type === 'candidate-pair') && item.selected)
+      ) {
+        setSelectedCandidatePair(item)
+      }
+    })
+
+    function setSelectedCandidatePair (selectedCandidatePair) {
+      var local = localCandidates[selectedCandidatePair.localCandidateId]
+
+      if (local && local.ip) {
+        // Spec
+        self.localAddress = local.ip
+        self.localPort = Number(local.port)
+      } else if (local && local.ipAddress) {
+        // Firefox
+        self.localAddress = local.ipAddress
+        self.localPort = Number(local.portNumber)
+      } else if (typeof selectedCandidatePair.googLocalAddress === 'string') {
+        // TODO: remove this once Chrome 58 is released
+        local = selectedCandidatePair.googLocalAddress.split(':')
+        self.localAddress = local[0]
+        self.localPort = Number(local[1])
+      }
+
+      var remote = remoteCandidates[selectedCandidatePair.remoteCandidateId]
+
+      if (remote && remote.ip) {
+        // Spec
+        self.remoteAddress = remote.ip
+        self.remotePort = Number(remote.port)
+      } else if (remote && remote.ipAddress) {
+        // Firefox
+        self.remoteAddress = remote.ipAddress
+        self.remotePort = Number(remote.portNumber)
+      } else if (typeof selectedCandidatePair.googRemoteAddress === 'string') {
+        // TODO: remove this once Chrome 58 is released
+        remote = selectedCandidatePair.googRemoteAddress.split(':')
+        self.remoteAddress = remote[0]
+        self.remotePort = Number(remote[1])
+      }
+      self.remoteFamily = 'IPv4'
+
+      self._debug(
+        'connect local: %s:%s remote: %s:%s',
+        self.localAddress, self.localPort, self.remoteAddress, self.remotePort
+      )
+    }
+
+    if (self._chunk) {
+      try {
+        self.send(self._chunk)
+      } catch (err) {
+        return self._destroy(err)
+      }
+      self._chunk = null
+      self._debug('sent chunk from "write before connect"')
+
+      var cb = self._cb
+      self._cb = null
+      cb(null)
+    }
+
+    // If `bufferedAmountLowThreshold` and 'onbufferedamountlow' are unsupported,
+    // fallback to using setInterval to implement backpressure.
+    if (typeof self._channel.bufferedAmountLowThreshold !== 'number') {
+      self._interval = setInterval(function () { self._onInterval() }, 150)
+      if (self._interval.unref) self._interval.unref()
+    }
+
+    self._debug('connect')
+    self.emit('connect')
+    if (self._earlyMessage) { // HACK: Workaround for Chrome not firing "open" between tabs
+      self._onChannelMessage(self._earlyMessage)
+      self._earlyMessage = null
+    }
+  })
+}
+
+Peer.prototype._onInterval = function () {
+  if (!this._cb || !this._channel || this._channel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+    return
+  }
+  this._onChannelBufferedAmountLow()
+}
+
+Peer.prototype._onSignalingStateChange = function () {
+  var self = this
+  if (self.destroyed) return
+  self._debug('signalingStateChange %s', self._pc.signalingState)
+  self.emit('signalingStateChange', self._pc.signalingState)
+}
+
+Peer.prototype._onIceCandidate = function (event) {
+  var self = this
+  if (self.destroyed) return
+  if (event.candidate && self.trickle) {
+    self.emit('signal', {
+      candidate: {
+        candidate: event.candidate.candidate,
+        sdpMLineIndex: event.candidate.sdpMLineIndex,
+        sdpMid: event.candidate.sdpMid
+      }
+    })
+  } else if (!event.candidate) {
+    self._iceComplete = true
+    self.emit('_iceComplete')
+  }
+}
+
+Peer.prototype._onChannelMessage = function (event) {
+  var self = this
+  if (self.destroyed) return
+  var data = event.data
+  if (data instanceof ArrayBuffer) data = Buffer.from(data)
+  self.push(data)
+}
+
+Peer.prototype._onChannelBufferedAmountLow = function () {
+  var self = this
+  if (self.destroyed || !self._cb) return
+  self._debug('ending backpressure: bufferedAmount %d', self._channel.bufferedAmount)
+  var cb = self._cb
+  self._cb = null
+  cb(null)
+}
+
+Peer.prototype._onChannelOpen = function () {
+  var self = this
+  if (self.connected || self.destroyed) return
+  self._debug('on channel open')
+  self._channelReady = true
+  self._maybeReady()
+}
+
+Peer.prototype._onChannelClose = function () {
+  var self = this
+  if (self.destroyed) return
+  self._debug('on channel close')
+  self._destroy()
+}
+
+Peer.prototype._onAddStream = function (event) {
+  var self = this
+  if (self.destroyed) return
+  self._debug('on add stream')
+  self.emit('stream', event.stream)
+}
+
+Peer.prototype._onTrack = function (event) {
+  var self = this
+  if (self.destroyed) return
+  self._debug('on track')
+  var id = event.streams[0].id
+  if (self._previousStreams.indexOf(id) !== -1) return // Only fire one 'stream' event, even though there may be multiple tracks per stream
+  self._previousStreams.push(id)
+  self.emit('stream', event.streams[0])
+}
+
+Peer.prototype._debug = function () {
+  var self = this
+  var args = [].slice.call(arguments)
+  args[0] = '[' + self._id + '] ' + args[0]
+  debug.apply(null, args)
+}
+
+// Transform constraints objects into the new format (unless Chromium)
+// TODO: This can be removed when Chromium supports the new format
+Peer.prototype._transformConstraints = function (constraints) {
+  var self = this
+
+  if (Object.keys(constraints).length === 0) {
+    return constraints
+  }
+
+  if ((constraints.mandatory || constraints.optional) && !self._isChromium) {
+    // convert to new format
+
+    // Merge mandatory and optional objects, prioritizing mandatory
+    var newConstraints = Object.assign({}, constraints.optional, constraints.mandatory)
+
+    // fix casing
+    if (newConstraints.OfferToReceiveVideo !== undefined) {
+      newConstraints.offerToReceiveVideo = newConstraints.OfferToReceiveVideo
+      delete newConstraints['OfferToReceiveVideo']
+    }
+
+    if (newConstraints.OfferToReceiveAudio !== undefined) {
+      newConstraints.offerToReceiveAudio = newConstraints.OfferToReceiveAudio
+      delete newConstraints['OfferToReceiveAudio']
+    }
+
+    return newConstraints
+  } else if (!constraints.mandatory && !constraints.optional && self._isChromium) {
+    // convert to old format
+
+    // fix casing
+    if (constraints.offerToReceiveVideo !== undefined) {
+      constraints.OfferToReceiveVideo = constraints.offerToReceiveVideo
+      delete constraints['offerToReceiveVideo']
+    }
+
+    if (constraints.offerToReceiveAudio !== undefined) {
+      constraints.OfferToReceiveAudio = constraints.offerToReceiveAudio
+      delete constraints['offerToReceiveAudio']
+    }
+
+    return {
+      mandatory: constraints // NOTE: All constraints are upgraded to mandatory
+    }
+  }
+
+  return constraints
+}
+
+function noop () {}
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":120,"debug":39,"get-browser-rtc":45,"inherits":48,"randombytes":73,"readable-stream":83}],93:[function(require,module,exports){
+var Rusha = require('rusha')
+
+var rusha = new Rusha
+var scope = typeof window !== 'undefined' ? window : self
+var crypto = scope.crypto || scope.msCrypto || {}
+var subtle = crypto.subtle || crypto.webkitSubtle
+
+function sha1sync (buf) {
+  return rusha.digest(buf)
+}
+
+// Browsers throw if they lack support for an algorithm.
+// Promise will be rejected on non-secure origins. (http://goo.gl/lq4gCo)
+try {
+  subtle.digest({ name: 'sha-1' }, new Uint8Array).catch(function () {
+    subtle = false
+  })
+} catch (err) { subtle = false }
+
+function sha1 (buf, cb) {
+  if (!subtle) {
+    // Use Rusha
+    setTimeout(cb, 0, sha1sync(buf))
+    return
+  }
+
+  if (typeof buf === 'string') {
+    buf = uint8array(buf)
+  }
+
+  subtle.digest({ name: 'sha-1' }, buf)
+    .then(function succeed (result) {
+      cb(hex(new Uint8Array(result)))
+    },
+    function fail (error) {
+      cb(sha1sync(buf))
+    })
+}
+
+function uint8array (s) {
+  var l = s.length
+  var array = new Uint8Array(l)
+  for (var i = 0; i < l; i++) {
+    array[i] = s.charCodeAt(i)
+  }
+  return array
+}
+
+function hex (buf) {
+  var l = buf.length
+  var chars = []
+  for (var i = 0; i < l; i++) {
+    var bite = buf[i]
+    chars.push((bite >>> 4).toString(16))
+    chars.push((bite & 0x0f).toString(16))
+  }
+  return chars.join('')
+}
+
+module.exports = sha1
+module.exports.sync = sha1sync
+
+},{"rusha":88}],94:[function(require,module,exports){
+(function (process){
+/* global WebSocket */
+
+module.exports = Socket
+
+var Buffer = require('safe-buffer').Buffer
+var debug = require('debug')('simple-websocket')
+var inherits = require('inherits')
+var randombytes = require('randombytes')
+var stream = require('readable-stream')
+var ws = require('ws') // websockets in node - will be empty object in browser
+
+var _WebSocket = typeof ws !== 'function' ? WebSocket : ws
+
+var MAX_BUFFERED_AMOUNT = 64 * 1024
+
+inherits(Socket, stream.Duplex)
+
+/**
+ * WebSocket. Same API as node core `net.Socket`. Duplex stream.
+ * @param {Object} opts
+ * @param {string=} opts.url websocket server url
+ * @param {string=} opts.socket raw websocket instance to wrap
+ */
+function Socket (opts) {
+  var self = this
+  if (!(self instanceof Socket)) return new Socket(opts)
+  if (!opts) opts = {}
+
+  // Support simple usage: `new Socket(url)`
+  if (typeof opts === 'string') {
+    opts = { url: opts }
+  }
+
+  if (opts.url == null && opts.socket == null) {
+    throw new Error('Missing required `url` or `socket` option')
+  }
+  if (opts.url != null && opts.socket != null) {
+    throw new Error('Must specify either `url` or `socket` option, not both')
+  }
+
+  self._id = randombytes(4).toString('hex').slice(0, 7)
+  self._debug('new websocket: %o', opts)
+
+  opts = Object.assign({
+    allowHalfOpen: false
+  }, opts)
+
+  stream.Duplex.call(self, opts)
+
+  self.connected = false
+  self.destroyed = false
+
+  self._chunk = null
+  self._cb = null
+  self._interval = null
+
+  if (opts.socket) {
+    self.url = opts.socket.url
+    self._ws = opts.socket
+  } else {
+    self.url = opts.url
+    try {
+      if (typeof ws === 'function') {
+        // `ws` package accepts options
+        self._ws = new _WebSocket(opts.url, opts)
+      } else {
+        self._ws = new _WebSocket(opts.url)
+      }
+    } catch (err) {
+      process.nextTick(function () {
+        self._destroy(err)
+      })
+      return
+    }
+  }
+
+  self._ws.binaryType = 'arraybuffer'
+  self._ws.onopen = function () {
+    self._onOpen()
+  }
+  self._ws.onmessage = function (event) {
+    self._onMessage(event)
+  }
+  self._ws.onclose = function () {
+    self._onClose()
+  }
+  self._ws.onerror = function () {
+    self._destroy(new Error('connection error to ' + self.url))
+  }
+
+  self._onFinishBound = function () {
+    self._onFinish()
+  }
+  self.once('finish', self._onFinishBound)
+}
+
+Socket.WEBSOCKET_SUPPORT = !!_WebSocket
+
+/**
+ * Send text/binary data to the WebSocket server.
+ * @param {TypedArrayView|ArrayBuffer|Buffer|string|Blob|Object} chunk
+ */
+Socket.prototype.send = function (chunk) {
+  this._ws.send(chunk)
+}
+
+Socket.prototype.destroy = function (onclose) {
+  this._destroy(null, onclose)
+}
+
+Socket.prototype._destroy = function (err, onclose) {
+  var self = this
+  if (self.destroyed) return
+  if (onclose) self.once('close', onclose)
+
+  self._debug('destroy (error: %s)', err && (err.message || err))
+
+  self.readable = self.writable = false
+  if (!self._readableState.ended) self.push(null)
+  if (!self._writableState.finished) self.end()
+
+  self.connected = false
+  self.destroyed = true
+
+  clearInterval(self._interval)
+  self._interval = null
+  self._chunk = null
+  self._cb = null
+
+  if (self._onFinishBound) self.removeListener('finish', self._onFinishBound)
+  self._onFinishBound = null
+
+  if (self._ws) {
+    var ws = self._ws
+    var onClose = function () {
+      ws.onclose = null
+    }
+    if (ws.readyState === _WebSocket.CLOSED) {
+      onClose()
+    } else {
+      try {
+        ws.onclose = onClose
+        ws.close()
+      } catch (err) {
+        onClose()
+      }
+    }
+
+    ws.onopen = null
+    ws.onmessage = null
+    ws.onerror = null
+  }
+  self._ws = null
+
+  if (err) self.emit('error', err)
+  self.emit('close')
+}
+
+Socket.prototype._read = function () {}
+
+Socket.prototype._write = function (chunk, encoding, cb) {
+  if (this.destroyed) return cb(new Error('cannot write after socket is destroyed'))
+
+  if (this.connected) {
+    try {
+      this.send(chunk)
+    } catch (err) {
+      return this._destroy(err)
+    }
+    if (typeof ws !== 'function' && this._ws.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+      this._debug('start backpressure: bufferedAmount %d', this._ws.bufferedAmount)
+      this._cb = cb
+    } else {
+      cb(null)
+    }
+  } else {
+    this._debug('write before connect')
+    this._chunk = chunk
+    this._cb = cb
+  }
+}
+
+// When stream finishes writing, close socket. Half open connections are not
+// supported.
+Socket.prototype._onFinish = function () {
+  var self = this
+  if (self.destroyed) return
+
+  if (self.connected) {
+    destroySoon()
+  } else {
+    self.once('connect', destroySoon)
+  }
+
+  // Wait a bit before destroying so the socket flushes.
+  // TODO: is there a more reliable way to accomplish this?
+  function destroySoon () {
+    setTimeout(function () {
+      self._destroy()
+    }, 1000)
+  }
+}
+
+Socket.prototype._onMessage = function (event) {
+  if (this.destroyed) return
+  var data = event.data
+  if (data instanceof ArrayBuffer) data = Buffer.from(data)
+  this.push(data)
+}
+
+Socket.prototype._onOpen = function () {
+  var self = this
+  if (self.connected || self.destroyed) return
+  self.connected = true
+
+  if (self._chunk) {
+    try {
+      self.send(self._chunk)
+    } catch (err) {
+      return self._destroy(err)
+    }
+    self._chunk = null
+    self._debug('sent chunk from "write before connect"')
+
+    var cb = self._cb
+    self._cb = null
+    cb(null)
+  }
+
+  // Backpressure is not implemented in Node.js. The `ws` module has a buggy
+  // `bufferedAmount` property. See: https://github.com/websockets/ws/issues/492
+  if (typeof ws !== 'function') {
+    self._interval = setInterval(function () {
+      self._onInterval()
+    }, 150)
+    if (self._interval.unref) self._interval.unref()
+  }
+
+  self._debug('connect')
+  self.emit('connect')
+}
+
+Socket.prototype._onInterval = function () {
+  if (!this._cb || !this._ws || this._ws.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+    return
+  }
+  this._debug('ending backpressure: bufferedAmount %d', this._ws.bufferedAmount)
+  var cb = this._cb
+  this._cb = null
+  cb(null)
+}
+
+Socket.prototype._onClose = function () {
+  if (this.destroyed) return
+  this._debug('on close')
+  this._destroy()
+}
+
+Socket.prototype._debug = function () {
+  var args = [].slice.call(arguments)
+  args[0] = '[' + this._id + '] ' + args[0]
+  debug.apply(null, args)
+}
+
+}).call(this,require('_process'))
+},{"_process":131,"debug":39,"inherits":48,"randombytes":73,"readable-stream":83,"safe-buffer":89,"ws":119}],95:[function(require,module,exports){
+var tick = 1
+var maxTick = 65535
+var resolution = 4
+var inc = function () {
+  tick = (tick + 1) & maxTick
+}
+
+var timer = setInterval(inc, (1000 / resolution) | 0)
+if (timer.unref) timer.unref()
+
+module.exports = function (seconds) {
+  var size = resolution * (seconds || 5)
+  var buffer = [0]
+  var pointer = 1
+  var last = (tick - 1) & maxTick
+
+  return function (delta) {
+    var dist = (tick - last) & maxTick
+    if (dist > size) dist = size
+    last = tick
+
+    while (dist--) {
+      if (pointer === size) pointer = 0
+      buffer[pointer] = buffer[pointer === 0 ? size - 1 : pointer - 1]
+      pointer++
+    }
+
+    if (delta) buffer[pointer - 1] += delta
+
+    var top = buffer[pointer - 1]
+    var btm = buffer.length < size ? 0 : buffer[pointer === size ? 0 : pointer]
+
+    return buffer.length < resolution ? top : (top - btm) * resolution / buffer.length
+  }
+}
+
+},{}],96:[function(require,module,exports){
 /* global URL */
 
 var getBlob = require('stream-to-blob')
@@ -14459,7 +18756,7 @@ module.exports = function getBlobURL (stream, mimeType, cb) {
   })
 }
 
-},{"stream-to-blob":69}],69:[function(require,module,exports){
+},{"stream-to-blob":97}],97:[function(require,module,exports){
 /* global Blob */
 
 var once = require('once')
@@ -14481,7 +18778,25 @@ module.exports = function getBlob (stream, mimeType, cb) {
     .on('error', cb)
 }
 
-},{"once":47}],70:[function(require,module,exports){
+},{"once":66}],98:[function(require,module,exports){
+(function (Buffer){
+var once = require('once')
+
+module.exports = function getBuffer (stream, length, cb) {
+  cb = once(cb)
+  var buf = new Buffer(length)
+  var offset = 0
+  stream
+    .on('data', function (chunk) {
+      chunk.copy(buf, offset)
+      offset += chunk.length
+    })
+    .on('end', function () { cb(null, buf) })
+    .on('error', cb)
+}
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":120,"once":66}],99:[function(require,module,exports){
 'use strict';
 
 var Buffer = require('safe-buffer').Buffer;
@@ -14754,66 +19069,167 @@ function simpleWrite(buf) {
 function simpleEnd(buf) {
   return buf && buf.length ? this.write(buf) : '';
 }
-},{"safe-buffer":67}],71:[function(require,module,exports){
-(function (process){
-'use strict'
+},{"safe-buffer":89}],100:[function(require,module,exports){
+/*                                                                              
+Copyright (c) 2011, Chris Umbel
 
-var nextTick = nextTickArgs
-process.nextTick(upgrade, 42) // pass 42 and see if upgrade is called with it
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-module.exports = thunky
+The above copyright notice and this permission notice shall be included in      
+all copies or substantial portions of the Software.
 
-function thunky (fn) {
-  var state = run
-  return thunk
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN 
+THE SOFTWARE.
+*/
 
-  function thunk (callback) {
-    state(callback || noop)
-  }
+var base32 = require('./thirty-two');
 
-  function run (callback) {
-    var stack = [callback]
-    state = wait
-    fn(done)
+exports.encode = base32.encode;
+exports.decode = base32.decode;
 
-    function wait (callback) {
-      stack.push(callback)
+},{"./thirty-two":101}],101:[function(require,module,exports){
+(function (Buffer){
+/*
+Copyright (c) 2011, Chris Umbel
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
+'use strict';
+
+var charTable = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+var byteTable = [
+    0xff, 0xff, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+    0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+    0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+    0x17, 0x18, 0x19, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+    0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+    0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+    0x17, 0x18, 0x19, 0xff, 0xff, 0xff, 0xff, 0xff
+];
+
+function quintetCount(buff) {
+    var quintets = Math.floor(buff.length / 5);
+    return buff.length % 5 === 0 ? quintets: quintets + 1;
+}
+
+exports.encode = function(plain) {
+    if(!Buffer.isBuffer(plain)){
+    	plain = new Buffer(plain);
+    }
+    var i = 0;
+    var j = 0;
+    var shiftIndex = 0;
+    var digit = 0;
+    var encoded = new Buffer(quintetCount(plain) * 8);
+
+    /* byte by byte isn't as pretty as quintet by quintet but tests a bit
+        faster. will have to revisit. */
+    while(i < plain.length) {
+        var current = plain[i];
+
+        if(shiftIndex > 3) {
+            digit = current & (0xff >> shiftIndex);
+            shiftIndex = (shiftIndex + 5) % 8;
+            digit = (digit << shiftIndex) | ((i + 1 < plain.length) ?
+                plain[i + 1] : 0) >> (8 - shiftIndex);
+            i++;
+        } else {
+            digit = (current >> (8 - (shiftIndex + 5))) & 0x1f;
+            shiftIndex = (shiftIndex + 5) % 8;
+            if(shiftIndex === 0) i++;
+        }
+
+        encoded[j] = charTable.charCodeAt(digit);
+        j++;
     }
 
-    function done (err) {
-      var args = arguments
-      state = isError(err) ? run : finished
-      while (stack.length) finished(stack.shift())
-
-      function finished (callback) {
-        nextTick(apply, callback, args)
-      }
+    for(i = j; i < encoded.length; i++) {
+        encoded[i] = 0x3d; //'='.charCodeAt(0)
     }
-  }
-}
 
-function isError (err) { // inlined from util so this works in the browser
-  return Object.prototype.toString.call(err) === '[object Error]'
-}
+    return encoded;
+};
 
-function noop () {}
+exports.decode = function(encoded) {
+    var shiftIndex = 0;
+    var plainDigit = 0;
+    var plainChar;
+    var plainPos = 0;
+    if(!Buffer.isBuffer(encoded)){
+    	encoded = new Buffer(encoded);
+    }
+    var decoded = new Buffer(Math.ceil(encoded.length * 5 / 8));
 
-function apply (callback, args) {
-  callback.apply(null, args)
-}
+    /* byte by byte isn't as pretty as octet by octet but tests a bit
+        faster. will have to revisit. */
+    for(var i = 0; i < encoded.length; i++) {
+    	if(encoded[i] === 0x3d){ //'='
+    		break;
+    	}
 
-function upgrade (val) {
-  if (val === 42) nextTick = process.nextTick
-}
+        var encodedByte = encoded[i] - 0x30;
 
-function nextTickArgs (fn, a, b) {
-  process.nextTick(function () {
-    fn(a, b)
-  })
-}
+        if(encodedByte < byteTable.length) {
+            plainDigit = byteTable[encodedByte];
 
-}).call(this,require('_process'))
-},{"_process":89}],72:[function(require,module,exports){
+            if(shiftIndex <= 3) {
+                shiftIndex = (shiftIndex + 5) % 8;
+
+                if(shiftIndex === 0) {
+                    plainChar |= plainDigit;
+                    decoded[plainPos] = plainChar;
+                    plainPos++;
+                    plainChar = 0;
+                } else {
+                    plainChar |= 0xff & (plainDigit << (8 - shiftIndex));
+                }
+            } else {
+                shiftIndex = (shiftIndex + 5) % 8;
+                plainChar |= 0xff & (plainDigit >>> shiftIndex);
+                decoded[plainPos] = plainChar;
+                plainPos++;
+
+                plainChar = 0xff & (plainDigit << (8 - shiftIndex));
+            }
+        } else {
+        	throw new Error('Invalid input - it is not base32 encoded string');
+        }
+    }
+
+    return decoded.slice(0, plainPos);
+};
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":120}],102:[function(require,module,exports){
 var Buffer = require('buffer').Buffer
 
 module.exports = function (buf) {
@@ -14842,7 +19258,345 @@ module.exports = function (buf) {
 	}
 }
 
-},{"buffer":82}],73:[function(require,module,exports){
+},{"buffer":120}],103:[function(require,module,exports){
+(function (process){
+module.exports = Discovery
+
+var debug = require('debug')('torrent-discovery')
+var DHT = require('bittorrent-dht/client') // empty object in browser
+var EventEmitter = require('events').EventEmitter
+var extend = require('xtend')
+var inherits = require('inherits')
+var parallel = require('run-parallel')
+var Tracker = require('bittorrent-tracker/client')
+
+inherits(Discovery, EventEmitter)
+
+function Discovery (opts) {
+  var self = this
+  if (!(self instanceof Discovery)) return new Discovery(opts)
+  EventEmitter.call(self)
+
+  if (!opts.peerId) throw new Error('Option `peerId` is required')
+  if (!opts.infoHash) throw new Error('Option `infoHash` is required')
+  if (!process.browser && !opts.port) throw new Error('Option `port` is required')
+
+  self.peerId = typeof opts.peerId === 'string'
+    ? opts.peerId
+    : opts.peerId.toString('hex')
+  self.infoHash = typeof opts.infoHash === 'string'
+    ? opts.infoHash
+    : opts.infoHash.toString('hex')
+  self._port = opts.port // torrent port
+  self._userAgent = opts.userAgent // User-Agent header for http requests
+
+  self.destroyed = false
+
+  self._announce = opts.announce || []
+  self._intervalMs = opts.intervalMs || (15 * 60 * 1000)
+  self._trackerOpts = null
+  self._dhtAnnouncing = false
+  self._dhtTimeout = false
+  self._internalDHT = false // is the DHT created internally?
+
+  self._onWarning = function (err) {
+    self.emit('warning', err)
+  }
+  self._onError = function (err) {
+    self.emit('error', err)
+  }
+  self._onDHTPeer = function (peer, infoHash) {
+    if (infoHash.toString('hex') !== self.infoHash) return
+    self.emit('peer', peer.host + ':' + peer.port, 'dht')
+  }
+  self._onTrackerPeer = function (peer) {
+    self.emit('peer', peer, 'tracker')
+  }
+  self._onTrackerAnnounce = function () {
+    self.emit('trackerAnnounce')
+  }
+
+  if (opts.tracker === false) {
+    self.tracker = null
+  } else if (opts.tracker && typeof opts.tracker === 'object') {
+    self._trackerOpts = extend(opts.tracker)
+    self.tracker = self._createTracker()
+  } else {
+    self.tracker = self._createTracker()
+  }
+
+  if (opts.dht === false || typeof DHT !== 'function') {
+    self.dht = null
+  } else if (opts.dht && typeof opts.dht.addNode === 'function') {
+    self.dht = opts.dht
+  } else if (opts.dht && typeof opts.dht === 'object') {
+    self.dht = createDHT(opts.dhtPort, opts.dht)
+  } else {
+    self.dht = createDHT(opts.dhtPort)
+  }
+
+  if (self.dht) {
+    self.dht.on('peer', self._onDHTPeer)
+    self._dhtAnnounce()
+  }
+
+  function createDHT (port, opts) {
+    var dht = new DHT(opts)
+    dht.on('warning', self._onWarning)
+    dht.on('error', self._onError)
+    dht.listen(port)
+    self._internalDHT = true
+    return dht
+  }
+}
+
+Discovery.prototype.updatePort = function (port) {
+  var self = this
+  if (port === self._port) return
+  self._port = port
+
+  if (self.dht) self._dhtAnnounce()
+
+  if (self.tracker) {
+    self.tracker.stop()
+    self.tracker.destroy(function () {
+      self.tracker = self._createTracker()
+    })
+  }
+}
+
+Discovery.prototype.complete = function (opts) {
+  if (this.tracker) {
+    this.tracker.complete(opts)
+  }
+}
+
+Discovery.prototype.destroy = function (cb) {
+  var self = this
+  if (self.destroyed) return
+  self.destroyed = true
+
+  clearTimeout(self._dhtTimeout)
+
+  var tasks = []
+
+  if (self.tracker) {
+    self.tracker.stop()
+    self.tracker.removeListener('warning', self._onWarning)
+    self.tracker.removeListener('error', self._onError)
+    self.tracker.removeListener('peer', self._onTrackerPeer)
+    self.tracker.removeListener('update', self._onTrackerAnnounce)
+    tasks.push(function (cb) {
+      self.tracker.destroy(cb)
+    })
+  }
+
+  if (self.dht) {
+    self.dht.removeListener('peer', self._onDHTPeer)
+  }
+
+  if (self._internalDHT) {
+    self.dht.removeListener('warning', self._onWarning)
+    self.dht.removeListener('error', self._onError)
+    tasks.push(function (cb) {
+      self.dht.destroy(cb)
+    })
+  }
+
+  parallel(tasks, cb)
+
+  // cleanup
+  self.dht = null
+  self.tracker = null
+  self._announce = null
+}
+
+Discovery.prototype._createTracker = function () {
+  var opts = extend(this._trackerOpts, {
+    infoHash: this.infoHash,
+    announce: this._announce,
+    peerId: this.peerId,
+    port: this._port,
+    userAgent: this._userAgent
+  })
+
+  var tracker = new Tracker(opts)
+  tracker.on('warning', this._onWarning)
+  tracker.on('error', this._onError)
+  tracker.on('peer', this._onTrackerPeer)
+  tracker.on('update', this._onTrackerAnnounce)
+  tracker.setInterval(this._intervalMs)
+  tracker.start()
+  return tracker
+}
+
+Discovery.prototype._dhtAnnounce = function () {
+  var self = this
+  if (self._dhtAnnouncing) return
+  debug('dht announce')
+
+  self._dhtAnnouncing = true
+  clearTimeout(self._dhtTimeout)
+
+  self.dht.announce(self.infoHash, self._port, function (err) {
+    self._dhtAnnouncing = false
+    debug('dht announce complete')
+
+    if (err) self.emit('warning', err)
+    self.emit('dhtAnnounce')
+
+    if (!self.destroyed) {
+      self._dhtTimeout = setTimeout(function () {
+        self._dhtAnnounce()
+      }, getRandomTimeout())
+      if (self._dhtTimeout.unref) self._dhtTimeout.unref()
+    }
+  })
+
+  // Returns timeout interval, with some random jitter
+  function getRandomTimeout () {
+    return self._intervalMs + Math.floor(Math.random() * self._intervalMs / 5)
+  }
+}
+
+}).call(this,require('_process'))
+},{"_process":131,"bittorrent-dht/client":119,"bittorrent-tracker/client":27,"debug":39,"events":123,"inherits":48,"run-parallel":87,"xtend":114}],104:[function(require,module,exports){
+(function (Buffer){
+module.exports = Piece
+
+var BLOCK_LENGTH = 1 << 14
+
+function Piece (length) {
+  if (!(this instanceof Piece)) return new Piece(length)
+
+  this.length = length
+  this.missing = length
+  this.sources = null
+
+  this._chunks = Math.ceil(length / BLOCK_LENGTH)
+  this._remainder = (length % BLOCK_LENGTH) || BLOCK_LENGTH
+  this._buffered = 0
+  this._buffer = null
+  this._cancellations = null
+  this._reservations = 0
+  this._flushed = false
+}
+
+Piece.BLOCK_LENGTH = BLOCK_LENGTH
+
+Piece.prototype.chunkLength = function (i) {
+  return i === this._chunks - 1 ? this._remainder : BLOCK_LENGTH
+}
+
+Piece.prototype.chunkLengthRemaining = function (i) {
+  return this.length - (i * BLOCK_LENGTH)
+}
+
+Piece.prototype.chunkOffset = function (i) {
+  return i * BLOCK_LENGTH
+}
+
+Piece.prototype.reserve = function () {
+  if (!this.init()) return -1
+  if (this._cancellations.length) return this._cancellations.pop()
+  if (this._reservations < this._chunks) return this._reservations++
+  return -1
+}
+
+Piece.prototype.reserveRemaining = function () {
+  if (!this.init()) return -1
+  if (this._reservations < this._chunks) {
+    var min = this._reservations
+    this._reservations = this._chunks
+    return min
+  }
+  return -1
+}
+
+Piece.prototype.cancel = function (i) {
+  if (!this.init()) return
+  this._cancellations.push(i)
+}
+
+Piece.prototype.cancelRemaining = function (i) {
+  if (!this.init()) return
+  this._reservations = i
+}
+
+Piece.prototype.get = function (i) {
+  if (!this.init()) return null
+  return this._buffer[i]
+}
+
+Piece.prototype.set = function (i, data, source) {
+  if (!this.init()) return false
+  var len = data.length
+  var blocks = Math.ceil(len / BLOCK_LENGTH)
+  for (var j = 0; j < blocks; j++) {
+    if (!this._buffer[i + j]) {
+      var offset = j * BLOCK_LENGTH
+      var splitData = data.slice(offset, offset + BLOCK_LENGTH)
+      this._buffered++
+      this._buffer[i + j] = splitData
+      this.missing -= splitData.length
+      if (this.sources.indexOf(source) === -1) {
+        this.sources.push(source)
+      }
+    }
+  }
+  return this._buffered === this._chunks
+}
+
+Piece.prototype.flush = function () {
+  if (!this._buffer || this._chunks !== this._buffered) return null
+  var buffer = Buffer.concat(this._buffer, this.length)
+  this._buffer = null
+  this._cancellations = null
+  this.sources = null
+  this._flushed = true
+  return buffer
+}
+
+Piece.prototype.init = function () {
+  if (this._flushed) return false
+  if (this._buffer) return true
+  this._buffer = new Array(this._chunks)
+  this._cancellations = []
+  this.sources = []
+  return true
+}
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":120}],105:[function(require,module,exports){
+(function (Buffer){
+/**
+ * Convert a typed array to a Buffer without a copy
+ *
+ * Author:   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
+ * License:  MIT
+ *
+ * `npm install typedarray-to-buffer`
+ */
+
+var isTypedArray = require('is-typedarray').strict
+
+module.exports = function typedarrayToBuffer (arr) {
+  if (isTypedArray(arr)) {
+    // To avoid a copy, use the typed array's underlying ArrayBuffer to back new Buffer
+    var buf = new Buffer(arr.buffer)
+    if (arr.byteLength !== arr.buffer.byteLength) {
+      // Respect the "view", i.e. byteOffset and byteLength, without doing a copy
+      buf = buf.slice(arr.byteOffset, arr.byteOffset + arr.byteLength)
+    }
+    return buf
+  } else {
+    // Pass through all other types to the `Buffer` constructor
+    return new Buffer(arr)
+  }
+}
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":120,"is-typedarray":51}],106:[function(require,module,exports){
 (function (Buffer){
 var UINT_32_MAX = 0xffffffff
 
@@ -14878,7 +19632,323 @@ exports.encode.bytes = 8
 exports.decode.bytes = 8
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":82}],74:[function(require,module,exports){
+},{"buffer":120}],107:[function(require,module,exports){
+"use strict"
+
+function unique_pred(list, compare) {
+  var ptr = 1
+    , len = list.length
+    , a=list[0], b=list[0]
+  for(var i=1; i<len; ++i) {
+    b = a
+    a = list[i]
+    if(compare(a, b)) {
+      if(i === ptr) {
+        ptr++
+        continue
+      }
+      list[ptr++] = a
+    }
+  }
+  list.length = ptr
+  return list
+}
+
+function unique_eq(list) {
+  var ptr = 1
+    , len = list.length
+    , a=list[0], b = list[0]
+  for(var i=1; i<len; ++i, b=a) {
+    b = a
+    a = list[i]
+    if(a !== b) {
+      if(i === ptr) {
+        ptr++
+        continue
+      }
+      list[ptr++] = a
+    }
+  }
+  list.length = ptr
+  return list
+}
+
+function unique(list, compare, sorted) {
+  if(list.length === 0) {
+    return list
+  }
+  if(compare) {
+    if(!sorted) {
+      list.sort(compare)
+    }
+    return unique_pred(list, compare)
+  }
+  if(!sorted) {
+    list.sort()
+  }
+  return unique_eq(list)
+}
+
+module.exports = unique
+
+},{}],108:[function(require,module,exports){
+module.exports = remove
+
+function remove (arr, i) {
+  if (i >= arr.length || i < 0) return
+  var last = arr.pop()
+  if (i < arr.length) {
+    var tmp = arr[i]
+    arr[i] = last
+    return tmp
+  }
+  return last
+}
+
+},{}],109:[function(require,module,exports){
+var bencode = require('bencode')
+var BitField = require('bitfield')
+var Buffer = require('safe-buffer').Buffer
+var debug = require('debug')('ut_metadata')
+var EventEmitter = require('events').EventEmitter
+var inherits = require('inherits')
+var sha1 = require('simple-sha1')
+
+var MAX_METADATA_SIZE = 10000000 // 10MB
+var BITFIELD_GROW = 1000
+var PIECE_LENGTH = 16 * 1024
+
+module.exports = function (metadata) {
+  inherits(utMetadata, EventEmitter)
+
+  function utMetadata (wire) {
+    EventEmitter.call(this)
+
+    this._wire = wire
+
+    this._metadataComplete = false
+    this._metadataSize = null
+    this._remainingRejects = null // how many reject messages to tolerate before quitting
+    this._fetching = false
+
+    // The largest .torrent file that I know of is ~1-2MB, which is ~100 pieces.
+    // Therefore, cap the bitfield to 10x that (1000 pieces) so a malicious peer can't
+    // make it grow to fill all memory.
+    this._bitfield = new BitField(0, { grow: BITFIELD_GROW })
+
+    if (Buffer.isBuffer(metadata)) {
+      this.setMetadata(metadata)
+    }
+  }
+
+  // Name of the bittorrent-protocol extension
+  utMetadata.prototype.name = 'ut_metadata'
+
+  utMetadata.prototype.onHandshake = function (infoHash, peerId, extensions) {
+    this._infoHash = infoHash
+  }
+
+  utMetadata.prototype.onExtendedHandshake = function (handshake) {
+    if (!handshake.m || !handshake.m.ut_metadata) {
+      return this.emit('warning', new Error('Peer does not support ut_metadata'))
+    }
+    if (!handshake.metadata_size) {
+      return this.emit('warning', new Error('Peer does not have metadata'))
+    }
+    if (typeof handshake.metadata_size !== 'number' ||
+        MAX_METADATA_SIZE < handshake.metadata_size ||
+        handshake.metadata_size <= 0) {
+      return this.emit('warning', new Error('Peer gave invalid metadata size'))
+    }
+
+    this._metadataSize = handshake.metadata_size
+    this._numPieces = Math.ceil(this._metadataSize / PIECE_LENGTH)
+    this._remainingRejects = this._numPieces * 2
+
+    if (this._fetching) {
+      this._requestPieces()
+    }
+  }
+
+  utMetadata.prototype.onMessage = function (buf) {
+    var dict, trailer
+    try {
+      var str = buf.toString()
+      var trailerIndex = str.indexOf('ee') + 2
+      dict = bencode.decode(str.substring(0, trailerIndex))
+      trailer = buf.slice(trailerIndex)
+    } catch (err) {
+      // drop invalid messages
+      return
+    }
+
+    switch (dict.msg_type) {
+      case 0:
+        // ut_metadata request (from peer)
+        // example: { 'msg_type': 0, 'piece': 0 }
+        this._onRequest(dict.piece)
+        break
+      case 1:
+        // ut_metadata data (in response to our request)
+        // example: { 'msg_type': 1, 'piece': 0, 'total_size': 3425 }
+        this._onData(dict.piece, trailer, dict.total_size)
+        break
+      case 2:
+        // ut_metadata reject (peer doesn't have piece we requested)
+        // { 'msg_type': 2, 'piece': 0 }
+        this._onReject(dict.piece)
+        break
+    }
+  }
+
+  /**
+   * Ask the peer to send metadata.
+   * @public
+   */
+  utMetadata.prototype.fetch = function () {
+    if (this._metadataComplete) {
+      return
+    }
+    this._fetching = true
+    if (this._metadataSize) {
+      this._requestPieces()
+    }
+  }
+
+  /**
+   * Stop asking the peer to send metadata.
+   * @public
+   */
+  utMetadata.prototype.cancel = function () {
+    this._fetching = false
+  }
+
+  utMetadata.prototype.setMetadata = function (metadata) {
+    if (this._metadataComplete) return true
+    debug('set metadata')
+
+    // if full torrent dictionary was passed in, pull out just `info` key
+    try {
+      var info = bencode.decode(metadata).info
+      if (info) {
+        metadata = bencode.encode(info)
+      }
+    } catch (err) {}
+
+    // check hash
+    if (this._infoHash && this._infoHash !== sha1.sync(metadata)) {
+      return false
+    }
+
+    this.cancel()
+
+    this.metadata = metadata
+    this._metadataComplete = true
+    this._metadataSize = this.metadata.length
+    this._wire.extendedHandshake.metadata_size = this._metadataSize
+
+    this.emit('metadata', bencode.encode({ info: bencode.decode(this.metadata) }))
+
+    return true
+  }
+
+  utMetadata.prototype._send = function (dict, trailer) {
+    var buf = bencode.encode(dict)
+    if (Buffer.isBuffer(trailer)) {
+      buf = Buffer.concat([buf, trailer])
+    }
+    this._wire.extended('ut_metadata', buf)
+  }
+
+  utMetadata.prototype._request = function (piece) {
+    this._send({ msg_type: 0, piece: piece })
+  }
+
+  utMetadata.prototype._data = function (piece, buf, totalSize) {
+    var msg = { msg_type: 1, piece: piece }
+    if (typeof totalSize === 'number') {
+      msg.total_size = totalSize
+    }
+    this._send(msg, buf)
+  }
+
+  utMetadata.prototype._reject = function (piece) {
+    this._send({ msg_type: 2, piece: piece })
+  }
+
+  utMetadata.prototype._onRequest = function (piece) {
+    if (!this._metadataComplete) {
+      this._reject(piece)
+      return
+    }
+    var start = piece * PIECE_LENGTH
+    var end = start + PIECE_LENGTH
+    if (end > this._metadataSize) {
+      end = this._metadataSize
+    }
+    var buf = this.metadata.slice(start, end)
+    this._data(piece, buf, this._metadataSize)
+  }
+
+  utMetadata.prototype._onData = function (piece, buf, totalSize) {
+    if (buf.length > PIECE_LENGTH) {
+      return
+    }
+    buf.copy(this.metadata, piece * PIECE_LENGTH)
+    this._bitfield.set(piece)
+    this._checkDone()
+  }
+
+  utMetadata.prototype._onReject = function (piece) {
+    if (this._remainingRejects > 0 && this._fetching) {
+      // If we haven't been rejected too much, then try to request the piece again
+      this._request(piece)
+      this._remainingRejects -= 1
+    } else {
+      this.emit('warning', new Error('Peer sent "reject" too much'))
+    }
+  }
+
+  utMetadata.prototype._requestPieces = function () {
+    this.metadata = Buffer.alloc(this._metadataSize)
+    for (var piece = 0; piece < this._numPieces; piece++) {
+      this._request(piece)
+    }
+  }
+
+  utMetadata.prototype._checkDone = function () {
+    var done = true
+    for (var piece = 0; piece < this._numPieces; piece++) {
+      if (!this._bitfield.get(piece)) {
+        done = false
+        break
+      }
+    }
+    if (!done) return
+
+    // attempt to set metadata -- may fail sha1 check
+    var success = this.setMetadata(this.metadata)
+
+    if (!success) {
+      this._failedMetadata()
+    }
+  }
+
+  utMetadata.prototype._failedMetadata = function () {
+    // reset bitfield & try again
+    this._bitfield = new BitField(0, { grow: BITFIELD_GROW })
+    this._remainingRejects -= this._numPieces
+    if (this._remainingRejects > 0) {
+      this._requestPieces()
+    } else {
+      this.emit('warning', new Error('Peer sent invalid metadata'))
+    }
+  }
+
+  return utMetadata
+}
+
+},{"bencode":23,"bitfield":25,"debug":39,"events":123,"inherits":48,"safe-buffer":89,"simple-sha1":93}],110:[function(require,module,exports){
 (function (global){
 
 /**
@@ -14949,7 +20019,7 @@ function config (name) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],75:[function(require,module,exports){
+},{}],111:[function(require,module,exports){
 (function (Buffer){
 var bs = require('binary-search')
 var EventEmitter = require('events').EventEmitter
@@ -15424,7 +20494,7 @@ MP4Remuxer.prototype._generateMoof = function (track, firstSample, lastSample) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"binary-search":13,"buffer":82,"events":84,"inherits":33,"mp4-box-encoding":41,"mp4-stream":44,"range-slice-stream":53}],76:[function(require,module,exports){
+},{"binary-search":24,"buffer":120,"events":123,"inherits":48,"mp4-box-encoding":59,"mp4-stream":62,"range-slice-stream":74}],112:[function(require,module,exports){
 var MediaElementWrapper = require('mediasource')
 var pump = require('pump')
 
@@ -15549,7 +20619,7 @@ VideoStream.prototype.destroy = function () {
 	self._elem.src = ''
 }
 
-},{"./mp4-remuxer":75,"mediasource":36,"pump":50}],77:[function(require,module,exports){
+},{"./mp4-remuxer":111,"mediasource":55,"pump":71}],113:[function(require,module,exports){
 // Returns a wrapper function that returns a wrapped callback
 // The wrapper function should do some stuff, and return a
 // presumably different callback function.
@@ -15584,720 +20654,252 @@ function wrappy (fn, cb) {
   }
 }
 
-},{}],78:[function(require,module,exports){
+},{}],114:[function(require,module,exports){
+module.exports = extend
 
-},{}],79:[function(require,module,exports){
-(function (global){
-'use strict';
+var hasOwnProperty = Object.prototype.hasOwnProperty;
 
-// compare and isBuffer taken from https://github.com/feross/buffer/blob/680e9e5e488f22aac27599a57dc844a6315928dd/index.js
-// original notice:
+function extend() {
+    var target = {}
 
-/*!
- * The buffer module from node.js, for the browser.
- *
- * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
- * @license  MIT
+    for (var i = 0; i < arguments.length; i++) {
+        var source = arguments[i]
+
+        for (var key in source) {
+            if (hasOwnProperty.call(source, key)) {
+                target[key] = source[key]
+            }
+        }
+    }
+
+    return target
+}
+
+},{}],115:[function(require,module,exports){
+module.exports = extend
+
+var hasOwnProperty = Object.prototype.hasOwnProperty;
+
+function extend(target) {
+    for (var i = 1; i < arguments.length; i++) {
+        var source = arguments[i]
+
+        for (var key in source) {
+            if (hasOwnProperty.call(source, key)) {
+                target[key] = source[key]
+            }
+        }
+    }
+
+    return target
+}
+
+},{}],116:[function(require,module,exports){
+/**
+ * Given a number, return a zero-filled string.
+ * From http://stackoverflow.com/questions/1267283/
+ * @param  {number} width
+ * @param  {number} number
+ * @return {string}
  */
-function compare(a, b) {
-  if (a === b) {
-    return 0;
-  }
-
-  var x = a.length;
-  var y = b.length;
-
-  for (var i = 0, len = Math.min(x, y); i < len; ++i) {
-    if (a[i] !== b[i]) {
-      x = a[i];
-      y = b[i];
-      break;
+module.exports = function zeroFill (width, number, pad) {
+  if (number === undefined) {
+    return function (number, pad) {
+      return zeroFill(width, number, pad)
     }
   }
-
-  if (x < y) {
-    return -1;
-  }
-  if (y < x) {
-    return 1;
-  }
-  return 0;
-}
-function isBuffer(b) {
-  if (global.Buffer && typeof global.Buffer.isBuffer === 'function') {
-    return global.Buffer.isBuffer(b);
-  }
-  return !!(b != null && b._isBuffer);
+  if (pad === undefined) pad = '0'
+  width -= number.toString().length
+  if (width > 0) return new Array(width + (/\./.test(number) ? 2 : 1)).join(pad) + number
+  return number + ''
 }
 
-// based on node assert, original notice:
+},{}],117:[function(require,module,exports){
 
-// http://wiki.commonjs.org/wiki/Unit_Testing/1.0
+},{}],118:[function(require,module,exports){
+arguments[4][20][0].apply(exports,arguments)
+},{"dup":20}],119:[function(require,module,exports){
+arguments[4][117][0].apply(exports,arguments)
+},{"dup":117}],120:[function(require,module,exports){
+arguments[4][34][0].apply(exports,arguments)
+},{"base64-js":118,"dup":34,"ieee754":125}],121:[function(require,module,exports){
+module.exports = {
+  "100": "Continue",
+  "101": "Switching Protocols",
+  "102": "Processing",
+  "200": "OK",
+  "201": "Created",
+  "202": "Accepted",
+  "203": "Non-Authoritative Information",
+  "204": "No Content",
+  "205": "Reset Content",
+  "206": "Partial Content",
+  "207": "Multi-Status",
+  "208": "Already Reported",
+  "226": "IM Used",
+  "300": "Multiple Choices",
+  "301": "Moved Permanently",
+  "302": "Found",
+  "303": "See Other",
+  "304": "Not Modified",
+  "305": "Use Proxy",
+  "307": "Temporary Redirect",
+  "308": "Permanent Redirect",
+  "400": "Bad Request",
+  "401": "Unauthorized",
+  "402": "Payment Required",
+  "403": "Forbidden",
+  "404": "Not Found",
+  "405": "Method Not Allowed",
+  "406": "Not Acceptable",
+  "407": "Proxy Authentication Required",
+  "408": "Request Timeout",
+  "409": "Conflict",
+  "410": "Gone",
+  "411": "Length Required",
+  "412": "Precondition Failed",
+  "413": "Payload Too Large",
+  "414": "URI Too Long",
+  "415": "Unsupported Media Type",
+  "416": "Range Not Satisfiable",
+  "417": "Expectation Failed",
+  "418": "I'm a teapot",
+  "421": "Misdirected Request",
+  "422": "Unprocessable Entity",
+  "423": "Locked",
+  "424": "Failed Dependency",
+  "425": "Unordered Collection",
+  "426": "Upgrade Required",
+  "428": "Precondition Required",
+  "429": "Too Many Requests",
+  "431": "Request Header Fields Too Large",
+  "451": "Unavailable For Legal Reasons",
+  "500": "Internal Server Error",
+  "501": "Not Implemented",
+  "502": "Bad Gateway",
+  "503": "Service Unavailable",
+  "504": "Gateway Timeout",
+  "505": "HTTP Version Not Supported",
+  "506": "Variant Also Negotiates",
+  "507": "Insufficient Storage",
+  "508": "Loop Detected",
+  "509": "Bandwidth Limit Exceeded",
+  "510": "Not Extended",
+  "511": "Network Authentication Required"
+}
+
+},{}],122:[function(require,module,exports){
+(function (Buffer){
+// Copyright Joyent, Inc. and other Node contributors.
 //
-// THIS IS NOT TESTED NOR LIKELY TO WORK OUTSIDE V8!
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
 //
-// Originally from narwhal.js (http://narwhaljs.org)
-// Copyright (c) 2009 Thomas Robinson <280north.com>
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
 //
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the 'Software'), to
-// deal in the Software without restriction, including without limitation the
-// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
-// sell copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
-// ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var util = require('util/');
-var hasOwn = Object.prototype.hasOwnProperty;
-var pSlice = Array.prototype.slice;
-var functionsHaveNames = (function () {
-  return function foo() {}.name === 'foo';
-}());
-function pToString (obj) {
-  return Object.prototype.toString.call(obj);
+// NOTE: These type checking functions intentionally don't use `instanceof`
+// because it is fragile and can be easily faked with `Object.create()`.
+
+function isArray(arg) {
+  if (Array.isArray) {
+    return Array.isArray(arg);
+  }
+  return objectToString(arg) === '[object Array]';
 }
-function isView(arrbuf) {
-  if (isBuffer(arrbuf)) {
-    return false;
-  }
-  if (typeof global.ArrayBuffer !== 'function') {
-    return false;
-  }
-  if (typeof ArrayBuffer.isView === 'function') {
-    return ArrayBuffer.isView(arrbuf);
-  }
-  if (!arrbuf) {
-    return false;
-  }
-  if (arrbuf instanceof DataView) {
-    return true;
-  }
-  if (arrbuf.buffer && arrbuf.buffer instanceof ArrayBuffer) {
-    return true;
-  }
-  return false;
+exports.isArray = isArray;
+
+function isBoolean(arg) {
+  return typeof arg === 'boolean';
 }
-// 1. The assert module provides functions that throw
-// AssertionError's when particular conditions are not met. The
-// assert module must conform to the following interface.
+exports.isBoolean = isBoolean;
 
-var assert = module.exports = ok;
-
-// 2. The AssertionError is defined in assert.
-// new assert.AssertionError({ message: message,
-//                             actual: actual,
-//                             expected: expected })
-
-var regex = /\s*function\s+([^\(\s]*)\s*/;
-// based on https://github.com/ljharb/function.prototype.name/blob/adeeeec8bfcc6068b187d7d9fb3d5bb1d3a30899/implementation.js
-function getName(func) {
-  if (!util.isFunction(func)) {
-    return;
-  }
-  if (functionsHaveNames) {
-    return func.name;
-  }
-  var str = func.toString();
-  var match = str.match(regex);
-  return match && match[1];
+function isNull(arg) {
+  return arg === null;
 }
-assert.AssertionError = function AssertionError(options) {
-  this.name = 'AssertionError';
-  this.actual = options.actual;
-  this.expected = options.expected;
-  this.operator = options.operator;
-  if (options.message) {
-    this.message = options.message;
-    this.generatedMessage = false;
-  } else {
-    this.message = getMessage(this);
-    this.generatedMessage = true;
-  }
-  var stackStartFunction = options.stackStartFunction || fail;
-  if (Error.captureStackTrace) {
-    Error.captureStackTrace(this, stackStartFunction);
-  } else {
-    // non v8 browsers so we can have a stacktrace
-    var err = new Error();
-    if (err.stack) {
-      var out = err.stack;
+exports.isNull = isNull;
 
-      // try to strip useless frames
-      var fn_name = getName(stackStartFunction);
-      var idx = out.indexOf('\n' + fn_name);
-      if (idx >= 0) {
-        // once we have located the function frame
-        // we need to strip out everything before it (and its line)
-        var next_line = out.indexOf('\n', idx + 1);
-        out = out.substring(next_line + 1);
-      }
-
-      this.stack = out;
-    }
-  }
-};
-
-// assert.AssertionError instanceof Error
-util.inherits(assert.AssertionError, Error);
-
-function truncate(s, n) {
-  if (typeof s === 'string') {
-    return s.length < n ? s : s.slice(0, n);
-  } else {
-    return s;
-  }
+function isNullOrUndefined(arg) {
+  return arg == null;
 }
-function inspect(something) {
-  if (functionsHaveNames || !util.isFunction(something)) {
-    return util.inspect(something);
-  }
-  var rawname = getName(something);
-  var name = rawname ? ': ' + rawname : '';
-  return '[Function' +  name + ']';
+exports.isNullOrUndefined = isNullOrUndefined;
+
+function isNumber(arg) {
+  return typeof arg === 'number';
 }
-function getMessage(self) {
-  return truncate(inspect(self.actual), 128) + ' ' +
-         self.operator + ' ' +
-         truncate(inspect(self.expected), 128);
+exports.isNumber = isNumber;
+
+function isString(arg) {
+  return typeof arg === 'string';
+}
+exports.isString = isString;
+
+function isSymbol(arg) {
+  return typeof arg === 'symbol';
+}
+exports.isSymbol = isSymbol;
+
+function isUndefined(arg) {
+  return arg === void 0;
+}
+exports.isUndefined = isUndefined;
+
+function isRegExp(re) {
+  return objectToString(re) === '[object RegExp]';
+}
+exports.isRegExp = isRegExp;
+
+function isObject(arg) {
+  return typeof arg === 'object' && arg !== null;
+}
+exports.isObject = isObject;
+
+function isDate(d) {
+  return objectToString(d) === '[object Date]';
+}
+exports.isDate = isDate;
+
+function isError(e) {
+  return (objectToString(e) === '[object Error]' || e instanceof Error);
+}
+exports.isError = isError;
+
+function isFunction(arg) {
+  return typeof arg === 'function';
+}
+exports.isFunction = isFunction;
+
+function isPrimitive(arg) {
+  return arg === null ||
+         typeof arg === 'boolean' ||
+         typeof arg === 'number' ||
+         typeof arg === 'string' ||
+         typeof arg === 'symbol' ||  // ES6 symbol
+         typeof arg === 'undefined';
+}
+exports.isPrimitive = isPrimitive;
+
+exports.isBuffer = Buffer.isBuffer;
+
+function objectToString(o) {
+  return Object.prototype.toString.call(o);
 }
 
-// At present only the three keys mentioned above are used and
-// understood by the spec. Implementations or sub modules can pass
-// other keys to the AssertionError's constructor - they will be
-// ignored.
-
-// 3. All of the following functions must throw an AssertionError
-// when a corresponding condition is not met, with a message that
-// may be undefined if not provided.  All assertion methods provide
-// both the actual and expected values to the assertion error for
-// display purposes.
-
-function fail(actual, expected, message, operator, stackStartFunction) {
-  throw new assert.AssertionError({
-    message: message,
-    actual: actual,
-    expected: expected,
-    operator: operator,
-    stackStartFunction: stackStartFunction
-  });
-}
-
-// EXTENSION! allows for well behaved errors defined elsewhere.
-assert.fail = fail;
-
-// 4. Pure assertion tests whether a value is truthy, as determined
-// by !!guard.
-// assert.ok(guard, message_opt);
-// This statement is equivalent to assert.equal(true, !!guard,
-// message_opt);. To test strictly for the value true, use
-// assert.strictEqual(true, guard, message_opt);.
-
-function ok(value, message) {
-  if (!value) fail(value, true, message, '==', assert.ok);
-}
-assert.ok = ok;
-
-// 5. The equality assertion tests shallow, coercive equality with
-// ==.
-// assert.equal(actual, expected, message_opt);
-
-assert.equal = function equal(actual, expected, message) {
-  if (actual != expected) fail(actual, expected, message, '==', assert.equal);
-};
-
-// 6. The non-equality assertion tests for whether two objects are not equal
-// with != assert.notEqual(actual, expected, message_opt);
-
-assert.notEqual = function notEqual(actual, expected, message) {
-  if (actual == expected) {
-    fail(actual, expected, message, '!=', assert.notEqual);
-  }
-};
-
-// 7. The equivalence assertion tests a deep equality relation.
-// assert.deepEqual(actual, expected, message_opt);
-
-assert.deepEqual = function deepEqual(actual, expected, message) {
-  if (!_deepEqual(actual, expected, false)) {
-    fail(actual, expected, message, 'deepEqual', assert.deepEqual);
-  }
-};
-
-assert.deepStrictEqual = function deepStrictEqual(actual, expected, message) {
-  if (!_deepEqual(actual, expected, true)) {
-    fail(actual, expected, message, 'deepStrictEqual', assert.deepStrictEqual);
-  }
-};
-
-function _deepEqual(actual, expected, strict, memos) {
-  // 7.1. All identical values are equivalent, as determined by ===.
-  if (actual === expected) {
-    return true;
-  } else if (isBuffer(actual) && isBuffer(expected)) {
-    return compare(actual, expected) === 0;
-
-  // 7.2. If the expected value is a Date object, the actual value is
-  // equivalent if it is also a Date object that refers to the same time.
-  } else if (util.isDate(actual) && util.isDate(expected)) {
-    return actual.getTime() === expected.getTime();
-
-  // 7.3 If the expected value is a RegExp object, the actual value is
-  // equivalent if it is also a RegExp object with the same source and
-  // properties (`global`, `multiline`, `lastIndex`, `ignoreCase`).
-  } else if (util.isRegExp(actual) && util.isRegExp(expected)) {
-    return actual.source === expected.source &&
-           actual.global === expected.global &&
-           actual.multiline === expected.multiline &&
-           actual.lastIndex === expected.lastIndex &&
-           actual.ignoreCase === expected.ignoreCase;
-
-  // 7.4. Other pairs that do not both pass typeof value == 'object',
-  // equivalence is determined by ==.
-  } else if ((actual === null || typeof actual !== 'object') &&
-             (expected === null || typeof expected !== 'object')) {
-    return strict ? actual === expected : actual == expected;
-
-  // If both values are instances of typed arrays, wrap their underlying
-  // ArrayBuffers in a Buffer each to increase performance
-  // This optimization requires the arrays to have the same type as checked by
-  // Object.prototype.toString (aka pToString). Never perform binary
-  // comparisons for Float*Arrays, though, since e.g. +0 === -0 but their
-  // bit patterns are not identical.
-  } else if (isView(actual) && isView(expected) &&
-             pToString(actual) === pToString(expected) &&
-             !(actual instanceof Float32Array ||
-               actual instanceof Float64Array)) {
-    return compare(new Uint8Array(actual.buffer),
-                   new Uint8Array(expected.buffer)) === 0;
-
-  // 7.5 For all other Object pairs, including Array objects, equivalence is
-  // determined by having the same number of owned properties (as verified
-  // with Object.prototype.hasOwnProperty.call), the same set of keys
-  // (although not necessarily the same order), equivalent values for every
-  // corresponding key, and an identical 'prototype' property. Note: this
-  // accounts for both named and indexed properties on Arrays.
-  } else if (isBuffer(actual) !== isBuffer(expected)) {
-    return false;
-  } else {
-    memos = memos || {actual: [], expected: []};
-
-    var actualIndex = memos.actual.indexOf(actual);
-    if (actualIndex !== -1) {
-      if (actualIndex === memos.expected.indexOf(expected)) {
-        return true;
-      }
-    }
-
-    memos.actual.push(actual);
-    memos.expected.push(expected);
-
-    return objEquiv(actual, expected, strict, memos);
-  }
-}
-
-function isArguments(object) {
-  return Object.prototype.toString.call(object) == '[object Arguments]';
-}
-
-function objEquiv(a, b, strict, actualVisitedObjects) {
-  if (a === null || a === undefined || b === null || b === undefined)
-    return false;
-  // if one is a primitive, the other must be same
-  if (util.isPrimitive(a) || util.isPrimitive(b))
-    return a === b;
-  if (strict && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
-    return false;
-  var aIsArgs = isArguments(a);
-  var bIsArgs = isArguments(b);
-  if ((aIsArgs && !bIsArgs) || (!aIsArgs && bIsArgs))
-    return false;
-  if (aIsArgs) {
-    a = pSlice.call(a);
-    b = pSlice.call(b);
-    return _deepEqual(a, b, strict);
-  }
-  var ka = objectKeys(a);
-  var kb = objectKeys(b);
-  var key, i;
-  // having the same number of owned properties (keys incorporates
-  // hasOwnProperty)
-  if (ka.length !== kb.length)
-    return false;
-  //the same set of keys (although not necessarily the same order),
-  ka.sort();
-  kb.sort();
-  //~~~cheap key test
-  for (i = ka.length - 1; i >= 0; i--) {
-    if (ka[i] !== kb[i])
-      return false;
-  }
-  //equivalent values for every corresponding key, and
-  //~~~possibly expensive deep test
-  for (i = ka.length - 1; i >= 0; i--) {
-    key = ka[i];
-    if (!_deepEqual(a[key], b[key], strict, actualVisitedObjects))
-      return false;
-  }
-  return true;
-}
-
-// 8. The non-equivalence assertion tests for any deep inequality.
-// assert.notDeepEqual(actual, expected, message_opt);
-
-assert.notDeepEqual = function notDeepEqual(actual, expected, message) {
-  if (_deepEqual(actual, expected, false)) {
-    fail(actual, expected, message, 'notDeepEqual', assert.notDeepEqual);
-  }
-};
-
-assert.notDeepStrictEqual = notDeepStrictEqual;
-function notDeepStrictEqual(actual, expected, message) {
-  if (_deepEqual(actual, expected, true)) {
-    fail(actual, expected, message, 'notDeepStrictEqual', notDeepStrictEqual);
-  }
-}
-
-
-// 9. The strict equality assertion tests strict equality, as determined by ===.
-// assert.strictEqual(actual, expected, message_opt);
-
-assert.strictEqual = function strictEqual(actual, expected, message) {
-  if (actual !== expected) {
-    fail(actual, expected, message, '===', assert.strictEqual);
-  }
-};
-
-// 10. The strict non-equality assertion tests for strict inequality, as
-// determined by !==.  assert.notStrictEqual(actual, expected, message_opt);
-
-assert.notStrictEqual = function notStrictEqual(actual, expected, message) {
-  if (actual === expected) {
-    fail(actual, expected, message, '!==', assert.notStrictEqual);
-  }
-};
-
-function expectedException(actual, expected) {
-  if (!actual || !expected) {
-    return false;
-  }
-
-  if (Object.prototype.toString.call(expected) == '[object RegExp]') {
-    return expected.test(actual);
-  }
-
-  try {
-    if (actual instanceof expected) {
-      return true;
-    }
-  } catch (e) {
-    // Ignore.  The instanceof check doesn't work for arrow functions.
-  }
-
-  if (Error.isPrototypeOf(expected)) {
-    return false;
-  }
-
-  return expected.call({}, actual) === true;
-}
-
-function _tryBlock(block) {
-  var error;
-  try {
-    block();
-  } catch (e) {
-    error = e;
-  }
-  return error;
-}
-
-function _throws(shouldThrow, block, expected, message) {
-  var actual;
-
-  if (typeof block !== 'function') {
-    throw new TypeError('"block" argument must be a function');
-  }
-
-  if (typeof expected === 'string') {
-    message = expected;
-    expected = null;
-  }
-
-  actual = _tryBlock(block);
-
-  message = (expected && expected.name ? ' (' + expected.name + ').' : '.') +
-            (message ? ' ' + message : '.');
-
-  if (shouldThrow && !actual) {
-    fail(actual, expected, 'Missing expected exception' + message);
-  }
-
-  var userProvidedMessage = typeof message === 'string';
-  var isUnwantedException = !shouldThrow && util.isError(actual);
-  var isUnexpectedException = !shouldThrow && actual && !expected;
-
-  if ((isUnwantedException &&
-      userProvidedMessage &&
-      expectedException(actual, expected)) ||
-      isUnexpectedException) {
-    fail(actual, expected, 'Got unwanted exception' + message);
-  }
-
-  if ((shouldThrow && actual && expected &&
-      !expectedException(actual, expected)) || (!shouldThrow && actual)) {
-    throw actual;
-  }
-}
-
-// 11. Expected to throw an error:
-// assert.throws(block, Error_opt, message_opt);
-
-assert.throws = function(block, /*optional*/error, /*optional*/message) {
-  _throws(true, block, error, message);
-};
-
-// EXTENSION! This is annoying to write outside this module.
-assert.doesNotThrow = function(block, /*optional*/error, /*optional*/message) {
-  _throws(false, block, error, message);
-};
-
-assert.ifError = function(err) { if (err) throw err; };
-
-var objectKeys = Object.keys || function (obj) {
-  var keys = [];
-  for (var key in obj) {
-    if (hasOwn.call(obj, key)) keys.push(key);
-  }
-  return keys;
-};
-
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"util/":98}],80:[function(require,module,exports){
-arguments[4][12][0].apply(exports,arguments)
-},{"dup":12}],81:[function(require,module,exports){
-arguments[4][78][0].apply(exports,arguments)
-},{"dup":78}],82:[function(require,module,exports){
-arguments[4][18][0].apply(exports,arguments)
-},{"base64-js":80,"dup":18,"ieee754":85}],83:[function(require,module,exports){
-module.exports={
-  "O_RDONLY": 0,
-  "O_WRONLY": 1,
-  "O_RDWR": 2,
-  "S_IFMT": 61440,
-  "S_IFREG": 32768,
-  "S_IFDIR": 16384,
-  "S_IFCHR": 8192,
-  "S_IFBLK": 24576,
-  "S_IFIFO": 4096,
-  "S_IFLNK": 40960,
-  "S_IFSOCK": 49152,
-  "O_CREAT": 512,
-  "O_EXCL": 2048,
-  "O_NOCTTY": 131072,
-  "O_TRUNC": 1024,
-  "O_APPEND": 8,
-  "O_DIRECTORY": 1048576,
-  "O_NOFOLLOW": 256,
-  "O_SYNC": 128,
-  "O_SYMLINK": 2097152,
-  "O_NONBLOCK": 4,
-  "S_IRWXU": 448,
-  "S_IRUSR": 256,
-  "S_IWUSR": 128,
-  "S_IXUSR": 64,
-  "S_IRWXG": 56,
-  "S_IRGRP": 32,
-  "S_IWGRP": 16,
-  "S_IXGRP": 8,
-  "S_IRWXO": 7,
-  "S_IROTH": 4,
-  "S_IWOTH": 2,
-  "S_IXOTH": 1,
-  "E2BIG": 7,
-  "EACCES": 13,
-  "EADDRINUSE": 48,
-  "EADDRNOTAVAIL": 49,
-  "EAFNOSUPPORT": 47,
-  "EAGAIN": 35,
-  "EALREADY": 37,
-  "EBADF": 9,
-  "EBADMSG": 94,
-  "EBUSY": 16,
-  "ECANCELED": 89,
-  "ECHILD": 10,
-  "ECONNABORTED": 53,
-  "ECONNREFUSED": 61,
-  "ECONNRESET": 54,
-  "EDEADLK": 11,
-  "EDESTADDRREQ": 39,
-  "EDOM": 33,
-  "EDQUOT": 69,
-  "EEXIST": 17,
-  "EFAULT": 14,
-  "EFBIG": 27,
-  "EHOSTUNREACH": 65,
-  "EIDRM": 90,
-  "EILSEQ": 92,
-  "EINPROGRESS": 36,
-  "EINTR": 4,
-  "EINVAL": 22,
-  "EIO": 5,
-  "EISCONN": 56,
-  "EISDIR": 21,
-  "ELOOP": 62,
-  "EMFILE": 24,
-  "EMLINK": 31,
-  "EMSGSIZE": 40,
-  "EMULTIHOP": 95,
-  "ENAMETOOLONG": 63,
-  "ENETDOWN": 50,
-  "ENETRESET": 52,
-  "ENETUNREACH": 51,
-  "ENFILE": 23,
-  "ENOBUFS": 55,
-  "ENODATA": 96,
-  "ENODEV": 19,
-  "ENOENT": 2,
-  "ENOEXEC": 8,
-  "ENOLCK": 77,
-  "ENOLINK": 97,
-  "ENOMEM": 12,
-  "ENOMSG": 91,
-  "ENOPROTOOPT": 42,
-  "ENOSPC": 28,
-  "ENOSR": 98,
-  "ENOSTR": 99,
-  "ENOSYS": 78,
-  "ENOTCONN": 57,
-  "ENOTDIR": 20,
-  "ENOTEMPTY": 66,
-  "ENOTSOCK": 38,
-  "ENOTSUP": 45,
-  "ENOTTY": 25,
-  "ENXIO": 6,
-  "EOPNOTSUPP": 102,
-  "EOVERFLOW": 84,
-  "EPERM": 1,
-  "EPIPE": 32,
-  "EPROTO": 100,
-  "EPROTONOSUPPORT": 43,
-  "EPROTOTYPE": 41,
-  "ERANGE": 34,
-  "EROFS": 30,
-  "ESPIPE": 29,
-  "ESRCH": 3,
-  "ESTALE": 70,
-  "ETIME": 101,
-  "ETIMEDOUT": 60,
-  "ETXTBSY": 26,
-  "EWOULDBLOCK": 35,
-  "EXDEV": 18,
-  "SIGHUP": 1,
-  "SIGINT": 2,
-  "SIGQUIT": 3,
-  "SIGILL": 4,
-  "SIGTRAP": 5,
-  "SIGABRT": 6,
-  "SIGIOT": 6,
-  "SIGBUS": 10,
-  "SIGFPE": 8,
-  "SIGKILL": 9,
-  "SIGUSR1": 30,
-  "SIGSEGV": 11,
-  "SIGUSR2": 31,
-  "SIGPIPE": 13,
-  "SIGALRM": 14,
-  "SIGTERM": 15,
-  "SIGCHLD": 20,
-  "SIGCONT": 19,
-  "SIGSTOP": 17,
-  "SIGTSTP": 18,
-  "SIGTTIN": 21,
-  "SIGTTOU": 22,
-  "SIGURG": 16,
-  "SIGXCPU": 24,
-  "SIGXFSZ": 25,
-  "SIGVTALRM": 26,
-  "SIGPROF": 27,
-  "SIGWINCH": 28,
-  "SIGIO": 23,
-  "SIGSYS": 12,
-  "SSL_OP_ALL": 2147486719,
-  "SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION": 262144,
-  "SSL_OP_CIPHER_SERVER_PREFERENCE": 4194304,
-  "SSL_OP_CISCO_ANYCONNECT": 32768,
-  "SSL_OP_COOKIE_EXCHANGE": 8192,
-  "SSL_OP_CRYPTOPRO_TLSEXT_BUG": 2147483648,
-  "SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS": 2048,
-  "SSL_OP_EPHEMERAL_RSA": 0,
-  "SSL_OP_LEGACY_SERVER_CONNECT": 4,
-  "SSL_OP_MICROSOFT_BIG_SSLV3_BUFFER": 32,
-  "SSL_OP_MICROSOFT_SESS_ID_BUG": 1,
-  "SSL_OP_MSIE_SSLV2_RSA_PADDING": 0,
-  "SSL_OP_NETSCAPE_CA_DN_BUG": 536870912,
-  "SSL_OP_NETSCAPE_CHALLENGE_BUG": 2,
-  "SSL_OP_NETSCAPE_DEMO_CIPHER_CHANGE_BUG": 1073741824,
-  "SSL_OP_NETSCAPE_REUSE_CIPHER_CHANGE_BUG": 8,
-  "SSL_OP_NO_COMPRESSION": 131072,
-  "SSL_OP_NO_QUERY_MTU": 4096,
-  "SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION": 65536,
-  "SSL_OP_NO_SSLv2": 16777216,
-  "SSL_OP_NO_SSLv3": 33554432,
-  "SSL_OP_NO_TICKET": 16384,
-  "SSL_OP_NO_TLSv1": 67108864,
-  "SSL_OP_NO_TLSv1_1": 268435456,
-  "SSL_OP_NO_TLSv1_2": 134217728,
-  "SSL_OP_PKCS1_CHECK_1": 0,
-  "SSL_OP_PKCS1_CHECK_2": 0,
-  "SSL_OP_SINGLE_DH_USE": 1048576,
-  "SSL_OP_SINGLE_ECDH_USE": 524288,
-  "SSL_OP_SSLEAY_080_CLIENT_DH_BUG": 128,
-  "SSL_OP_SSLREF2_REUSE_CERT_TYPE_BUG": 0,
-  "SSL_OP_TLS_BLOCK_PADDING_BUG": 512,
-  "SSL_OP_TLS_D5_BUG": 256,
-  "SSL_OP_TLS_ROLLBACK_BUG": 8388608,
-  "ENGINE_METHOD_DSA": 2,
-  "ENGINE_METHOD_DH": 4,
-  "ENGINE_METHOD_RAND": 8,
-  "ENGINE_METHOD_ECDH": 16,
-  "ENGINE_METHOD_ECDSA": 32,
-  "ENGINE_METHOD_CIPHERS": 64,
-  "ENGINE_METHOD_DIGESTS": 128,
-  "ENGINE_METHOD_STORE": 256,
-  "ENGINE_METHOD_PKEY_METHS": 512,
-  "ENGINE_METHOD_PKEY_ASN1_METHS": 1024,
-  "ENGINE_METHOD_ALL": 65535,
-  "ENGINE_METHOD_NONE": 0,
-  "DH_CHECK_P_NOT_SAFE_PRIME": 2,
-  "DH_CHECK_P_NOT_PRIME": 1,
-  "DH_UNABLE_TO_CHECK_GENERATOR": 4,
-  "DH_NOT_SUITABLE_GENERATOR": 8,
-  "NPN_ENABLED": 1,
-  "RSA_PKCS1_PADDING": 1,
-  "RSA_SSLV23_PADDING": 2,
-  "RSA_NO_PADDING": 3,
-  "RSA_PKCS1_OAEP_PADDING": 4,
-  "RSA_X931_PADDING": 5,
-  "RSA_PKCS1_PSS_PADDING": 6,
-  "POINT_CONVERSION_COMPRESSED": 2,
-  "POINT_CONVERSION_UNCOMPRESSED": 4,
-  "POINT_CONVERSION_HYBRID": 6,
-  "F_OK": 0,
-  "R_OK": 4,
-  "W_OK": 2,
-  "X_OK": 1,
-  "UV_UDP_REUSEADDR": 4
-}
-
-},{}],84:[function(require,module,exports){
+}).call(this,{"isBuffer":require("../../is-buffer/index.js")})
+},{"../../is-buffer/index.js":127}],123:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -16601,9 +21203,44 @@ function isUndefined(arg) {
   return arg === void 0;
 }
 
-},{}],85:[function(require,module,exports){
-arguments[4][30][0].apply(exports,arguments)
-},{"dup":30}],86:[function(require,module,exports){
+},{}],124:[function(require,module,exports){
+var http = require('http')
+var url = require('url')
+
+var https = module.exports
+
+for (var key in http) {
+  if (http.hasOwnProperty(key)) https[key] = http[key]
+}
+
+https.request = function (params, cb) {
+  params = validateParams(params)
+  return http.request.call(this, params, cb)
+}
+
+https.get = function (params, cb) {
+  params = validateParams(params)
+  return http.get.call(this, params, cb)
+}
+
+function validateParams (params) {
+  if (typeof params === 'string') {
+    params = url.parse(params)
+  }
+  if (!params.protocol) {
+    params.protocol = 'https:'
+  }
+  if (params.protocol !== 'https:') {
+    throw new Error('Protocol "' + params.protocol + '" not supported. Expected "https:"')
+  }
+  return params
+}
+
+},{"http":146,"url":152}],125:[function(require,module,exports){
+arguments[4][46][0].apply(exports,arguments)
+},{"dup":46}],126:[function(require,module,exports){
+arguments[4][48][0].apply(exports,arguments)
+},{"dup":48}],127:[function(require,module,exports){
 /*!
  * Determine if an object is a Buffer
  *
@@ -16626,54 +21263,9 @@ function isSlowBuffer (obj) {
   return typeof obj.readFloatLE === 'function' && typeof obj.slice === 'function' && isBuffer(obj.slice(0, 0))
 }
 
-},{}],87:[function(require,module,exports){
-exports.endianness = function () { return 'LE' };
-
-exports.hostname = function () {
-    if (typeof location !== 'undefined') {
-        return location.hostname
-    }
-    else return '';
-};
-
-exports.loadavg = function () { return [] };
-
-exports.uptime = function () { return 0 };
-
-exports.freemem = function () {
-    return Number.MAX_VALUE;
-};
-
-exports.totalmem = function () {
-    return Number.MAX_VALUE;
-};
-
-exports.cpus = function () { return [] };
-
-exports.type = function () { return 'Browser' };
-
-exports.release = function () {
-    if (typeof navigator !== 'undefined') {
-        return navigator.appVersion;
-    }
-    return '';
-};
-
-exports.networkInterfaces
-= exports.getNetworkInterfaces
-= function () { return {} };
-
-exports.arch = function () { return 'javascript' };
-
-exports.platform = function () { return 'browser' };
-
-exports.tmpdir = exports.tmpDir = function () {
-    return '/tmp';
-};
-
-exports.EOL = '\n';
-
-},{}],88:[function(require,module,exports){
+},{}],128:[function(require,module,exports){
+arguments[4][52][0].apply(exports,arguments)
+},{"dup":52}],129:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -16901,7 +21493,9 @@ var substr = 'ab'.substr(-1) === 'b'
 ;
 
 }).call(this,require('_process'))
-},{"_process":89}],89:[function(require,module,exports){
+},{"_process":131}],130:[function(require,module,exports){
+arguments[4][70][0].apply(exports,arguments)
+},{"_process":131,"dup":70}],131:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -17087,7 +21681,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],90:[function(require,module,exports){
+},{}],132:[function(require,module,exports){
 (function (global){
 /*! https://mths.be/punycode v1.4.1 by @mathias */
 ;(function(root) {
@@ -17624,7 +22218,7 @@ process.umask = function() { return 0; };
 }(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],91:[function(require,module,exports){
+},{}],133:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -17710,7 +22304,7 @@ var isArray = Array.isArray || function (xs) {
   return Object.prototype.toString.call(xs) === '[object Array]';
 };
 
-},{}],92:[function(require,module,exports){
+},{}],134:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -17797,13 +22391,688 @@ var objectKeys = Object.keys || function (obj) {
   return res;
 };
 
-},{}],93:[function(require,module,exports){
+},{}],135:[function(require,module,exports){
 'use strict';
 
 exports.decode = exports.parse = require('./decode');
 exports.encode = exports.stringify = require('./encode');
 
-},{"./decode":91,"./encode":92}],94:[function(require,module,exports){
+},{"./decode":133,"./encode":134}],136:[function(require,module,exports){
+arguments[4][75][0].apply(exports,arguments)
+},{"./_stream_readable":138,"./_stream_writable":140,"core-util-is":122,"dup":75,"inherits":126,"process-nextick-args":130}],137:[function(require,module,exports){
+arguments[4][76][0].apply(exports,arguments)
+},{"./_stream_transform":139,"core-util-is":122,"dup":76,"inherits":126}],138:[function(require,module,exports){
+arguments[4][77][0].apply(exports,arguments)
+},{"./_stream_duplex":136,"./internal/streams/BufferList":141,"./internal/streams/destroy":142,"./internal/streams/stream":143,"_process":131,"core-util-is":122,"dup":77,"events":123,"inherits":126,"isarray":128,"process-nextick-args":130,"safe-buffer":145,"string_decoder/":150,"util":119}],139:[function(require,module,exports){
+arguments[4][78][0].apply(exports,arguments)
+},{"./_stream_duplex":136,"core-util-is":122,"dup":78,"inherits":126}],140:[function(require,module,exports){
+arguments[4][79][0].apply(exports,arguments)
+},{"./_stream_duplex":136,"./internal/streams/destroy":142,"./internal/streams/stream":143,"_process":131,"core-util-is":122,"dup":79,"inherits":126,"process-nextick-args":130,"safe-buffer":145,"util-deprecate":154}],141:[function(require,module,exports){
+arguments[4][80][0].apply(exports,arguments)
+},{"dup":80,"safe-buffer":145}],142:[function(require,module,exports){
+arguments[4][81][0].apply(exports,arguments)
+},{"dup":81,"process-nextick-args":130}],143:[function(require,module,exports){
+arguments[4][82][0].apply(exports,arguments)
+},{"dup":82,"events":123}],144:[function(require,module,exports){
+arguments[4][83][0].apply(exports,arguments)
+},{"./lib/_stream_duplex.js":136,"./lib/_stream_passthrough.js":137,"./lib/_stream_readable.js":138,"./lib/_stream_transform.js":139,"./lib/_stream_writable.js":140,"dup":83}],145:[function(require,module,exports){
+arguments[4][89][0].apply(exports,arguments)
+},{"buffer":120,"dup":89}],146:[function(require,module,exports){
+(function (global){
+var ClientRequest = require('./lib/request')
+var extend = require('xtend')
+var statusCodes = require('builtin-status-codes')
+var url = require('url')
+
+var http = exports
+
+http.request = function (opts, cb) {
+	if (typeof opts === 'string')
+		opts = url.parse(opts)
+	else
+		opts = extend(opts)
+
+	// Normally, the page is loaded from http or https, so not specifying a protocol
+	// will result in a (valid) protocol-relative url. However, this won't work if
+	// the protocol is something else, like 'file:'
+	var defaultProtocol = global.location.protocol.search(/^https?:$/) === -1 ? 'http:' : ''
+
+	var protocol = opts.protocol || defaultProtocol
+	var host = opts.hostname || opts.host
+	var port = opts.port
+	var path = opts.path || '/'
+
+	// Necessary for IPv6 addresses
+	if (host && host.indexOf(':') !== -1)
+		host = '[' + host + ']'
+
+	// This may be a relative url. The browser should always be able to interpret it correctly.
+	opts.url = (host ? (protocol + '//' + host) : '') + (port ? ':' + port : '') + path
+	opts.method = (opts.method || 'GET').toUpperCase()
+	opts.headers = opts.headers || {}
+
+	// Also valid opts.auth, opts.mode
+
+	var req = new ClientRequest(opts)
+	if (cb)
+		req.on('response', cb)
+	return req
+}
+
+http.get = function get (opts, cb) {
+	var req = http.request(opts, cb)
+	req.end()
+	return req
+}
+
+http.Agent = function () {}
+http.Agent.defaultMaxSockets = 4
+
+http.STATUS_CODES = statusCodes
+
+http.METHODS = [
+	'CHECKOUT',
+	'CONNECT',
+	'COPY',
+	'DELETE',
+	'GET',
+	'HEAD',
+	'LOCK',
+	'M-SEARCH',
+	'MERGE',
+	'MKACTIVITY',
+	'MKCOL',
+	'MOVE',
+	'NOTIFY',
+	'OPTIONS',
+	'PATCH',
+	'POST',
+	'PROPFIND',
+	'PROPPATCH',
+	'PURGE',
+	'PUT',
+	'REPORT',
+	'SEARCH',
+	'SUBSCRIBE',
+	'TRACE',
+	'UNLOCK',
+	'UNSUBSCRIBE'
+]
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"./lib/request":148,"builtin-status-codes":121,"url":152,"xtend":155}],147:[function(require,module,exports){
+(function (global){
+exports.fetch = isFunction(global.fetch) && isFunction(global.ReadableStream)
+
+exports.blobConstructor = false
+try {
+	new Blob([new ArrayBuffer(1)])
+	exports.blobConstructor = true
+} catch (e) {}
+
+// The xhr request to example.com may violate some restrictive CSP configurations,
+// so if we're running in a browser that supports `fetch`, avoid calling getXHR()
+// and assume support for certain features below.
+var xhr
+function getXHR () {
+	// Cache the xhr value
+	if (xhr !== undefined) return xhr
+
+	if (global.XMLHttpRequest) {
+		xhr = new global.XMLHttpRequest()
+		// If XDomainRequest is available (ie only, where xhr might not work
+		// cross domain), use the page location. Otherwise use example.com
+		// Note: this doesn't actually make an http request.
+		try {
+			xhr.open('GET', global.XDomainRequest ? '/' : 'https://example.com')
+		} catch(e) {
+			xhr = null
+		}
+	} else {
+		// Service workers don't have XHR
+		xhr = null
+	}
+	return xhr
+}
+
+function checkTypeSupport (type) {
+	var xhr = getXHR()
+	if (!xhr) return false
+	try {
+		xhr.responseType = type
+		return xhr.responseType === type
+	} catch (e) {}
+	return false
+}
+
+// For some strange reason, Safari 7.0 reports typeof global.ArrayBuffer === 'object'.
+// Safari 7.1 appears to have fixed this bug.
+var haveArrayBuffer = typeof global.ArrayBuffer !== 'undefined'
+var haveSlice = haveArrayBuffer && isFunction(global.ArrayBuffer.prototype.slice)
+
+// If fetch is supported, then arraybuffer will be supported too. Skip calling
+// checkTypeSupport(), since that calls getXHR().
+exports.arraybuffer = exports.fetch || (haveArrayBuffer && checkTypeSupport('arraybuffer'))
+
+// These next two tests unavoidably show warnings in Chrome. Since fetch will always
+// be used if it's available, just return false for these to avoid the warnings.
+exports.msstream = !exports.fetch && haveSlice && checkTypeSupport('ms-stream')
+exports.mozchunkedarraybuffer = !exports.fetch && haveArrayBuffer &&
+	checkTypeSupport('moz-chunked-arraybuffer')
+
+// If fetch is supported, then overrideMimeType will be supported too. Skip calling
+// getXHR().
+exports.overrideMimeType = exports.fetch || (getXHR() ? isFunction(getXHR().overrideMimeType) : false)
+
+exports.vbArray = isFunction(global.VBArray)
+
+function isFunction (value) {
+	return typeof value === 'function'
+}
+
+xhr = null // Help gc
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{}],148:[function(require,module,exports){
+(function (process,global,Buffer){
+var capability = require('./capability')
+var inherits = require('inherits')
+var response = require('./response')
+var stream = require('readable-stream')
+var toArrayBuffer = require('to-arraybuffer')
+
+var IncomingMessage = response.IncomingMessage
+var rStates = response.readyStates
+
+function decideMode (preferBinary, useFetch) {
+	if (capability.fetch && useFetch) {
+		return 'fetch'
+	} else if (capability.mozchunkedarraybuffer) {
+		return 'moz-chunked-arraybuffer'
+	} else if (capability.msstream) {
+		return 'ms-stream'
+	} else if (capability.arraybuffer && preferBinary) {
+		return 'arraybuffer'
+	} else if (capability.vbArray && preferBinary) {
+		return 'text:vbarray'
+	} else {
+		return 'text'
+	}
+}
+
+var ClientRequest = module.exports = function (opts) {
+	var self = this
+	stream.Writable.call(self)
+
+	self._opts = opts
+	self._body = []
+	self._headers = {}
+	if (opts.auth)
+		self.setHeader('Authorization', 'Basic ' + new Buffer(opts.auth).toString('base64'))
+	Object.keys(opts.headers).forEach(function (name) {
+		self.setHeader(name, opts.headers[name])
+	})
+
+	var preferBinary
+	var useFetch = true
+	if (opts.mode === 'disable-fetch' || 'timeout' in opts) {
+		// If the use of XHR should be preferred and includes preserving the 'content-type' header.
+		// Force XHR to be used since the Fetch API does not yet support timeouts.
+		useFetch = false
+		preferBinary = true
+	} else if (opts.mode === 'prefer-streaming') {
+		// If streaming is a high priority but binary compatibility and
+		// the accuracy of the 'content-type' header aren't
+		preferBinary = false
+	} else if (opts.mode === 'allow-wrong-content-type') {
+		// If streaming is more important than preserving the 'content-type' header
+		preferBinary = !capability.overrideMimeType
+	} else if (!opts.mode || opts.mode === 'default' || opts.mode === 'prefer-fast') {
+		// Use binary if text streaming may corrupt data or the content-type header, or for speed
+		preferBinary = true
+	} else {
+		throw new Error('Invalid value for opts.mode')
+	}
+	self._mode = decideMode(preferBinary, useFetch)
+
+	self.on('finish', function () {
+		self._onFinish()
+	})
+}
+
+inherits(ClientRequest, stream.Writable)
+
+ClientRequest.prototype.setHeader = function (name, value) {
+	var self = this
+	var lowerName = name.toLowerCase()
+	// This check is not necessary, but it prevents warnings from browsers about setting unsafe
+	// headers. To be honest I'm not entirely sure hiding these warnings is a good thing, but
+	// http-browserify did it, so I will too.
+	if (unsafeHeaders.indexOf(lowerName) !== -1)
+		return
+
+	self._headers[lowerName] = {
+		name: name,
+		value: value
+	}
+}
+
+ClientRequest.prototype.getHeader = function (name) {
+	var header = this._headers[name.toLowerCase()]
+	if (header)
+		return header.value
+	return null
+}
+
+ClientRequest.prototype.removeHeader = function (name) {
+	var self = this
+	delete self._headers[name.toLowerCase()]
+}
+
+ClientRequest.prototype._onFinish = function () {
+	var self = this
+
+	if (self._destroyed)
+		return
+	var opts = self._opts
+
+	var headersObj = self._headers
+	var body = null
+	if (opts.method !== 'GET' && opts.method !== 'HEAD') {
+		if (capability.blobConstructor) {
+			body = new global.Blob(self._body.map(function (buffer) {
+				return toArrayBuffer(buffer)
+			}), {
+				type: (headersObj['content-type'] || {}).value || ''
+			})
+		} else {
+			// get utf8 string
+			body = Buffer.concat(self._body).toString()
+		}
+	}
+
+	// create flattened list of headers
+	var headersList = []
+	Object.keys(headersObj).forEach(function (keyName) {
+		var name = headersObj[keyName].name
+		var value = headersObj[keyName].value
+		if (Array.isArray(value)) {
+			value.forEach(function (v) {
+				headersList.push([name, v])
+			})
+		} else {
+			headersList.push([name, value])
+		}
+	})
+
+	if (self._mode === 'fetch') {
+		global.fetch(self._opts.url, {
+			method: self._opts.method,
+			headers: headersList,
+			body: body || undefined,
+			mode: 'cors',
+			credentials: opts.withCredentials ? 'include' : 'same-origin'
+		}).then(function (response) {
+			self._fetchResponse = response
+			self._connect()
+		}, function (reason) {
+			self.emit('error', reason)
+		})
+	} else {
+		var xhr = self._xhr = new global.XMLHttpRequest()
+		try {
+			xhr.open(self._opts.method, self._opts.url, true)
+		} catch (err) {
+			process.nextTick(function () {
+				self.emit('error', err)
+			})
+			return
+		}
+
+		// Can't set responseType on really old browsers
+		if ('responseType' in xhr)
+			xhr.responseType = self._mode.split(':')[0]
+
+		if ('withCredentials' in xhr)
+			xhr.withCredentials = !!opts.withCredentials
+
+		if (self._mode === 'text' && 'overrideMimeType' in xhr)
+			xhr.overrideMimeType('text/plain; charset=x-user-defined')
+
+		if ('timeout' in opts) {
+			xhr.timeout = opts.timeout
+			xhr.ontimeout = function () {
+				self.emit('timeout')
+			}
+		}
+
+		headersList.forEach(function (header) {
+			xhr.setRequestHeader(header[0], header[1])
+		})
+
+		self._response = null
+		xhr.onreadystatechange = function () {
+			switch (xhr.readyState) {
+				case rStates.LOADING:
+				case rStates.DONE:
+					self._onXHRProgress()
+					break
+			}
+		}
+		// Necessary for streaming in Firefox, since xhr.response is ONLY defined
+		// in onprogress, not in onreadystatechange with xhr.readyState = 3
+		if (self._mode === 'moz-chunked-arraybuffer') {
+			xhr.onprogress = function () {
+				self._onXHRProgress()
+			}
+		}
+
+		xhr.onerror = function () {
+			if (self._destroyed)
+				return
+			self.emit('error', new Error('XHR error'))
+		}
+
+		try {
+			xhr.send(body)
+		} catch (err) {
+			process.nextTick(function () {
+				self.emit('error', err)
+			})
+			return
+		}
+	}
+}
+
+/**
+ * Checks if xhr.status is readable and non-zero, indicating no error.
+ * Even though the spec says it should be available in readyState 3,
+ * accessing it throws an exception in IE8
+ */
+function statusValid (xhr) {
+	try {
+		var status = xhr.status
+		return (status !== null && status !== 0)
+	} catch (e) {
+		return false
+	}
+}
+
+ClientRequest.prototype._onXHRProgress = function () {
+	var self = this
+
+	if (!statusValid(self._xhr) || self._destroyed)
+		return
+
+	if (!self._response)
+		self._connect()
+
+	self._response._onXHRProgress()
+}
+
+ClientRequest.prototype._connect = function () {
+	var self = this
+
+	if (self._destroyed)
+		return
+
+	self._response = new IncomingMessage(self._xhr, self._fetchResponse, self._mode)
+	self._response.on('error', function(err) {
+		self.emit('error', err)
+	})
+
+	self.emit('response', self._response)
+}
+
+ClientRequest.prototype._write = function (chunk, encoding, cb) {
+	var self = this
+
+	self._body.push(chunk)
+	cb()
+}
+
+ClientRequest.prototype.abort = ClientRequest.prototype.destroy = function () {
+	var self = this
+	self._destroyed = true
+	if (self._response)
+		self._response._destroyed = true
+	if (self._xhr)
+		self._xhr.abort()
+	// Currently, there isn't a way to truly abort a fetch.
+	// If you like bikeshedding, see https://github.com/whatwg/fetch/issues/27
+}
+
+ClientRequest.prototype.end = function (data, encoding, cb) {
+	var self = this
+	if (typeof data === 'function') {
+		cb = data
+		data = undefined
+	}
+
+	stream.Writable.prototype.end.call(self, data, encoding, cb)
+}
+
+ClientRequest.prototype.flushHeaders = function () {}
+ClientRequest.prototype.setTimeout = function () {}
+ClientRequest.prototype.setNoDelay = function () {}
+ClientRequest.prototype.setSocketKeepAlive = function () {}
+
+// Taken from http://www.w3.org/TR/XMLHttpRequest/#the-setrequestheader%28%29-method
+var unsafeHeaders = [
+	'accept-charset',
+	'accept-encoding',
+	'access-control-request-headers',
+	'access-control-request-method',
+	'connection',
+	'content-length',
+	'cookie',
+	'cookie2',
+	'date',
+	'dnt',
+	'expect',
+	'host',
+	'keep-alive',
+	'origin',
+	'referer',
+	'te',
+	'trailer',
+	'transfer-encoding',
+	'upgrade',
+	'user-agent',
+	'via'
+]
+
+}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},require("buffer").Buffer)
+},{"./capability":147,"./response":149,"_process":131,"buffer":120,"inherits":126,"readable-stream":144,"to-arraybuffer":151}],149:[function(require,module,exports){
+(function (process,global,Buffer){
+var capability = require('./capability')
+var inherits = require('inherits')
+var stream = require('readable-stream')
+
+var rStates = exports.readyStates = {
+	UNSENT: 0,
+	OPENED: 1,
+	HEADERS_RECEIVED: 2,
+	LOADING: 3,
+	DONE: 4
+}
+
+var IncomingMessage = exports.IncomingMessage = function (xhr, response, mode) {
+	var self = this
+	stream.Readable.call(self)
+
+	self._mode = mode
+	self.headers = {}
+	self.rawHeaders = []
+	self.trailers = {}
+	self.rawTrailers = []
+
+	// Fake the 'close' event, but only once 'end' fires
+	self.on('end', function () {
+		// The nextTick is necessary to prevent the 'request' module from causing an infinite loop
+		process.nextTick(function () {
+			self.emit('close')
+		})
+	})
+
+	if (mode === 'fetch') {
+		self._fetchResponse = response
+
+		self.url = response.url
+		self.statusCode = response.status
+		self.statusMessage = response.statusText
+		
+		response.headers.forEach(function(header, key){
+			self.headers[key.toLowerCase()] = header
+			self.rawHeaders.push(key, header)
+		})
+
+
+		// TODO: this doesn't respect backpressure. Once WritableStream is available, this can be fixed
+		var reader = response.body.getReader()
+		function read () {
+			reader.read().then(function (result) {
+				if (self._destroyed)
+					return
+				if (result.done) {
+					self.push(null)
+					return
+				}
+				self.push(new Buffer(result.value))
+				read()
+			}).catch(function(err) {
+				self.emit('error', err)
+			})
+		}
+		read()
+
+	} else {
+		self._xhr = xhr
+		self._pos = 0
+
+		self.url = xhr.responseURL
+		self.statusCode = xhr.status
+		self.statusMessage = xhr.statusText
+		var headers = xhr.getAllResponseHeaders().split(/\r?\n/)
+		headers.forEach(function (header) {
+			var matches = header.match(/^([^:]+):\s*(.*)/)
+			if (matches) {
+				var key = matches[1].toLowerCase()
+				if (key === 'set-cookie') {
+					if (self.headers[key] === undefined) {
+						self.headers[key] = []
+					}
+					self.headers[key].push(matches[2])
+				} else if (self.headers[key] !== undefined) {
+					self.headers[key] += ', ' + matches[2]
+				} else {
+					self.headers[key] = matches[2]
+				}
+				self.rawHeaders.push(matches[1], matches[2])
+			}
+		})
+
+		self._charset = 'x-user-defined'
+		if (!capability.overrideMimeType) {
+			var mimeType = self.rawHeaders['mime-type']
+			if (mimeType) {
+				var charsetMatch = mimeType.match(/;\s*charset=([^;])(;|$)/)
+				if (charsetMatch) {
+					self._charset = charsetMatch[1].toLowerCase()
+				}
+			}
+			if (!self._charset)
+				self._charset = 'utf-8' // best guess
+		}
+	}
+}
+
+inherits(IncomingMessage, stream.Readable)
+
+IncomingMessage.prototype._read = function () {}
+
+IncomingMessage.prototype._onXHRProgress = function () {
+	var self = this
+
+	var xhr = self._xhr
+
+	var response = null
+	switch (self._mode) {
+		case 'text:vbarray': // For IE9
+			if (xhr.readyState !== rStates.DONE)
+				break
+			try {
+				// This fails in IE8
+				response = new global.VBArray(xhr.responseBody).toArray()
+			} catch (e) {}
+			if (response !== null) {
+				self.push(new Buffer(response))
+				break
+			}
+			// Falls through in IE8	
+		case 'text':
+			try { // This will fail when readyState = 3 in IE9. Switch mode and wait for readyState = 4
+				response = xhr.responseText
+			} catch (e) {
+				self._mode = 'text:vbarray'
+				break
+			}
+			if (response.length > self._pos) {
+				var newData = response.substr(self._pos)
+				if (self._charset === 'x-user-defined') {
+					var buffer = new Buffer(newData.length)
+					for (var i = 0; i < newData.length; i++)
+						buffer[i] = newData.charCodeAt(i) & 0xff
+
+					self.push(buffer)
+				} else {
+					self.push(newData, self._charset)
+				}
+				self._pos = response.length
+			}
+			break
+		case 'arraybuffer':
+			if (xhr.readyState !== rStates.DONE || !xhr.response)
+				break
+			response = xhr.response
+			self.push(new Buffer(new Uint8Array(response)))
+			break
+		case 'moz-chunked-arraybuffer': // take whole
+			response = xhr.response
+			if (xhr.readyState !== rStates.LOADING || !response)
+				break
+			self.push(new Buffer(new Uint8Array(response)))
+			break
+		case 'ms-stream':
+			response = xhr.response
+			if (xhr.readyState !== rStates.LOADING)
+				break
+			var reader = new global.MSStreamReader()
+			reader.onprogress = function () {
+				if (reader.result.byteLength > self._pos) {
+					self.push(new Buffer(new Uint8Array(reader.result.slice(self._pos))))
+					self._pos = reader.result.byteLength
+				}
+			}
+			reader.onload = function () {
+				self.push(null)
+			}
+			// reader.onerror = ??? // TODO: this
+			reader.readAsArrayBuffer(response)
+			break
+	}
+
+	// The ms-stream case handles end separately in reader.onload()
+	if (self._xhr.readyState === rStates.DONE && self._mode !== 'ms-stream') {
+		self.push(null)
+	}
+}
+
+}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},require("buffer").Buffer)
+},{"./capability":147,"_process":131,"buffer":120,"inherits":126,"readable-stream":144}],150:[function(require,module,exports){
+arguments[4][99][0].apply(exports,arguments)
+},{"dup":99,"safe-buffer":145}],151:[function(require,module,exports){
+arguments[4][102][0].apply(exports,arguments)
+},{"buffer":120,"dup":102}],152:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -18537,7 +23806,7 @@ Url.prototype.parseHost = function() {
   if (host) this.hostname = host;
 };
 
-},{"./util":95,"punycode":90,"querystring":93}],95:[function(require,module,exports){
+},{"./util":153,"punycode":132,"querystring":135}],153:[function(require,module,exports){
 'use strict';
 
 module.exports = {
@@ -18555,604 +23824,9 @@ module.exports = {
   }
 };
 
-},{}],96:[function(require,module,exports){
-arguments[4][33][0].apply(exports,arguments)
-},{"dup":33}],97:[function(require,module,exports){
-module.exports = function isBuffer(arg) {
-  return arg && typeof arg === 'object'
-    && typeof arg.copy === 'function'
-    && typeof arg.fill === 'function'
-    && typeof arg.readUInt8 === 'function';
-}
-},{}],98:[function(require,module,exports){
-(function (process,global){
-// Copyright Joyent, Inc. and other Node contributors.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to permit
-// persons to whom the Software is furnished to do so, subject to the
-// following conditions:
-//
-// The above copyright notice and this permission notice shall be included
-// in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-// USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-var formatRegExp = /%[sdj%]/g;
-exports.format = function(f) {
-  if (!isString(f)) {
-    var objects = [];
-    for (var i = 0; i < arguments.length; i++) {
-      objects.push(inspect(arguments[i]));
-    }
-    return objects.join(' ');
-  }
-
-  var i = 1;
-  var args = arguments;
-  var len = args.length;
-  var str = String(f).replace(formatRegExp, function(x) {
-    if (x === '%%') return '%';
-    if (i >= len) return x;
-    switch (x) {
-      case '%s': return String(args[i++]);
-      case '%d': return Number(args[i++]);
-      case '%j':
-        try {
-          return JSON.stringify(args[i++]);
-        } catch (_) {
-          return '[Circular]';
-        }
-      default:
-        return x;
-    }
-  });
-  for (var x = args[i]; i < len; x = args[++i]) {
-    if (isNull(x) || !isObject(x)) {
-      str += ' ' + x;
-    } else {
-      str += ' ' + inspect(x);
-    }
-  }
-  return str;
-};
-
-
-// Mark that a method should not be used.
-// Returns a modified function which warns once by default.
-// If --no-deprecation is set, then it is a no-op.
-exports.deprecate = function(fn, msg) {
-  // Allow for deprecating things in the process of starting up.
-  if (isUndefined(global.process)) {
-    return function() {
-      return exports.deprecate(fn, msg).apply(this, arguments);
-    };
-  }
-
-  if (process.noDeprecation === true) {
-    return fn;
-  }
-
-  var warned = false;
-  function deprecated() {
-    if (!warned) {
-      if (process.throwDeprecation) {
-        throw new Error(msg);
-      } else if (process.traceDeprecation) {
-        console.trace(msg);
-      } else {
-        console.error(msg);
-      }
-      warned = true;
-    }
-    return fn.apply(this, arguments);
-  }
-
-  return deprecated;
-};
-
-
-var debugs = {};
-var debugEnviron;
-exports.debuglog = function(set) {
-  if (isUndefined(debugEnviron))
-    debugEnviron = process.env.NODE_DEBUG || '';
-  set = set.toUpperCase();
-  if (!debugs[set]) {
-    if (new RegExp('\\b' + set + '\\b', 'i').test(debugEnviron)) {
-      var pid = process.pid;
-      debugs[set] = function() {
-        var msg = exports.format.apply(exports, arguments);
-        console.error('%s %d: %s', set, pid, msg);
-      };
-    } else {
-      debugs[set] = function() {};
-    }
-  }
-  return debugs[set];
-};
-
-
-/**
- * Echos the value of a value. Trys to print the value out
- * in the best way possible given the different types.
- *
- * @param {Object} obj The object to print out.
- * @param {Object} opts Optional options object that alters the output.
- */
-/* legacy: obj, showHidden, depth, colors*/
-function inspect(obj, opts) {
-  // default options
-  var ctx = {
-    seen: [],
-    stylize: stylizeNoColor
-  };
-  // legacy...
-  if (arguments.length >= 3) ctx.depth = arguments[2];
-  if (arguments.length >= 4) ctx.colors = arguments[3];
-  if (isBoolean(opts)) {
-    // legacy...
-    ctx.showHidden = opts;
-  } else if (opts) {
-    // got an "options" object
-    exports._extend(ctx, opts);
-  }
-  // set default options
-  if (isUndefined(ctx.showHidden)) ctx.showHidden = false;
-  if (isUndefined(ctx.depth)) ctx.depth = 2;
-  if (isUndefined(ctx.colors)) ctx.colors = false;
-  if (isUndefined(ctx.customInspect)) ctx.customInspect = true;
-  if (ctx.colors) ctx.stylize = stylizeWithColor;
-  return formatValue(ctx, obj, ctx.depth);
-}
-exports.inspect = inspect;
-
-
-// http://en.wikipedia.org/wiki/ANSI_escape_code#graphics
-inspect.colors = {
-  'bold' : [1, 22],
-  'italic' : [3, 23],
-  'underline' : [4, 24],
-  'inverse' : [7, 27],
-  'white' : [37, 39],
-  'grey' : [90, 39],
-  'black' : [30, 39],
-  'blue' : [34, 39],
-  'cyan' : [36, 39],
-  'green' : [32, 39],
-  'magenta' : [35, 39],
-  'red' : [31, 39],
-  'yellow' : [33, 39]
-};
-
-// Don't use 'blue' not visible on cmd.exe
-inspect.styles = {
-  'special': 'cyan',
-  'number': 'yellow',
-  'boolean': 'yellow',
-  'undefined': 'grey',
-  'null': 'bold',
-  'string': 'green',
-  'date': 'magenta',
-  // "name": intentionally not styling
-  'regexp': 'red'
-};
-
-
-function stylizeWithColor(str, styleType) {
-  var style = inspect.styles[styleType];
-
-  if (style) {
-    return '\u001b[' + inspect.colors[style][0] + 'm' + str +
-           '\u001b[' + inspect.colors[style][1] + 'm';
-  } else {
-    return str;
-  }
-}
-
-
-function stylizeNoColor(str, styleType) {
-  return str;
-}
-
-
-function arrayToHash(array) {
-  var hash = {};
-
-  array.forEach(function(val, idx) {
-    hash[val] = true;
-  });
-
-  return hash;
-}
-
-
-function formatValue(ctx, value, recurseTimes) {
-  // Provide a hook for user-specified inspect functions.
-  // Check that value is an object with an inspect function on it
-  if (ctx.customInspect &&
-      value &&
-      isFunction(value.inspect) &&
-      // Filter out the util module, it's inspect function is special
-      value.inspect !== exports.inspect &&
-      // Also filter out any prototype objects using the circular check.
-      !(value.constructor && value.constructor.prototype === value)) {
-    var ret = value.inspect(recurseTimes, ctx);
-    if (!isString(ret)) {
-      ret = formatValue(ctx, ret, recurseTimes);
-    }
-    return ret;
-  }
-
-  // Primitive types cannot have properties
-  var primitive = formatPrimitive(ctx, value);
-  if (primitive) {
-    return primitive;
-  }
-
-  // Look up the keys of the object.
-  var keys = Object.keys(value);
-  var visibleKeys = arrayToHash(keys);
-
-  if (ctx.showHidden) {
-    keys = Object.getOwnPropertyNames(value);
-  }
-
-  // IE doesn't make error fields non-enumerable
-  // http://msdn.microsoft.com/en-us/library/ie/dww52sbt(v=vs.94).aspx
-  if (isError(value)
-      && (keys.indexOf('message') >= 0 || keys.indexOf('description') >= 0)) {
-    return formatError(value);
-  }
-
-  // Some type of object without properties can be shortcutted.
-  if (keys.length === 0) {
-    if (isFunction(value)) {
-      var name = value.name ? ': ' + value.name : '';
-      return ctx.stylize('[Function' + name + ']', 'special');
-    }
-    if (isRegExp(value)) {
-      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
-    }
-    if (isDate(value)) {
-      return ctx.stylize(Date.prototype.toString.call(value), 'date');
-    }
-    if (isError(value)) {
-      return formatError(value);
-    }
-  }
-
-  var base = '', array = false, braces = ['{', '}'];
-
-  // Make Array say that they are Array
-  if (isArray(value)) {
-    array = true;
-    braces = ['[', ']'];
-  }
-
-  // Make functions say that they are functions
-  if (isFunction(value)) {
-    var n = value.name ? ': ' + value.name : '';
-    base = ' [Function' + n + ']';
-  }
-
-  // Make RegExps say that they are RegExps
-  if (isRegExp(value)) {
-    base = ' ' + RegExp.prototype.toString.call(value);
-  }
-
-  // Make dates with properties first say the date
-  if (isDate(value)) {
-    base = ' ' + Date.prototype.toUTCString.call(value);
-  }
-
-  // Make error with message first say the error
-  if (isError(value)) {
-    base = ' ' + formatError(value);
-  }
-
-  if (keys.length === 0 && (!array || value.length == 0)) {
-    return braces[0] + base + braces[1];
-  }
-
-  if (recurseTimes < 0) {
-    if (isRegExp(value)) {
-      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
-    } else {
-      return ctx.stylize('[Object]', 'special');
-    }
-  }
-
-  ctx.seen.push(value);
-
-  var output;
-  if (array) {
-    output = formatArray(ctx, value, recurseTimes, visibleKeys, keys);
-  } else {
-    output = keys.map(function(key) {
-      return formatProperty(ctx, value, recurseTimes, visibleKeys, key, array);
-    });
-  }
-
-  ctx.seen.pop();
-
-  return reduceToSingleString(output, base, braces);
-}
-
-
-function formatPrimitive(ctx, value) {
-  if (isUndefined(value))
-    return ctx.stylize('undefined', 'undefined');
-  if (isString(value)) {
-    var simple = '\'' + JSON.stringify(value).replace(/^"|"$/g, '')
-                                             .replace(/'/g, "\\'")
-                                             .replace(/\\"/g, '"') + '\'';
-    return ctx.stylize(simple, 'string');
-  }
-  if (isNumber(value))
-    return ctx.stylize('' + value, 'number');
-  if (isBoolean(value))
-    return ctx.stylize('' + value, 'boolean');
-  // For some reason typeof null is "object", so special case here.
-  if (isNull(value))
-    return ctx.stylize('null', 'null');
-}
-
-
-function formatError(value) {
-  return '[' + Error.prototype.toString.call(value) + ']';
-}
-
-
-function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
-  var output = [];
-  for (var i = 0, l = value.length; i < l; ++i) {
-    if (hasOwnProperty(value, String(i))) {
-      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
-          String(i), true));
-    } else {
-      output.push('');
-    }
-  }
-  keys.forEach(function(key) {
-    if (!key.match(/^\d+$/)) {
-      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
-          key, true));
-    }
-  });
-  return output;
-}
-
-
-function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
-  var name, str, desc;
-  desc = Object.getOwnPropertyDescriptor(value, key) || { value: value[key] };
-  if (desc.get) {
-    if (desc.set) {
-      str = ctx.stylize('[Getter/Setter]', 'special');
-    } else {
-      str = ctx.stylize('[Getter]', 'special');
-    }
-  } else {
-    if (desc.set) {
-      str = ctx.stylize('[Setter]', 'special');
-    }
-  }
-  if (!hasOwnProperty(visibleKeys, key)) {
-    name = '[' + key + ']';
-  }
-  if (!str) {
-    if (ctx.seen.indexOf(desc.value) < 0) {
-      if (isNull(recurseTimes)) {
-        str = formatValue(ctx, desc.value, null);
-      } else {
-        str = formatValue(ctx, desc.value, recurseTimes - 1);
-      }
-      if (str.indexOf('\n') > -1) {
-        if (array) {
-          str = str.split('\n').map(function(line) {
-            return '  ' + line;
-          }).join('\n').substr(2);
-        } else {
-          str = '\n' + str.split('\n').map(function(line) {
-            return '   ' + line;
-          }).join('\n');
-        }
-      }
-    } else {
-      str = ctx.stylize('[Circular]', 'special');
-    }
-  }
-  if (isUndefined(name)) {
-    if (array && key.match(/^\d+$/)) {
-      return str;
-    }
-    name = JSON.stringify('' + key);
-    if (name.match(/^"([a-zA-Z_][a-zA-Z_0-9]*)"$/)) {
-      name = name.substr(1, name.length - 2);
-      name = ctx.stylize(name, 'name');
-    } else {
-      name = name.replace(/'/g, "\\'")
-                 .replace(/\\"/g, '"')
-                 .replace(/(^"|"$)/g, "'");
-      name = ctx.stylize(name, 'string');
-    }
-  }
-
-  return name + ': ' + str;
-}
-
-
-function reduceToSingleString(output, base, braces) {
-  var numLinesEst = 0;
-  var length = output.reduce(function(prev, cur) {
-    numLinesEst++;
-    if (cur.indexOf('\n') >= 0) numLinesEst++;
-    return prev + cur.replace(/\u001b\[\d\d?m/g, '').length + 1;
-  }, 0);
-
-  if (length > 60) {
-    return braces[0] +
-           (base === '' ? '' : base + '\n ') +
-           ' ' +
-           output.join(',\n  ') +
-           ' ' +
-           braces[1];
-  }
-
-  return braces[0] + base + ' ' + output.join(', ') + ' ' + braces[1];
-}
-
-
-// NOTE: These type checking functions intentionally don't use `instanceof`
-// because it is fragile and can be easily faked with `Object.create()`.
-function isArray(ar) {
-  return Array.isArray(ar);
-}
-exports.isArray = isArray;
-
-function isBoolean(arg) {
-  return typeof arg === 'boolean';
-}
-exports.isBoolean = isBoolean;
-
-function isNull(arg) {
-  return arg === null;
-}
-exports.isNull = isNull;
-
-function isNullOrUndefined(arg) {
-  return arg == null;
-}
-exports.isNullOrUndefined = isNullOrUndefined;
-
-function isNumber(arg) {
-  return typeof arg === 'number';
-}
-exports.isNumber = isNumber;
-
-function isString(arg) {
-  return typeof arg === 'string';
-}
-exports.isString = isString;
-
-function isSymbol(arg) {
-  return typeof arg === 'symbol';
-}
-exports.isSymbol = isSymbol;
-
-function isUndefined(arg) {
-  return arg === void 0;
-}
-exports.isUndefined = isUndefined;
-
-function isRegExp(re) {
-  return isObject(re) && objectToString(re) === '[object RegExp]';
-}
-exports.isRegExp = isRegExp;
-
-function isObject(arg) {
-  return typeof arg === 'object' && arg !== null;
-}
-exports.isObject = isObject;
-
-function isDate(d) {
-  return isObject(d) && objectToString(d) === '[object Date]';
-}
-exports.isDate = isDate;
-
-function isError(e) {
-  return isObject(e) &&
-      (objectToString(e) === '[object Error]' || e instanceof Error);
-}
-exports.isError = isError;
-
-function isFunction(arg) {
-  return typeof arg === 'function';
-}
-exports.isFunction = isFunction;
-
-function isPrimitive(arg) {
-  return arg === null ||
-         typeof arg === 'boolean' ||
-         typeof arg === 'number' ||
-         typeof arg === 'string' ||
-         typeof arg === 'symbol' ||  // ES6 symbol
-         typeof arg === 'undefined';
-}
-exports.isPrimitive = isPrimitive;
-
-exports.isBuffer = require('./support/isBuffer');
-
-function objectToString(o) {
-  return Object.prototype.toString.call(o);
-}
-
-
-function pad(n) {
-  return n < 10 ? '0' + n.toString(10) : n.toString(10);
-}
-
-
-var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
-              'Oct', 'Nov', 'Dec'];
-
-// 26 Feb 16:19:34
-function timestamp() {
-  var d = new Date();
-  var time = [pad(d.getHours()),
-              pad(d.getMinutes()),
-              pad(d.getSeconds())].join(':');
-  return [d.getDate(), months[d.getMonth()], time].join(' ');
-}
-
-
-// log is just a thin wrapper to console.log that prepends a timestamp
-exports.log = function() {
-  console.log('%s - %s', timestamp(), exports.format.apply(exports, arguments));
-};
-
-
-/**
- * Inherit the prototype methods from one constructor into another.
- *
- * The Function.prototype.inherits from lang.js rewritten as a standalone
- * function (not on Function.prototype). NOTE: If this file is to be loaded
- * during bootstrapping this function needs to be rewritten using some native
- * functions as prototype setup using normal JavaScript does not work as
- * expected during bootstrapping (see mirror.js in r114903).
- *
- * @param {function} ctor Constructor function which needs to inherit the
- *     prototype.
- * @param {function} superCtor Constructor function to inherit prototype from.
- */
-exports.inherits = require('inherits');
-
-exports._extend = function(origin, add) {
-  // Don't do anything if add isn't an object
-  if (!add || !isObject(add)) return origin;
-
-  var keys = Object.keys(add);
-  var i = keys.length;
-  while (i--) {
-    origin[keys[i]] = add[keys[i]];
-  }
-  return origin;
-};
-
-function hasOwnProperty(obj, prop) {
-  return Object.prototype.hasOwnProperty.call(obj, prop);
-}
-
-}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":97,"_process":89,"inherits":96}]},{},[1])(1)
+},{}],154:[function(require,module,exports){
+arguments[4][110][0].apply(exports,arguments)
+},{"dup":110}],155:[function(require,module,exports){
+arguments[4][114][0].apply(exports,arguments)
+},{"dup":114}]},{},[1])(1)
 });
