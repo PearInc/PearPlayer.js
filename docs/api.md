@@ -47,6 +47,9 @@ var PearPlayer = require('PearPlayer');
   slideInterval: 15,          //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
   useDataChannel: true,       //是否开启data channel,默认true
   dataChannels: 4,            //创建data channel的最大数量,默认2
+  useTorrent: true,           //是否开启Browser P2P(基于Webtorrent)，默认true
+  magnetURI: 'magnet:example...',       //可手动传入magnetURI，需先将useTorrent设为true
+  trackers:["wss://tracker.openwebtorrent.com"],    //可手动传入tracker服务器，需先将useTorrent设为true
   useMonitor: true            //是否开启monitor,会稍微影响性能,默认false，只有开启useMonitor才能监听事件
 }
 ```

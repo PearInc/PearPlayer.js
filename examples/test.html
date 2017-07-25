@@ -8,12 +8,15 @@
 <body>
 <div id="main">
     <video id="pearvideo" src="https://qq.webrtc.win/tv/pear001.mp4" controls>
-    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/cqz/yxs-18.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/free/planet.mp4" controls>-->
     </video>
 </div>
 <!--<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest/dist/pear-player.min.js"></script>-->
 <script src="../pear-player.js"></script>
+<!--<script src="../dist/pear-player.min.js"></script>-->
 <script>
+    var magnetURI = 'magnet:?xt=urn:btih:1e02d0db405a5a17d59a2e1d42e9908f074a1e44&dn=pear001.mp4&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com';
+//    var magnetURI = 'magnet:?xt=urn:btih:18aef04e719dbc741578824938715e42397b194b&dn=planet.mp4&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com';
     var xhr = new XMLHttpRequest();
     xhr.open("POST", 'https://api.webrtc.win:6601/v1/customer/login');
     var data = JSON.stringify({
@@ -36,6 +39,9 @@
                     slideInterval: 15,          //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
                     useDataChannel: true,       //是否开启data channel,默认true
                     dataChannels: 3,            //创建data channel的最大数量,默认2
+                    useTorrent: true,           //是否开启Browser P2P(基于Webtorrent)，默认true
+//                    magnetURI: magnetURI,       //可手动传入magnetURI，需先将useTorrent设为true
+//                    trackers:["wss://tracker.openwebtorrent.com"],    //可手动传入tracker服务器，需先将useTorrent设为true
                     useMonitor: true             //是否开启monitor,会稍微影响性能,默认false
                 });
 
