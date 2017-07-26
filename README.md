@@ -19,7 +19,6 @@
 只需将`pear-player.min.js`通过`<script>`标签导入到HTML就可以使用。 参考以下[代码示例](#使用方法)，也可以查看[`/examples/test.html`](/examples/test.html)来了解使用方法。
 
 信令部分以及WebRTC部分使用了精心设计的协议，实现此部分可以参考[API文档](docs/get-started.md)。<br/>
-Demo演示地址：[https://qq.webrtc.win/watch](https://qq.webrtc.win/watch/)
 
 ### 特性
 
@@ -34,7 +33,8 @@ Demo演示地址：[https://qq.webrtc.win/watch](https://qq.webrtc.win/watch/)
 - 协议默认通过TLS/DTLS全加密，无DPI特征；并可通过Pear Fog组件的动态端口映射进一步消除统计学特征
 - 像使用HTML5 `<video>`标签一样简单，并容易与[video.js](https://github.com/videojs/video.js)等流行播放框架集成
 - 目前已实现Browser P2P能力（基于webtorrent）
-
+<br>
+Demo演示地址：[https://qq.webrtc.win/watch](https://qq.webrtc.win/watch/)
 ![multisources](fig/bitmap.jpeg)
 ## 使用方法
 
