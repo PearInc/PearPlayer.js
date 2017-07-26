@@ -34,7 +34,7 @@
 - 像使用HTML5 `<video>`标签一样简单，并容易与[video.js](https://github.com/videojs/video.js)等流行播放框架集成
 - 目前已实现Browser P2P能力（基于webtorrent）
 <br>
-Demo演示地址：[https://qq.webrtc.win/watch](https://qq.webrtc.win/watch/)<br>
+Demo演示地址：[https://qq.webrtc.win/watch](https://qq.webrtc.win/watch/)
 
 ![multisources](fig/bitmap.jpeg)
 
