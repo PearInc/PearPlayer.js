@@ -35,7 +35,9 @@
 - 目前已实现Browser P2P能力（基于webtorrent）
 <br>
 Demo演示地址：[https://qq.webrtc.win/watch](https://qq.webrtc.win/watch/)
+
 ![multisources](fig/bitmap.jpeg)
+
 ## 使用方法
 
 ### 导入js文件并绑定video标签
