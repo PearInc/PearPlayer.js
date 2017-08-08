@@ -21,16 +21,16 @@ var BLOCK_LENGTH = 32 * 1024;
 
 inherits(PearPlayer, EventEmitter);
 
-function PearPlayer(selector, token, opts) {
+function PearPlayer(selector, opts) {
     var self = this;
-    if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
+    // if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
+    if (!(self instanceof PearPlayer)) return new PearPlayer(selector, opts);
     EventEmitter.call(self);
-
     opts = opts || {};
     self.video = document.querySelector(selector);
-
+    token = '';
     if (typeof selector !== 'string') throw new Error('video selector must be a string!');
-    if (typeof token !== 'string') throw new Error('token must be a string!');
+    // if (typeof token !== 'string') throw new Error('token must be a string!');
     // if (!(opts.type && opts.type === 'mp4')) throw new Error('only mp4 is supported!');
     if (!((opts.src && typeof opts.src === 'string') || self.video.src)) throw new Error('video src is not valid!');
     // if (!(config.token && typeof config.token === 'string')) throw new Error('token is not valid!');
@@ -54,7 +54,7 @@ function PearPlayer(selector, token, opts) {
     self.dispatcher = null;
     self.JDMap = {};                           //根据dc的peer_id来获取jd的map
     self.nodeSet = new Set();                  //保存node的set
-
+    self.file = null;
     self.dispatcherConfig = {
 
         chunkSize: opts.chunkSize && (opts.chunkSize%BLOCK_LENGTH === 0 ? opts.chunkSize : Math.ceil(opts.chunkSize/BLOCK_LENGTH)*BLOCK_LENGTH),   //每个chunk的大小,默认1M
@@ -111,9 +111,10 @@ PearPlayer.prototype._getNodes = function (token, cb) {
     })(postData);
 
     var xhr = new XMLHttpRequest();
-    xhr.open("GET", 'https://api.webrtc.win:6601/v1/customer/nodes'+postData);
+    // xhr.open("GET", 'https://api.webrtc.win:6601/v1/customer/nodes'+postData);
+    xhr.open("GET", 'https://api.webrtc.win:6601//v1/customer/pear/nodes'+postData);
     xhr.timeout = 2000;
-    xhr.setRequestHeader('X-Pear-Token', self.token);
+    // xhr.setRequestHeader('X-Pear-Token', self.token);
     xhr.ontimeout = function() {
         // self._fallBack();
         cb(null);
@@ -230,7 +231,6 @@ PearPlayer.prototype._pearSignalHandshake = function () {
     self.websocket = websocket;
     websocket.onopen = function() {
         console.log('websocket connection opened!');
-
         var hash = md5(self.urlObj.host + self.urlObj.path);
         websocket.push(JSON.stringify({
             "action": "get",
@@ -293,7 +293,6 @@ PearPlayer.prototype.initDC = function (message) {
         self.websocket.send(JSON.stringify(message));
     });
     jd.on('connect',function () {
-
         // if (!self.isPlaying) {
         //
         //     self._startPlaying(self.fileLength, self.nodes);
@@ -337,7 +336,18 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
     var file = new File(d, fileConfig);
 
+    self.file = file;
+
+    file.once('canplay', function () {
+        self.emit('canplay');
+        // console.log('66666666666666 canplay');
+        // if (self.autoPlay) {
+        //     self.video.play();
+        // }
+    });
+
     file.renderTo(self.selector, {autoplay: self.autoPlay});
+    // file.renderTo(self.selector, {autoplay: false});
 
     self.isPlaying = true;
 

@@ -58,36 +58,12 @@ Demo演示地址：https://qq.webrtc.win/watch
 <script>
 /**
  * 第一个参数为video标签的id或class
- * 第二个参数为获得授权后的token
  * opts是可选的参数配置
  */
-var player = new PearPlayer('#pearvideo', token, opts);
+var player = new PearPlayer('#pearvideo', opts);
 </script>
 ```
 恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！
-
-### 获取token
-在使用PearPlayer之前，需要获取token，通过调用提供的API接口（/v1/customer/login）并传入用户名和密码，
-这里已经为访客提供了测试帐号（用户名：test　密码：123456），获取token的示例代码如下：
-```js
-var xhr = new XMLHttpRequest();
-xhr.open("POST", 'https://api.webrtc.win:6601/v1/customer/login');
-var data = JSON.stringify({
-    user:'test',
-    password:'123456'
-});
-xhr.onload = function () {
-    if (this.status >= 200 && this.status < 300) {
-        var res = JSON.parse(this.response);
-        if (!!res.token){
-            console.log('token:' +res.token);
-        }
-    } else {
-        alert('请求出错!');
-    }
-};
-xhr.send(data);
-```
 
 ### 同其他播放框架集成：
 本播放器现已支持video.js，示例代码请移步[videojs.html](examples/videojs/videojs.html)

@@ -31,9 +31,9 @@ var PearPlayer = require('PearPlayer');
 
 # PearPlayer API
 
-## `var player = new PearPlayer('#pearvideo', token, opts)`
+## `var player = new PearPlayer('#pearvideo', opts)`
 
-创建一个新的PearPlayer实例，`#pearvideo`是video标签的id，token是登陆pear服务器获取的授权，有效期7个小时。
+创建一个新的PearPlayer实例，`#pearvideo`是video标签的id。
 
 其中`opts`可以指定PearPlayer的具体配置，相关字段的说明如下：
 
