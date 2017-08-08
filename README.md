@@ -1,7 +1,7 @@
 <h1 align="center">
   <img src="fig/pear.png" height="220"></img>
   <br>
-  PearPlayer.js
+  [PearPlayer.js](https://github.com/PearInc/PearPlayer.js)
   <br>
   <br>
 </h1>
