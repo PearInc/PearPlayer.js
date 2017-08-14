@@ -22,14 +22,15 @@ var BLOCK_LENGTH = 32 * 1024;
 
 inherits(PearPlayer, EventEmitter);
 
-function PearPlayer(selector, opts) {
+function PearPlayer(selector, token, opts) {
     var self = this;
-    // if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
-    if (!(self instanceof PearPlayer)) return new PearPlayer(selector, opts);
+    if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
+    // if (!(self instanceof PearPlayer)) return new PearPlayer(selector, opts);
+    if (typeof token === 'object') return PearPlayer(selector, '', token);
     EventEmitter.call(self);
     opts = opts || {};
     self.video = document.querySelector(selector);
-    token = '';
+    // token = '';
     if (typeof selector !== 'string') throw new Error('video selector must be a string!');
     // if (typeof token !== 'string') throw new Error('token must be a string!');
     // if (!(opts.type && opts.type === 'mp4')) throw new Error('only mp4 is supported!');
@@ -112,10 +113,10 @@ PearPlayer.prototype._getNodes = function (token, cb) {
     })(postData);
 
     var xhr = new XMLHttpRequest();
-    // xhr.open("GET", 'https://api.webrtc.win:6601/v1/customer/nodes'+postData);
-    xhr.open("GET", 'https://api.webrtc.win:6601//v1/customer/pear/nodes'+postData);
+    xhr.open("GET", 'https://api.webrtc.win:6601/v1/customer/nodes'+postData);
+    // xhr.open("GET", 'https://api.webrtc.win:6601//v1/customer/pear/nodes'+postData);
     xhr.timeout = 2000;
-    // xhr.setRequestHeader('X-Pear-Token', self.token);
+    xhr.setRequestHeader('X-Pear-Token', self.token);
     xhr.ontimeout = function() {
         // self._fallBack();
         cb(null);
@@ -403,7 +404,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
                     d.addNode(hd);
                 }
             } else {
-
+                d.noMoreNodes = true;
             }
         });
 
@@ -536,7 +537,6 @@ function Dispatcher(config) {
 
     self._selections = [];                           //下载队列
     self._store = FSChunkStore;
-    self.destroyed = false;
     self.elem = null;                          //video标签的id
     self.video = null;
     self.path = '';
@@ -546,6 +546,7 @@ function Dispatcher(config) {
     self.bufferSources = new Array(self.chunks);    //记录每个buffer下载的方式
     self.slide = null;
     self.bufferingCount = 0;                   //视频卡的次数
+    self.noMoreNodes = false;                   //是否已没有新的节点可获取
 
     //firstaid参数自适应
     self._windowLength = 5;
@@ -575,7 +576,7 @@ Dispatcher.prototype._init = function () {
     self.bitfield = new BitField(self.chunks);       //记录哪个块已经下好
 
     self.queue = [];                     //初始化下载队列
-    self._slide();
+    // self._slide();
     if (self.auto) {
         self.startFrom(0, false);
         self.autoSlide();
@@ -657,16 +658,16 @@ Dispatcher.prototype.startFrom = function (start, priority, notify) {  //start�
     if (self.destroyed) throw new Error('dispatcher is destroyed');
 
     var length = self._selections.length;
-    if ( length > 0) {
-
-        var s = self._selections[length-1];
-        // var start = s.from + s.offset;
-        console.log('start:'+self._calIndex(start)+' s.from:'+self._calIndex(s.from));
-        if (self._calIndex(start) === self._calIndex(s.from)) {
-            console.log('startFrom return');
-            return;
-        }
-    }
+    // if ( length > 0) {
+    //
+    //     var s = self._selections[length-1];
+    //     // var start = s.from + s.offset;
+    //     console.log('start:'+self._calIndex(start)+' s.from:'+self._calIndex(s.from));
+    //     if (self._calIndex(start) === self._calIndex(s.from)) {
+    //         console.log('startFrom return');
+    //         return;
+    //     }
+    // }
 
     priority = Number(priority) || 0;
     self._selections.push({
@@ -676,7 +677,7 @@ Dispatcher.prototype.startFrom = function (start, priority, notify) {  //start�
         priority: priority,
         notify: notify || noop
     });
-
+    console.log('Dispatcher startFrom');
     self._selections.sort(function (a, b) {           //从小到大排列
         return a.priority - b.priority
     });
@@ -691,6 +692,7 @@ Dispatcher.prototype.deStartFrom = function (start, priority) {
     priority = Number(priority) || 0;
     console.log('deselect '+start);
     self._clearAllQueues();
+    self._abortAll();
     for (var i = 0; i < self._selections.length; ++i) {
         var s = self._selections[i];
         if (s.from === start && s.to === self.chunks-1 && s.priority === priority) {
@@ -722,7 +724,7 @@ Dispatcher.prototype._updateSelections = function () {
     process.nextTick(function () {
         self._gcSelections()
     });
-
+    console.log('Dispatcher _updateSelections');
     //此处开始下载
     self._update();
 };
@@ -758,7 +760,7 @@ Dispatcher.prototype._gcSelections = function () {
 Dispatcher.prototype._update = function () {
     var self = this;
     if (self.destroyed) return;
-
+    console.log('Dispatcher _update');
     var length = self._selections.length;
     if ( length > 0) {
 
@@ -907,7 +909,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
             // console.log('bufferSources:'+self.bufferSources);
         } else {
             console.log('重复下载');
-            hd.redundance ++;
+
         }
     });
 
@@ -955,7 +957,6 @@ Dispatcher.prototype._setupDC = function (jd) {
             }
         } else {
             console.log('重复下载');
-            jd.redundance ++;
             for (var k=0;k<self.downloaders.length;++k) {
                 if (self.downloaders[k].type === 'datachannel') {
                     self.downloaders[k].clearQueue();                //如果dc下载跟不上http,则清空下载队列
@@ -980,7 +981,7 @@ Dispatcher.prototype._setupDC = function (jd) {
 
 Dispatcher.prototype.checkoutDownloaders = function () {            //TODO:防止重复请求
 
-    if (this.downloaders.length <= 3) {
+    if (this.downloaders.length <= 3 && !this.noMoreNodes) {
         this.requestMoreNodes();
         this.requestMoreDataChannels();
         if (this.downloaders.length <= 2 && this._windowLength / this.downloaders.length >= 2) {
@@ -1124,6 +1125,13 @@ Dispatcher.prototype._clearAllQueues = function () {
 
     for (var k=0;k<this.downloaders.length;++k) {
         this.downloaders[k].clearQueue();
+    }
+};
+
+Dispatcher.prototype._abortAll = function () {
+
+    for (var k=0;k<this.downloaders.length;++k) {
+        this.downloaders[k].abort();
     }
 };
 
@@ -1338,12 +1346,12 @@ File.prototype.createReadStream = function (opts) {
         fileStream._notify();
     });
     // self._dispatcher._updateAfterSeek();
-    eos(fileStream, function () {
-        if (self._destroyed) return;
-        if (!self._dispatcher.destroyed) {
-            self._dispatcher.deStartFrom(fileStream._startPiece, true);
-        }
-    });
+    // eos(fileStream, function () {
+    //     if (self._destroyed) return;
+    //     if (!self._dispatcher.destroyed) {
+    //         self._dispatcher.deStartFrom(fileStream._startPiece, true);
+    //     }
+    // });
     fileStream.once('canplay', function () {
         self.emit('canplay');
     });
@@ -1396,7 +1404,6 @@ function HttpDownloader(uri, type, opts) {
     this.meanSpeed = 0;             //平均速度
     this.counter = 0;               //记录下载的次数
     this.weight = type === 'server' ? 0.7 : 1.0;           //下载排序时的权重系数
-    this.redundance = 0;            //记录重复下载的次数
     this.isAsync = opts.isAsync || false;                  //默认并行下载
     //节点流量统计
     this.downloaded = 0;
@@ -1411,16 +1418,16 @@ HttpDownloader.prototype.select = function (start, end) {
     console.log('HttpDownloader ' + this.uri + ' select:' + start + '-' +end + ' weight:' + this.weight);
     if (this.isAsync) {                               //并行
         this._getChunk(start, end);
-    } else {　　　　　　　　　　　　　　　　　　　　　　　　 //串行
+    } else {　　　　　　　　　　　　　　　　　　　　　　　　  //串行
         if (this.downloading){
             this.queue.push([start,end]);
         } else {
             this._getChunk(start, end);
         }
     }
-    if (this.redundance >= 1) {
-        this.weight -= 0.2;
-        this.redundance  = 0;
+    if (this.queue.length >= 3) {
+        this.clearQueue();
+        this.weight -= 0.1;
         if (this.weight < 0.1) {
             this.emit('error');
         }
@@ -1433,6 +1440,7 @@ HttpDownloader.prototype.abort = function () {
     if (self._xhr && (self._xhr.readyState == 2 || self._xhr.readyState == 3)) {  //如果正在下载,则停止
         self._xhr.abort();
         console.log('HttpDownloader ' + self.uri +' aborted!');
+        self.downloading = false;
     }
 };
 
@@ -5185,7 +5193,6 @@ function RTCDownloader(config) {
     self.meanSpeed = 0;             //平均速度
     self.counter = 0;               //记录下载的次数
     self.weight = 1.0;              //下载排序时的权重系数
-    self.redundance = 0;            //记录重复下载的次数
     self.simpleRTC = new SimpleRTC();
     self._setupSimpleRTC(self.simpleRTC);
 
@@ -5214,13 +5221,6 @@ RTCDownloader.prototype.select = function (start, end) {
     } else {
         // console.log('pear_webrtc startDownloading:'+start+'-'+end);
         self.startDownloading(start,end);
-    }
-    if (self.redundance >= 3) {
-        self.weight -= 0.1;
-        self.redundance --;
-        if (self.weight < 0.1) {
-            self.emit('error');
-        }
     }
     if (self.queue.length >= 3) {
         self.clearQueue();
@@ -5314,6 +5314,10 @@ RTCDownloader.prototype._receive = function (chunk) {
     } else {
         self.emit('error');
     }
+
+};
+
+RTCDownloader.prototype.abort = function () {
 
 };
 

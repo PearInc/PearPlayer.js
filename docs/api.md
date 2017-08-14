@@ -106,6 +106,7 @@ function onException(exception) {
 ```
 
 请参考[`/examples/test.html`](/examples/test.html)来了解API使用方法。
+CP接入方法：[Pear FogVDN](https://github.com/PearInc/FogVDN/blob/master/For_CPs.md)
 
 
 

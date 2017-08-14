@@ -21,14 +21,15 @@ var BLOCK_LENGTH = 32 * 1024;
 
 inherits(PearPlayer, EventEmitter);
 
-function PearPlayer(selector, opts) {
+function PearPlayer(selector, token, opts) {
     var self = this;
-    // if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
-    if (!(self instanceof PearPlayer)) return new PearPlayer(selector, opts);
+    if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
+    // if (!(self instanceof PearPlayer)) return new PearPlayer(selector, opts);
+    if (typeof token === 'object') return PearPlayer(selector, '', token);
     EventEmitter.call(self);
     opts = opts || {};
     self.video = document.querySelector(selector);
-    token = '';
+    // token = '';
     if (typeof selector !== 'string') throw new Error('video selector must be a string!');
     // if (typeof token !== 'string') throw new Error('token must be a string!');
     // if (!(opts.type && opts.type === 'mp4')) throw new Error('only mp4 is supported!');
@@ -111,10 +112,10 @@ PearPlayer.prototype._getNodes = function (token, cb) {
     })(postData);
 
     var xhr = new XMLHttpRequest();
-    // xhr.open("GET", 'https://api.webrtc.win:6601/v1/customer/nodes'+postData);
-    xhr.open("GET", 'https://api.webrtc.win:6601//v1/customer/pear/nodes'+postData);
+    xhr.open("GET", 'https://api.webrtc.win:6601/v1/customer/nodes'+postData);
+    // xhr.open("GET", 'https://api.webrtc.win:6601//v1/customer/pear/nodes'+postData);
     xhr.timeout = 2000;
-    // xhr.setRequestHeader('X-Pear-Token', self.token);
+    xhr.setRequestHeader('X-Pear-Token', self.token);
     xhr.ontimeout = function() {
         // self._fallBack();
         cb(null);
@@ -402,7 +403,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
                     d.addNode(hd);
                 }
             } else {
-
+                d.noMoreNodes = true;
             }
         });
 
