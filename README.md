@@ -87,6 +87,7 @@ var player = new PearPlayer('#pearvideo', opts);
 
 ### 演讲与媒体报道
 
+- 2017.08.18  (IT大咖说) - [WebRTC会成主流吗？众包CDN时代到了！](https://mp.weixin.qq.com/s?__biz=MzIxODQxMjc0MA==&mid=2247487837&idx=1&sn=4f8b99210cc6bbfd80e8735cf65bb16f&chksm=97ebb2f6a09c3be0b9010e9b8248f20c15877c74ea7a28f90d0b252f3e104eed448175e0a504&mpshare=1&scene=1&srcid=08188C78oSmbnLPBiPEre8PG&key=4f7eff3ed59cc3284e141a3a0d46b0d0db6a308091b822c062840f7ab5d0281a244ea4e531a2ade77821593fc12859657215950e388dd9c1616a7f7660e06a33afec2f0b674c1e1f1056f6acf38b4719&ascene=0&uin=MTIyNTA0NzEyMQ%3D%3D&devicetype=iMac+Macmini7%2C1+OSX+OSX+10.12.5+build(16F73)&version=12020810&nettype=WIFI&fontScale=100&pass_ticket=A2ZlfB0YONYHCCo4MxRbEG9SqBXsnO%2FR1dn7pitoD8SdKPaWIgnv9UJFfRXud4WC)
 - 2017.07.11 （OSChina开源中国） - [PearPlayer.js —— 混合P2P-CDN的流媒体播放器](https://www.oschina.net/p/PearPlayerjs)
 - 2017.06.24 （腾讯Web前端大会） - [基于WebRTC的P2P-CDN流媒体加速](http://www.itdks.com/dakashuo/new/dakalive/detail/2577)
 - 2017.05.17 （南方科技大学） - Edge Computing and Shared Fog Streaming
