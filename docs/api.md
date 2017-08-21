@@ -78,14 +78,16 @@ var PearPlayer = require('PearPlayer');
 
 通过该事件可以监听fog节点（包括WebRTC和HTTP）总的下载比率（fog下载的字节数除以目前总的下载字节数）。(useMonitor需设为true)
 
-## `player.on('buffersources', function (bufferSources) {})`
+## `player.on('sourcemap', function (sourceType, index) {})`
 
-每下载一个buffer都会触发该事件，bufferSources是一个bitmap，每个元素代表该buffer是从哪个源下载的，有以下几种取值：(useMonitor需设为true)<br/>
+每下载一个buffer都会触发该事件，sourceType是一个string，代表该buffer是从哪个源下载的，有以下几种取值：(useMonitor需设为true)<br/>
 null: 该处的buffer还未下载<br/>
 s: server，从服务器端下载（HTTP协议）<br/>
 n: node，从节点下载（HTTP协议）<br/>
 d: data channel，从节点下载（WebRTC协议）<br/>
 b: browser，从其它浏览器下载（WebRTC协议）<br/>
+
+index是对应的索引。
 
 ## `player.on('traffic', function (mac, downloaded, type) {})`
 通过该事件可以监听每个节点的实时流量，其中mac是节点的mac地址，downloaded是对应节点的下载流量（字节），type是
