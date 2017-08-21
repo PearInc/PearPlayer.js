@@ -113,7 +113,6 @@ PearPlayer.prototype._getNodes = function (token, cb) {
 
     var xhr = new XMLHttpRequest();
     xhr.open("GET", 'https://api.webrtc.win:6601/v1/customer/nodes'+postData);
-    // xhr.open("GET", 'https://api.webrtc.win:6601//v1/customer/pear/nodes'+postData);
     xhr.timeout = 2000;
     xhr.setRequestHeader('X-Pear-Token', self.token);
     xhr.ontimeout = function() {
@@ -463,9 +462,13 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
         self.emit('buffersources', bufferSources);
     });
-    d.on('traffic', function (mac, downloaded, type) {
+    d.on('sourcemap', function (sourceType, index) {       //s: server   n: node  d: data channel  b: browser
 
-        self.emit('traffic', mac, downloaded, type);
+        self.emit('sourcemap', sourceType, index);
+    });
+    d.on('traffic', function (mac, size, type) {
+
+        self.emit('traffic', mac, size, type);
     });
 };
 

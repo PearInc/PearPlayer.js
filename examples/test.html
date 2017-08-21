@@ -7,9 +7,12 @@
 </head>
 <body>
 <div id="main">
-    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/pear001.mp4" controls>-->
+    <video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>
     <!--<video id="pearvideo" src="https://qq.webrtc.win/free/planet.mp4" controls>-->
-    <video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-Planet_Earth_II.mp4" controls>
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-Planet_Earth_II.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/free/SoundOfMusic.mp4" controls>-->
+        <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_100.mp4" controls>-->
+        <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_60.mp4" controls>-->
     </video>
 </div>
 <!--<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest/dist/pear-player.min.js"></script>-->
@@ -18,12 +21,12 @@
 <script>
 
     //第一个参数为video标签的id或class
-    var player = new PearPlayer('#pearvideo', {
+    var player = new PearPlayer('#pearvideo','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwZWFyIjoicGVhci1yZXN0ZnVsLWFwaS0zMzQ0IiwiZXhwIjoxNTAyOTY0ODkyLCJqdGkiOiIxOTIuMTY4LjEuMTA0OjU5MDI0IiwiaXNzIjoiZm9nLWxvZ2luLWFwaSIsInN1YiI6ImFkbWluIn0.eBHCzp2P6grg6rqI9JLW0rg68goVeou0mOQLf7NWfNI', {
         type: 'mp4',
         algorithm: 'firstaid',      //核心算法,默认firstaid
         autoplay: true,             //是否自动播发视频,默认true
         interval: 5000,             //滑动窗口的时间间隔,单位毫秒,默认10s
-        auto: false,                //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,默认false
+        auto: true,                //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,默认false
         slideInterval: 20,          //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
         useDataChannel: true,       //是否开启data channel,默认true
         dataChannels: 10,            //创建data channel的最大数量,默认2
@@ -41,7 +44,8 @@
     player.on('fograte', onWebRTCRate);　　　　　　　　　 //fog节点的下载比率（下载的字节数除以总的字节数）
     player.on('buffersources', onBufferSources);       //buffer map，记录每个buffer的下载源类型，其中s: server   n: node  d: data channel  b: browser
     player.on('done', onDone);　　　　　　　　           //结束下载时触发
-    player.on('traffic', onTraffic);                  //节点流量统计
+    player.on('traffic', onTraffic);                  //节点流量统计,每次下载buffer都会触发该事件
+    player.on('sourcemap', onSourceMap);          //记录每个buffer的下载源类型，其中s: server   n: node  d: data channel  b: browser
 
     function onBegin(fileLength, chunks) {
         console.log('start downloading buffer by first aid, file length is:' + fileLength + ' total chunks:' + chunks);
@@ -79,8 +83,12 @@
     function onBufferSources(bufferSources) {            //s: server   n: node  d: data channel  b: browser
         console.log('Current Buffer Sources:' + bufferSources);
     }
-    function onTraffic(mac, downloaded, type) {
-        console.log('type:'+type+' mac:'+mac+' downloaded:'+downloaded/1024/1024+'MB');
+    function onTraffic(mac, size, type) {
+        console.log('type:'+type+' mac:'+mac+' downloaded:'+size/1024/1024+'MB');
+    }
+
+    function onSourceMap(sourceType, index) {
+        console.log('Received source type:' + sourceType + ' index:' + index);
     }
 
 </script>

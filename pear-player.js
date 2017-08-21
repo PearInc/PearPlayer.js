@@ -114,7 +114,6 @@ PearPlayer.prototype._getNodes = function (token, cb) {
 
     var xhr = new XMLHttpRequest();
     xhr.open("GET", 'https://api.webrtc.win:6601/v1/customer/nodes'+postData);
-    // xhr.open("GET", 'https://api.webrtc.win:6601//v1/customer/pear/nodes'+postData);
     xhr.timeout = 2000;
     xhr.setRequestHeader('X-Pear-Token', self.token);
     xhr.ontimeout = function() {
@@ -464,9 +463,13 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
         self.emit('buffersources', bufferSources);
     });
-    d.on('traffic', function (mac, downloaded, type) {
+    d.on('sourcemap', function (sourceType, index) {       //s: server   n: node  d: data channel  b: browser
 
-        self.emit('traffic', mac, downloaded, type);
+        self.emit('sourcemap', sourceType, index);
+    });
+    d.on('traffic', function (mac, size, type) {
+
+        self.emit('traffic', mac, size, type);
     });
 };
 
@@ -489,12 +492,12 @@ function getBrowserRTC () {
 
  config:{
 
- initialDownloaders: [],      //初始的httpdownloader数组,必须
- chunkSize: number,   //每个chunk的大小,默认1M
- fileSize: number,    //下载文件的总大小,必须
- interval: number,     //滑动窗口的时间间隔,单位毫秒,默认10s
- auto: boolean,       //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,默认false
- slideInterval: number,  //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
+ initialDownloaders: [],  //初始的httpdownloader数组,必须
+ chunkSize: number,       //每个chunk的大小,默认1M
+ fileSize: number,        //下载文件的总大小,必须
+ interval: number,        //滑动窗口的时间间隔,单位毫秒,默认10s
+ auto: boolean,           //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,默认false
+ slideInterval: number,   //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
  useMonitor: boolean      //开启监控器,默认关闭
  }
  */
@@ -707,6 +710,7 @@ Dispatcher.prototype.deStartFrom = function (start, priority) {
 Dispatcher.prototype._slide = function () {
     var self = this;
 
+    // if (self.done || self.video.paused) return;
     if (self.done) return;
     // console.log('[dispatcher] slide window downloader length:'+self.downloaders.length);
     self._fillWindow();
@@ -769,6 +773,7 @@ Dispatcher.prototype._update = function () {
         var start = s.from + s.offset;
         // var end = s.to;
         self._windowOffset = start;
+        console.log('current _windowOffset:' + self._windowOffset);
         self._slide();
         // self.slide();
         // self._throttle(self.slide,self);
@@ -879,7 +884,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
 
         var index = self._calIndex(start);
         console.log('httpDownloader' + hd.uri +' ondata range:'+start+'-'+end+' at index:'+index);
-        // console.log('hd.id:'+hd.id+' speed:'+speed);
+        var size = end - start + 1;
         if (!self.bitfield.get(index)){
             self.bitfield.set(index,true);
             // self.emit('bitfieldchange', self.bitfield);
@@ -890,10 +895,10 @@ Dispatcher.prototype._setupHttp = function (hd) {
             }
             self._checkDone();
             if (self.useMonitor) {
-                self.downloaded += self.pieceLength;
+                self.downloaded += size;
                 self.emit('downloaded', self.downloaded/self.fileSize);
-                hd.downloaded += self.pieceLength;
-                self.emit('traffic', hd.mac, hd.downloaded, 'HTTP');
+                // hd.downloaded += size;
+                self.emit('traffic', hd.mac, size, 'HTTP');
                 console.log('ondata hd.type:' + hd.type +' index:' + index);
                 if (hd.type === 'node' || hd.type === 'browser') {
                     self.fogDownloaded += self.pieceLength;
@@ -905,6 +910,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
                     self.bufferSources[index] = 's'
                 }
                 self.emit('buffersources', self.bufferSources);
+                self.emit('sourcemap', hd.type === 'node' ? 'n' : 's', index);
             }
             // console.log('bufferSources:'+self.bufferSources);
         } else {
@@ -927,14 +933,8 @@ Dispatcher.prototype._setupDC = function (jd) {
 
         var index = self._calIndex(start);
         console.log('pear_webrtc '+jd.dc_id+' ondata range:'+start+'-'+end+' at index:'+index);
+        var size = end - start + 1;
         if (!self.bitfield.get(index)){
-            // console.log('httpDownloader ondata range:'+start+'-'+end+' at index:'+index);
-            // var obj = {
-            //     start: start,
-            //     end: end,
-            //     buffer: buffer
-            // };
-            // self.buffers[index] = obj;
             self.bitfield.set(index,true);
             // self.emit('bitfieldchange', self.bitfield);
             try {
@@ -944,16 +944,17 @@ Dispatcher.prototype._setupDC = function (jd) {
             }
             self._checkDone();
             if (self.useMonitor) {
-                self.downloaded += self.pieceLength;
-                self.fogDownloaded += self.pieceLength;
+                self.downloaded += size;
+                self.fogDownloaded += size;
                 console.log('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
                 self.emit('downloaded', self.downloaded/self.fileSize);
                 self.emit('fograte', self.fogDownloaded/self.downloaded);
                 self.emit('fogspeed', self.downloaders.getMeanSpeed(['node','browser','datachannel']));
                 self.bufferSources[index] = 'd';
                 self.emit('buffersources', self.bufferSources);
-                jd.downloaded += self.pieceLength;
-                self.emit('traffic', jd.mac, jd.downloaded, 'WebRTC');
+                self.emit('sourcemap', 'd', index);
+                // jd.downloaded += size;
+                self.emit('traffic', jd.mac, size, 'WebRTC');
             }
         } else {
             console.log('重复下载');
@@ -1015,6 +1016,7 @@ Dispatcher.prototype.addTorrent = function (torrent) {
             self.emit('fogspeed', self.downloaders.getMeanSpeed(['node', 'datachannel']) + torrent.downloadSpeed/1024);
             self.bufferSources[index] = 'b';
             self.emit('buffersources', self.bufferSources);
+            self.emit('sourcemap', 'b', index);
             self.emit('traffic', 'Webtorrent', torrent.pear_downloaded, 'Browser');
         }
     });
@@ -1304,7 +1306,7 @@ function File (dispatcher, file){
     this._destroyed = false;
 
     this.name = file.name;
-    this.path = '/tmp/dispatcher'+this.name;
+    this.path = '/tmp/player'+this.name;
 
     this.length = file.length;
     this.offset = file.offset;
@@ -1415,7 +1417,8 @@ HttpDownloader.prototype.select = function (start, end) {
 
     // if (end < start) throw new Error('end must larger than start');
     // this.emit('start',start,end);
-    console.log('HttpDownloader ' + this.uri + ' select:' + start + '-' +end + ' weight:' + this.weight);
+    var index = Math.floor(start/(1024*1024));
+    console.log('HttpDownloader ' + this.uri + ' select:' + start + '-' + end + ' at ' + index + ' weight:' + this.weight);
     if (this.isAsync) {                               //并行
         this._getChunk(start, end);
     } else {　　　　　　　　　　　　　　　　　　　　　　　　  //串行
@@ -1440,13 +1443,13 @@ HttpDownloader.prototype.abort = function () {
     if (self._xhr && (self._xhr.readyState == 2 || self._xhr.readyState == 3)) {  //如果正在下载,则停止
         self._xhr.abort();
         console.log('HttpDownloader ' + self.uri +' aborted!');
-        self.downloading = false;
     }
+    self.downloading = false;
 };
 
 HttpDownloader.prototype.clearQueue = function () {              //清空下载队列
 
-    this.downloading = false;
+    // this.downloading = false;
     if (this.queue.length > 0) {
         // console.log('[HttpDownloader] clear queue!');
         this.queue = [];
@@ -1455,7 +1458,7 @@ HttpDownloader.prototype.clearQueue = function () {              //清空下载�
 
 HttpDownloader.prototype._getChunk = function (begin,end) {
     var self = this;
-
+    console.log('HttpDownloader _getChunk');
     self.downloading = true;
     var xhr = new XMLHttpRequest();
     self._xhr = xhr;
