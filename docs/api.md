@@ -89,8 +89,8 @@ b: browser，从其它浏览器下载（WebRTC协议）<br/>
 
 index是对应的索引。
 
-## `player.on('traffic', function (mac, downloaded, type) {})`
-通过该事件可以监听每个节点的实时流量，其中mac是节点的mac地址，downloaded是对应节点的下载流量（字节），type是
+## `player.on('traffic', function (mac, size, type) {})`
+通过该事件可以监听每个节点的实时流量，其中mac是节点的mac地址，size是对应节点的瞬时下载流量（字节），type是
 节点的类型（http、datachannel等）。(useMonitor需设为true)
 
 ## `player.on('exception', onException)`
