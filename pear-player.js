@@ -81,6 +81,13 @@ PearPlayer.prototype._start = function () {
     if (!window.WebSocket) {
         self.useDataChannel = false;
     }
+
+    //test
+    // var nodes = [];
+
+    // self._startPlaying(nodes);
+
+
     self._getNodes(self.token, function (nodes) {
         console.log('_getNodes:'+JSON.stringify(nodes));
         // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
@@ -127,7 +134,39 @@ PearPlayer.prototype._getNodes = function (token, cb) {
             var res = JSON.parse(this.response);
             // console.log(res.nodes);
             if (!res.nodes){
-                cb(null);
+                // cb(null);
+                var allNodes = [];
+                allNodes.push({uri: 'https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_165.mp4', type: 'node'});           //examples
+                allNodes.push({uri: 'https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_165.mp4', type: 'node'});           //examples
+                allNodes.push({uri: 'https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_165.mp4', type: 'node'});           //examples
+                console.log('allNodes:'+JSON.stringify(allNodes));
+                nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+
+                    var length = nodes.length;
+                    console.log('nodes:'+JSON.stringify(nodes));
+
+                    if (length) {
+                        self.fileLength = fileLength;
+                        console.log('nodeFilter fileLength:'+fileLength);
+                        // self.nodes = nodes;
+                        if (length <= 2) {
+                            // fallBack(nodes[0]);
+                            nodes.push({uri: self.src, type: 'server'});
+                            cb(nodes);
+                            // self._fallBack();           //test
+                        } else if (nodes.length >= 20){
+                            nodes = nodes.slice(0, 20);
+                            cb(nodes);
+                        } else {
+                            cb(nodes);
+                        }
+                    } else {
+                        // self._fallBack();
+                        cb(null);
+                    }
+                });
+
+
             } else {
                 var nodes = res.nodes;
                 var allNodes = [];
@@ -153,9 +192,7 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                     }
                 }
                 console.log('allNodes:'+JSON.stringify(allNodes));
-                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
-                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
-                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
+
                 nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
 
                     var length = nodes.length;
@@ -552,7 +589,7 @@ function Dispatcher(config) {
     self.noMoreNodes = false;                   //是否已没有新的节点可获取
 
     //firstaid参数自适应
-    self._windowLength = 5;
+    self._windowLength = 10;
     self.downloaders = [];
     self.bitrate = 0;                         //码率
 
@@ -594,7 +631,7 @@ Dispatcher.prototype._init = function () {
 
         console.info('loadedmetadata duration:' + self.video.duration);
         self.bitrate = Math.ceil(self.fileSize/self.video.duration);
-        self._windowLength = Math.ceil(self.bitrate * 10 / self.pieceLength);       //根据码率和时间间隔来计算窗口长度
+        // self._windowLength = Math.ceil(self.bitrate * 10 / self.pieceLength);       //根据码率和时间间隔来计算窗口长度
         if (self._windowLength < 3) {
             self._windowLength = 3;
         } else if (self._windowLength > 10) {
@@ -1017,7 +1054,7 @@ Dispatcher.prototype.addTorrent = function (torrent) {
             self.bufferSources[index] = 'b';
             self.emit('buffersources', self.bufferSources);
             self.emit('sourcemap', 'b', index);
-            self.emit('traffic', 'Webtorrent', torrent.pear_downloaded, 'Browser');
+            self.emit('traffic', 'Webtorrent', self.pieceLength, 'Browser');
         }
     });
 

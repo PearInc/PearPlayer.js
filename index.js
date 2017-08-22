@@ -80,6 +80,13 @@ PearPlayer.prototype._start = function () {
     if (!window.WebSocket) {
         self.useDataChannel = false;
     }
+
+    //test
+    // var nodes = [];
+
+    // self._startPlaying(nodes);
+
+
     self._getNodes(self.token, function (nodes) {
         console.log('_getNodes:'+JSON.stringify(nodes));
         // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
@@ -126,7 +133,39 @@ PearPlayer.prototype._getNodes = function (token, cb) {
             var res = JSON.parse(this.response);
             // console.log(res.nodes);
             if (!res.nodes){
-                cb(null);
+                // cb(null);
+                var allNodes = [];
+                allNodes.push({uri: 'https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_165.mp4', type: 'node'});           //examples
+                allNodes.push({uri: 'https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_165.mp4', type: 'node'});           //examples
+                allNodes.push({uri: 'https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_165.mp4', type: 'node'});           //examples
+                console.log('allNodes:'+JSON.stringify(allNodes));
+                nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+
+                    var length = nodes.length;
+                    console.log('nodes:'+JSON.stringify(nodes));
+
+                    if (length) {
+                        self.fileLength = fileLength;
+                        console.log('nodeFilter fileLength:'+fileLength);
+                        // self.nodes = nodes;
+                        if (length <= 2) {
+                            // fallBack(nodes[0]);
+                            nodes.push({uri: self.src, type: 'server'});
+                            cb(nodes);
+                            // self._fallBack();           //test
+                        } else if (nodes.length >= 20){
+                            nodes = nodes.slice(0, 20);
+                            cb(nodes);
+                        } else {
+                            cb(nodes);
+                        }
+                    } else {
+                        // self._fallBack();
+                        cb(null);
+                    }
+                });
+
+
             } else {
                 var nodes = res.nodes;
                 var allNodes = [];
@@ -152,9 +191,7 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                     }
                 }
                 console.log('allNodes:'+JSON.stringify(allNodes));
-                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
-                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
-                // allNodes.push({uri: 'https://qq.webrtc.win/tv/pear001.mp4', type: 'node'});           //examples
+
                 nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
 
                     var length = nodes.length;
