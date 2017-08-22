@@ -102,5 +102,3 @@ MIT. Copyright (c) [Pear Limited](https://pear.hk) and [snowinszu](https://githu
 
 ### 帮助与支持
 E-mail: <service@pear.hk>；用户QQ群：`373594967`；[CP/CDN接入、OEM与其他商务合作](https://github.com/PearInc/FogVDN)
-
-ffmpeg  -i ./SoundOfMusic.mp4 -vcodec copy -acodec copy -ss 00:00:10 -t 00:20:00 ./SoundOfMusic_new.mp4 -y
