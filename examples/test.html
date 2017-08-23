@@ -49,7 +49,7 @@
     player.on('sourcemap', onSourceMap);          //记录每个buffer的下载源类型，其中s: server   n: node  d: data channel  b: browser
 
     function onBegin(fileLength, chunks) {
-        console.log('start downloading buffer by first aid, file length is:' + fileLength + ' total chunks:' + chunks);
+        console.log('start downloading buffer by first aid, file length is:' + fileLength/1024/1024 + ' total chunks:' + chunks);
     }
 
     function onProgress(downloaded) {
