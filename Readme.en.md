@@ -37,37 +37,37 @@ Demo：https://qq.webrtc.win/watch
 
 ![multisources](fig/bitmap.jpeg)
 
-## Use 
+## Quick Start
 
-### 导入js文件并绑定video标签
-首先通过script标签导入pear-player.min.js：
+### import the js document
+use script label to import pear-player.min.js
 ```html
 <script src="./dist/pear-player.min.js"></script>
 ```
-或者使用CDN：
+or
 ```html
 <script src="https://cdn.jsdelivr.net/npm/pearplayer@latest/dist/pear-player.min.js"></script>
 ```
-假设用video标签播放（/tv/pear001.mp4）这个视频，HTML如下所示：
+suppose we want to use video label to paly（/tv/pear001.mp4）
 ```html
 <video id="pearvideo" src="https://qq.webrtc.win/tv/pear001.mp4" controls>
 ```
-只需要如下几行代码，即可将PearPlayer绑定到video标签：
+Final
 ```html
 <script>
 /**
- * 第一个参数为video标签的id或class
- * opts是可选的参数配置
+ * first parameter is the video label's id or class
+ * opts is optional parameter
  */
 var player = new PearPlayer('#pearvideo', opts);
 </script>
 ```
-恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！
+Congratulations! You can use the PearPlayer now!
 
-### 同其他播放框架集成：
-本播放器现已支持video.js，示例代码请移步[videojs.html](examples/videojs/videojs.html)
+### Support
+[videojs.html](examples/videojs/videojs.html)
 
-### 谁在用我们的产品？
+### Who is using WebTorrent today?
 
 + [Pear Limited](https://pear.hk)
 + [Lenovo China](https://www.lenovo.com.cn/)
@@ -76,28 +76,27 @@ var player = new PearPlayer('#pearvideo', opts);
 + [Tencent Cloud](https://qcloud.com)
 + [Tencent X5/TBS](https://x5.tencent.com/tbs/)
 
-### Pear Player 文档
-- **[阅读get-started文档](docs/get-started.md)**
-- **[阅读API文档](docs/api.md)**
+### Pear Player document
+- **[get-started](docs/get-started.md)**
+- **[API](docs/api.md)**
 
-### 致谢
-特别感谢以下项目，为本项目提供了部分灵感来源以及API设计参考：
+### Thanks
 
 - [WebTorrent](https://github.com/webtorrent/webtorrent)
 - [Peer5](https://www.peer5.com/#)
 
-### 演讲与媒体报道
+### Talks
 
 - 2017.08.18  （IT大咖说） - [WebRTC会成主流吗？众包CDN时代到了！](http://mp.weixin.qq.com/s/cx_ljl2sexE0XkgliZfnmQ)
 - 2017.07.11 （OSChina开源中国） - [PearPlayer.js —— 混合P2P-CDN的流媒体播放器](https://www.oschina.net/p/PearPlayerjs)
 - 2017.06.24 （腾讯Web前端大会） - [基于WebRTC的P2P-CDN流媒体加速](http://www.itdks.com/dakashuo/new/dakalive/detail/2577)
-- 2017.05.17 （南方科技大学） - Edge Computing and Shared Fog Streaming
-- 2017.05.08 （台湾逢甲大学） - A Cooler Fruit Venture: Scaling up a Network from Cloud to Fog with Crowdsourcing
-- 2016.08.17 （香港科技大学） - From Cloud to Fog: Scaling up a Network with Crowdsourcing
+- 2017.05.17 （SUSTC） - Edge Computing and Shared Fog Streaming
+- 2017.05.08 （FCU） - A Cooler Fruit Venture: Scaling up a Network from Cloud to Fog with Crowdsourcing
+- 2016.08.17 （HKUST） - From Cloud to Fog: Scaling up a Network with Crowdsourcing
 
 ### License
 
 MIT. Copyright (c) [Pear Limited](https://pear.hk) and [snowinszu](https://github.com/snowinszu).
 
-### 帮助与支持
-E-mail: <service@pear.hk>；用户QQ群：`373594967`；[CP/CDN接入、OEM与其他商务合作](https://github.com/PearInc/FogVDN)
+### Service
+E-mail: <service@pear.hk>；QQ group：`373594967`；[Business](https://github.com/PearInc/FogVDN)
