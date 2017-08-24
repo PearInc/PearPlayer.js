@@ -8,7 +8,7 @@
 
 <h4 align="center">一个支持多协议、多源、混合P2P-CDN的流媒体播放器</h4>
 <br>
-
+<h5 align="right">[English](https://github.com/PearInc/PearPlayer.js/blob/master/README_EN.md)</h5>
 **[PearPlayer（梨享播放器）](https://github.com/PearInc/PearPlayer.js)** 是完全用JavaScript写的开源HTML5流媒体播放框架，实现了融合HTTP（包含HTTPS、HTTP2）、WebRTC的多协议、多源、低延迟、高带宽利用率的无插件Web端流媒体加速能力。基于H5的MSE技术(Media Source Extension)将来自多个源节点的Buffer分块喂给播放器，再加上精心设计的算法来达到最优的调度策略及对各种异常情况的处理，Pear Player能在保证用户流畅视频体验的前提下最大化P2P率。
 
 ![multisources](fig/PearPlayer.png)
