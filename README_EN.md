@@ -16,7 +16,7 @@
 <br>
 ![multisources](fig/fogvdn_multisources.png)
 
- `pear-player.min.js` can be imported by the html label `<script>` refer to [code example](#使用方法)，also [`/examples/test.html`](/examples/test.html)can help you.
+ `pear-player.min.js` can be imported by the html label `<script>`, refer to [code example](#使用方法)，also [`/examples/test.html`](/examples/test.html)can help you.
 
 To know more information [API document ](docs/get-started.md)。<br/>
 
@@ -27,11 +27,11 @@ To know more information [API document ](docs/get-started.md)。<br/>
 - Multi-protocol(HTTP、HTTPS、WebRTC), multi-source
 - No parameter
 - Save the data usage
-- run well in Chrome、Firefox、Opera、Safari11
-- support Pear [FogVDN](https://github.com/PearInc/FogVDN)
-- Encode by TLS/DTLS，no DPI feature;Pear Fog dynamic port mapping
-- Use easily as `<video>` label ，can Integrate [video.js](https://github.com/videojs/video.js)
-- Realize Browser P2P ability（base on webtorrent）
+- Run well in Chrome、Firefox、Opera、Safari11
+- Support  [Pear FogVDN](https://github.com/PearInc/FogVDN)
+- Encode by TLS/DTLS，no DPI feature,Pear Fog dynamic port mapping
+- Use easily like `<video>` label ，can integrate [video.js](https://github.com/videojs/video.js)
+- Realize browser P2P ability（base on webtorrent）
 <br>
 Demo：https://qq.webrtc.win/watch
 
