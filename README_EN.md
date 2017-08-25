@@ -9,8 +9,6 @@
 <h4 align="center">A multi-protocol, multi-source and P2P-CDN supporting streaming media player</h4>
 <br>
 
-[中文](https://github.com/PearInc/PearPlayer.js/blob/master/README.md)
-
 **[PearPlayer](https://github.com/PearInc/PearPlayer.js)** is a open source HTML5 streaming media framework written by JavaScript, combine HTTP (including HTTPS, HTTP2) and WebRTC. It realized multi-protocol, multi-source, low latency, high bandwidth utilization, used to end streaming media acceleration. MSE (Media Source Extension) based on H5 technology collects the Buffer block from multiple source nodes to the player. With a well  designed algorithm, PearPlayer can guarantee the maximum rate of P2P as well as great watching experience.
 
 ![multisources](fig/PearPlayer.png)
@@ -66,10 +64,10 @@ var player = new PearPlayer('#pearvideo', opts);
 ```
 Congratulations! You can use the PearPlayer now!
 
-### Support
+### Compatibility
 [videojs.html](examples/videojs/videojs.html)
 
-### Who is using WebTorrent today?
+### Who is using Pear Player today?
 
 + [Pear Limited](https://pear.hk)
 + [Lenovo China](https://www.lenovo.com.cn/)
