@@ -39,7 +39,7 @@ Demo：https://qq.webrtc.win/watch
 
 ## Quick Start
 
-### import the js document
+### Import the js packet
 use script label to import pear-player.min.js
 ```html
 <script src="./dist/pear-player.min.js"></script>
