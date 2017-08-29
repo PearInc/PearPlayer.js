@@ -18,19 +18,19 @@
 
  `pear-player.min.js` can be imported by the html label `<script>`, refer to [code example](#使用方法)，also [`/examples/test.html`](/examples/test.html)can help you.
 
-To know more information [API document ](docs/get-started.md)。<br/>
+To know more information [API document ](docs/get-started.md).<br/>
 
 ### Feature
 
-- P2P based on **WebRTC**，no plug in
-- **Speed up**，reliable
-- Multi-protocol(HTTP、HTTPS、WebRTC), multi-source
+- P2P based on **WebRTC**,no plug in
+- **Speed up**,reliable
+- Multi-protocol(HTTP,HTTPS,WebRTC), multi-source
 - No parameter
 - Save the data usage
-- Run well in Chrome、Firefox、Opera、Safari11
+- Run well in Chrome,Firefox,Opera,Safari11
 - Support  [Pear FogVDN](https://github.com/PearInc/FogVDN)
-- Encode by TLS/DTLS，no DPI feature,Pear Fog dynamic port mapping
-- Use easily like `<video>` label ，can integrate [video.js](https://github.com/videojs/video.js)
+- Encode by TLS/DTLS, no DPI feature,Pear Fog dynamic port mapping
+- Use easily like `<video>` label, can integrate [video.js](https://github.com/videojs/video.js)
 - Realize browser P2P ability（base on webtorrent）
 <br>
 Demo：https://qq.webrtc.win/watch
@@ -99,4 +99,4 @@ Congratulations! You can use the PearPlayer now!
 MIT. Copyright (c) [Pear Limited](https://pear.hk) and [snowinszu](https://github.com/snowinszu).
 
 ### Service
-E-mail: <service@pear.hk>；QQ group：`373594967`；[Business](https://github.com/PearInc/FogVDN)
+E-mail: <service@pear.hk>; QQ group：`373594967`; [Business](https://github.com/PearInc/FogVDN)
