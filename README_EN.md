@@ -72,6 +72,7 @@ Congratulations! You can use the PearPlayer now!
 + [Pear Limited](https://pear.hk)
 + [Lenovo China](https://www.lenovo.com.cn/)
 + [Newifi xCloud](http://www.newifi.com/)
++ [FastWeb](http://fastweb.com.cn/)
 + [UCloud](https://www.ucloud.cn)
 + [Tencent Cloud](https://qcloud.com)
 + [Tencent X5/TBS](https://x5.tencent.com/tbs/)
