@@ -75,6 +75,7 @@ var player = new PearPlayer('#pearvideo', opts);
 + [Pear Limited](https://pear.hk)
 + [Lenovo China](https://www.lenovo.com.cn/)
 + [Newifi xCloud](http://www.newifi.com/)
++ [FastWeb](http://fastweb.com.cn/)
 + [UCloud](https://www.ucloud.cn)
 + [Tencent Cloud](https://qcloud.com)
 + [Tencent X5/TBS](https://x5.tencent.com/tbs/)
@@ -91,7 +92,8 @@ var player = new PearPlayer('#pearvideo', opts);
 
 ### 演讲与媒体报道
 
-- 2017.08.18  （IT大咖说） - [WebRTC会成主流吗？众包CDN时代到了！](http://mp.weixin.qq.com/s/cx_ljl2sexE0XkgliZfnmQ)
+- 2017.09.01  (未来网络开放社区联盟) - [继云计算之后，雾计算再起 - 谈谈 P2P CDN](https://mp.weixin.qq.com/s/39dfSA6cTj2eoo-KqsC3AQ)  
+- 2017.08.18 （IT大咖说） - [WebRTC会成主流吗？众包CDN时代到了！](http://mp.weixin.qq.com/s/cx_ljl2sexE0XkgliZfnmQ)
 - 2017.07.11 （OSChina开源中国） - [PearPlayer.js —— 混合P2P-CDN的流媒体播放器](https://www.oschina.net/p/PearPlayerjs)
 - 2017.06.24 （腾讯Web前端大会） - [基于WebRTC的P2P-CDN流媒体加速](http://www.itdks.com/dakashuo/new/dakalive/detail/2577)
 - 2017.05.17 （南方科技大学） - Edge Computing and Shared Fog Streaming
