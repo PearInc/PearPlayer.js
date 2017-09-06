@@ -46,8 +46,9 @@ function PearPlayer(selector, token, opts) {
     self.useTorrent = (opts.useTorrent === false)? false : true;
     self.magnetURI = opts.magnetURI || undefined;
     self.trackers = opts.trackers && Array.isArray(opts.trackers) && opts.trackers.length > 0 ? opts.trackers : null;
+    self.sources = opts.sources && Array.isArray(opts.sources) && opts.sources.length > 0 ? opts.sources : null;
     self.autoPlay = (opts.autoplay === false)? false : true;
-    self.dataChannels = opts.dataChannels || 2;
+    self.dataChannels = opts.dataChannels || 3;
     self.peerId = getPeerId();
     self.isPlaying = false;
     self.fileLength = 0;
@@ -82,24 +83,42 @@ PearPlayer.prototype._start = function () {
         self.useDataChannel = false;
     }
 
-    //test
-    // var nodes = [];
+    if (self.sources) {                     //如果用户指定下载源
 
-    // self._startPlaying(nodes);
+        self.sources = self.sources.map(function (source) {
 
+            return {uri: source, type: 'server'};
+        });
+        nodeFilter(self.sources, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
 
-    self._getNodes(self.token, function (nodes) {
-        console.log('_getNodes:'+JSON.stringify(nodes));
-        // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
-        if (nodes) {
-            self._startPlaying(nodes);
-            // if (self.useDataChannel) {
-            //     self._pearSignalHandshake();
-            // }
-        } else {
-            self._fallBack();
-        }
-    });
+            var length = nodes.length;
+            console.log('nodes:'+JSON.stringify(nodes));
+
+            if (length) {
+                self.fileLength = fileLength;
+                console.log('nodeFilter fileLength:'+fileLength);
+
+                self._startPlaying(nodes);
+            } else {
+
+                self._fallBack();
+            }
+        }, {start: 0, end: 30});
+    } else {
+
+        self._getNodes(self.token, function (nodes) {
+            console.log('_getNodes:'+JSON.stringify(nodes));
+            // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
+            if (nodes) {
+                self._startPlaying(nodes);
+                // if (self.useDataChannel) {
+                //     self._pearSignalHandshake();
+                // }
+            } else {
+                self._fallBack();
+            }
+        });
+    }
 };
 
 PearPlayer.prototype._getNodes = function (token, cb) {
@@ -133,40 +152,8 @@ PearPlayer.prototype._getNodes = function (token, cb) {
             console.log(this.response);
             var res = JSON.parse(this.response);
             // console.log(res.nodes);
-            if (!res.nodes){
+            if (!res.nodes || res.nodes.length <= 2){      //如果没有可用节点或节点数<=2则回源
                 cb(null);
-                // var allNodes = [];
-                // allNodes.push({uri: 'https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_165.mp4', type: 'node'});           //examples
-                // allNodes.push({uri: 'https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_165.mp4', type: 'node'});           //examples
-                // allNodes.push({uri: 'https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_165.mp4', type: 'node'});           //examples
-                // console.log('allNodes:'+JSON.stringify(allNodes));
-                // nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
-                //
-                //     var length = nodes.length;
-                //     console.log('nodes:'+JSON.stringify(nodes));
-                //
-                //     if (length) {
-                //         self.fileLength = fileLength;
-                //         console.log('nodeFilter fileLength:'+fileLength);
-                //         // self.nodes = nodes;
-                //         if (length <= 2) {
-                //             // fallBack(nodes[0]);
-                //             nodes.push({uri: self.src, type: 'server'});
-                //             cb(nodes);
-                //             // self._fallBack();           //test
-                //         } else if (nodes.length >= 20){
-                //             nodes = nodes.slice(0, 20);
-                //             cb(nodes);
-                //         } else {
-                //             cb(nodes);
-                //         }
-                //     } else {
-                //         // self._fallBack();
-                //         cb(null);
-                //     }
-                // });
-
-
             } else {
                 var nodes = res.nodes;
                 var allNodes = [];
@@ -192,7 +179,8 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                     }
                 }
                 console.log('allNodes:'+JSON.stringify(allNodes));
-
+                self.nodes = allNodes;
+                if (allNodes.length === 0) cb(null);
                 nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
 
                     var length = nodes.length;
@@ -217,7 +205,7 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                         // self._fallBack();
                         cb(null);
                     }
-                });
+                }, {start: 0, end: 10});
             }
         } else {
             // self._fallBack();
@@ -239,24 +227,6 @@ PearPlayer.prototype._fallBack = function (url) {
     if (this.autoPlay) {
         this.video.play();
     }
-
-    // nodeFilter([{uri: this.src, type: 'server'}], function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
-    //
-    //     var length = nodes.length;
-    //     console.log('nodes:'+JSON.stringify(nodes));
-    //
-    //     if (length) {
-    //         self.fileLength = fileLength;
-    //         console.log('nodeFilter fileLength:'+fileLength);
-    //         self._startPlaying(nodes);
-    //         if (self.useDataChannel) {
-    //             self._pearSignalHandshake();
-    //         }
-    //     } else {
-    //         // self._fallBack();
-    //         self.emit('exception', {errCode: 2, errMsg: 'Access video source fail'});
-    //     }
-    // });
 
     this.isPlaying = true;
 };
@@ -370,6 +340,21 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
         self.emit('begin', self.fileLength, chunks);
 
+        if (self.useDataChannel) {
+            self._pearSignalHandshake();
+        }
+
+        nodeFilter(self.nodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+
+            if (nodes.length) {
+
+                nodes.map(function (item) {
+
+                    var hd = new HttpDownloader(item.uri, item.type);
+                    d.addNode(hd);
+                });
+            }
+        }, {start: 10, end: 30});
     });
 
     var file = new File(d, fileConfig);
@@ -400,9 +385,9 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
     d.on('loadedmetadata', function () {
 
-        if (self.useDataChannel) {
-            self._pearSignalHandshake();
-        }
+        // if (self.useDataChannel) {
+        //     self._pearSignalHandshake();
+        // }
 
         if (self.useTorrent && self.magnetURI) {
             var client = new WebTorrent();
@@ -413,8 +398,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
             client.add(self.magnetURI, {
                     announce: self.trackers || [
                         "wss://tracker.openwebtorrent.com",
-                        "wss://tracker.btorrent.xyz",
-                        "wss://tracker.fastcast.nz"
+                        "wss://tracker.btorrent.xyz"
                     ],
                     store: d.store,
                     bitfield: d.bitfield
@@ -431,7 +415,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     d.on('needmorenodes', function () {
         console.log('request more nodes');
         self._getNodes(self.token, function (nodes) {
-            console.log('_getNodes:'+JSON.stringify(nodes));
+            console.log('needmorenodes _getNodes:'+JSON.stringify(nodes));
             if (nodes) {
                 // d.addNodes(nodes);
                 for (var i=0;i<nodes.length;++i) {
@@ -440,6 +424,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
                     d.addNode(hd);
                 }
             } else {
+                console.log('noMoreNodes');
                 d.noMoreNodes = true;
             }
         });
@@ -558,7 +543,7 @@ function Dispatcher(config) {
     self.initialDownloaders = config.initialDownloaders;
     self.pieceLength = config.chunkSize || 1*1024*1024;
     self.interval = config.interval || 10000;
-    self._slideInterval = config.slideInterval || 20;
+    self._slideInterval = config.slideInterval || 20;           //当前播放点距离缓冲前沿多少秒时滑动窗口
     self.auto = config.auto || false;
     self.useMonitor = config.useMonitor || false;
     self.downloaded = 0;
@@ -582,29 +567,41 @@ function Dispatcher(config) {
     self.path = '';
     self._bufferedPos = 0;                     //当前所在的缓冲区间
     self._lastSlideTime = -5;                  //上次滑动窗口的时间
-    self._colddown = 5;                        //窗口滑动的冷却时间
     self.bufferSources = new Array(self.chunks);    //记录每个buffer下载的方式
     self.slide = null;
     self.bufferingCount = 0;                   //视频卡的次数
     self.noMoreNodes = false;                   //是否已没有新的节点可获取
 
     //firstaid参数自适应
-    self._windowLength = 5;
+    self._windowLength = self.initialDownloaders.length <= 8 ? self.initialDownloaders.length : 8;
+    // self._windowLength = 15;
+    // self._colddown = self._windowLength;                        //窗口滑动的冷却时间
+    self._colddown = 12;                        //窗口滑动的冷却时间
     self.downloaders = [];
     self.bitrate = 0;                         //码率
 
     //webtorrent
     self.torrent = null;
+
+    //减少重复下载
+    self._interval2BufPos = 0;                                  //当前播放点距离缓冲前沿的时间，单位秒
+    self.lastStartIdx = -1;                                       //记录上个startFrom的索引
 };
 
 Dispatcher.prototype._init = function () {
     var self = this;
 
-    for (var i=0;i<self.initialDownloaders.length;++i){
-        var hd = self.initialDownloaders[i];
-        self._setupHttp(hd);
-        self.downloaders.push(hd);
-    }
+    // for (var i=0;i<self.initialDownloaders.length;++i){
+    //     var hd = self.initialDownloaders[i];
+    //     self._setupHttp(hd);
+    //     self.downloaders.push(hd);
+    // }
+
+    self.downloaders = self.initialDownloaders.map(function (item){
+
+        self._setupHttp(item);
+        return item;
+    });
 
     self.store = new ImmediateChunkStore(
         new self._store(self.pieceLength, {
@@ -631,22 +628,27 @@ Dispatcher.prototype._init = function () {
 
         console.info('loadedmetadata duration:' + self.video.duration);
         self.bitrate = Math.ceil(self.fileSize/self.video.duration);
-        self._windowLength = Math.ceil(self.bitrate * 10 / self.pieceLength);       //根据码率和时间间隔来计算窗口长度
+        self._windowLength = Math.ceil(self.bitrate * 15 / self.pieceLength);       //根据码率和时间间隔来计算窗口长度
         if (self._windowLength < 3) {
             self._windowLength = 3;
         } else if (self._windowLength > 10) {
             self._windowLength = 10;
         }
+        // self._colddown = 5/self._slideInterval*self._interval2BufPos + 5;                        //窗口滑动的冷却时间
+        // self._colddown = self._windowLength*2;
+        self._colddown = 5;
         self.emit('loadedmetadata');
     });
-    self.video.addEventListener('seeked',function () {
+    self.video.addEventListener('seeked', function () {
         console.info('video seeked');
 
         var currentTime = Math.floor(self.video.currentTime);
         for (var index=0;index<self.video.buffered.length;++index) {
+            // console.log('currentTime:' + currentTime + ' Math.floor(self.video.buffered.start(index)):' + Math.floor(self.video.buffered.start(index)));
             if (currentTime >= Math.floor(self.video.buffered.start(index))) {
 
                 self._bufferedPos = index;
+                // console.log('_bufferedPos:' + self._bufferedPos);
             }
             // self.bufferedPos = self.video.buffered.length-1;
         }
@@ -655,8 +657,11 @@ Dispatcher.prototype._init = function () {
     });
     self.video.addEventListener('timeupdate', function () {
 
-        if (self._shouldFetchNextSegment()){
+        var bool = self._shouldFetchNextSegment();
+        // console.log('_shouldFetchNextSegment:'+bool);
+        if (bool){
             self.slide();
+            // console.log('timeupdate slide');
             // self._throttle(self.slide,self);
             // self._update();
             self._lastSlideTime = self.video.currentTime;
@@ -666,7 +671,6 @@ Dispatcher.prototype._init = function () {
 
         console.info('waiting for buffer');
         // self.requestMoreNodes();
-        self.sortDownloaders();                              //根据平均速度和类型算出的权重从大到小排列
         for (var j=0;j<self.downloaders.length;++j) {
             console.log('downloaders type:' + self.downloaders[j].type + ' mean speed:' +self.downloaders[j].meanSpeed);
         }
@@ -697,7 +701,7 @@ Dispatcher.prototype.startFrom = function (start, priority, notify) {  //start�
     var self = this;
     if (self.destroyed) throw new Error('dispatcher is destroyed');
 
-    var length = self._selections.length;
+    // var length = self._selections.length;
     // if ( length > 0) {
     //
     //     var s = self._selections[length-1];
@@ -708,6 +712,10 @@ Dispatcher.prototype.startFrom = function (start, priority, notify) {  //start�
     //         return;
     //     }
     // }
+    if (start === self.lastStartIdx) {           //如果这次的start和上次一样，则不滑动窗口
+        return;
+    }
+    self.lastStartIdx = start;
 
     priority = Number(priority) || 0;
     self._selections.push({
@@ -728,6 +736,10 @@ Dispatcher.prototype.startFrom = function (start, priority, notify) {  //start�
 Dispatcher.prototype.deStartFrom = function (start, priority) {
     var self = this;
     if (self.destroyed) throw new Error('dispatcher is destroyed');
+
+    if (start === self.lastStartIdx) {           //如果这次的start和上次一样，则不deStartFrom
+        return;
+    }
 
     priority = Number(priority) || 0;
     console.log('deselect '+start);
@@ -776,24 +788,48 @@ Dispatcher.prototype._updateSelections = function () {
 Dispatcher.prototype._gcSelections = function () {
     var self = this;
 
-    for (var i = 0; i < self._selections.length; ++i) {
-        var s = self._selections[i];
+    // for (var i = 0; i < self._selections.length; ++i) {
+    //     var s = self._selections[i];
+    //     var oldOffset = s.offset;
+    //
+    //     // check for newly downloaded pieces in selection
+    //     while (self.bitfield.get(s.from + s.offset) && s.from + s.offset < s.to) {
+    //         s.offset += 1
+    //     }
+    //
+    //     if (oldOffset !== s.offset) s.notify();
+    //     if (s.to !== s.from + s.offset) continue;
+    //     if (!self.bitfield.get(s.from + s.offset)) continue;
+    //
+    //     self._selections.splice(i, 1); // remove fully downloaded selection
+    //     i -= 1; // decrement i to offset splice
+    //
+    //     s.notify();
+    // }
+
+    // for (var i = 0; i < self._selections.length; ++i) {
+    //test
+        var s = self._selections[self._selections.length-1];
         var oldOffset = s.offset;
 
         // check for newly downloaded pieces in selection
         while (self.bitfield.get(s.from + s.offset) && s.from + s.offset < s.to) {
             s.offset += 1
         }
+        self._windowOffset = s.from + s.offset;
 
         if (oldOffset !== s.offset) s.notify();
-        if (s.to !== s.from + s.offset) continue;
-        if (!self.bitfield.get(s.from + s.offset)) continue;
-
-        self._selections.splice(i, 1); // remove fully downloaded selection
-        i -= 1; // decrement i to offset splice
+        // if (s.to !== s.from + s.offset) continue;
+        // if (!self.bitfield.get(s.from + s.offset)) continue;
+        //
+        // self._selections.splice(i, 1); // remove fully downloaded selection
+        // i -= 1; // decrement i to offset splice
 
         s.notify();
-    }
+    // }
+
+    // self._windowOffset = s.from + s.offset;
+    // console.log('current _windowOffset:' + self._windowOffset);
 
     if (!self._selections.length) self.emit('idle')
 };
@@ -803,12 +839,13 @@ Dispatcher.prototype._update = function () {
     if (self.destroyed) return;
     console.log('Dispatcher _update');
     var length = self._selections.length;
+    console.log('_selections.length:'+self._selections.length);
     if ( length > 0) {
 
         // console.log('_update self._selections:'+JSON.stringify(self._selections));
         var s = self._selections[length-1];
         var start = s.from + s.offset;
-        // var end = s.to;
+        // // var end = s.to;
         self._windowOffset = start;
         console.log('current _windowOffset:' + self._windowOffset);
         self._slide();
@@ -873,27 +910,60 @@ Dispatcher.prototype._getNodes = function (index) {      //返回节点构成的
 Dispatcher.prototype._fillWindow = function () {
     var self = this;
 
-    var count = 0;
-    var index = self._windowOffset;                       //TODO:修复auto下为零
+    var sortedNodes = sortByIdleFirst(this.downloaders);     //已经按某种策略排好序的节点数组，按优先级降序
+    if (sortedNodes.length === 0) return;
+    // if (sortedNodes.length > 10) {
+    //     var mean = sortedNodes.getMeanSpeed();
+    //     sortedNodes = sortedNodes.filter(function (item) {
+    //         return item.meanSpeed === -1 || item.meanSpeed >= mean*0.5;
+    //     })
+    // }
 
+    var count = 0;
+    console.log('_fillWindow _windowOffset:' + self._windowOffset + ' downloaders:'+self.downloaders.length);
+    var index = self._windowOffset;                       //TODO:修复auto下为零
+    console.log('sortedNodes length:'+sortedNodes.length);
     while (count !== self._windowLength){
-        console.log('_fillWindow _windowLength:'+self._windowLength);
+        console.log('_fillWindow _windowLength:'+self._windowLength + ' downloadersLength:' + self.downloaders.length);
         if (index >= self.chunks){
 
             break;
         }
 
+        if (count >= sortedNodes.length) break;
+
         if (!self.bitfield.get(index)) {
 
             var pair = self._calRange(index);
-            var node = self._getNodes(count);
-            // console.log('_getNodes windowLength:'+self._windowLength);
+            // var node = self._getNodes(count);
+            // node.select(pair[0],pair[1]);
+            var node = sortedNodes[count];
+            console.log('_fillWindow node downloading:'+node.downloading+' meanspeed:'+node.meanSpeed+' queue:'+node.queue.length);
             node.select(pair[0],pair[1]);
             count ++;
         } else {
 
         }
         index ++;
+    }
+
+
+    function sortByIdleFirst(arr) {
+
+        arr.sort(function (a, b) {           //从大到小排列
+
+            return b.meanSpeed - a.meanSpeed;
+        });
+
+        var idles = arr.filter(function (item) {
+            return item.downloading === false;
+        });
+        var busys = arr.filter(function (item) {
+            return item.downloading === true;
+        });
+        return idles.concat(busys).filter(function (item) {
+            return item.queue.length <= 2;
+        });
     }
 };
 
@@ -912,15 +982,16 @@ Dispatcher.prototype._setupHttp = function (hd) {
 
         console.warn('hd error!');
 
-        if (self.downloaders.length > 2) {
+        if (self.downloaders.length > self._windowLength) {
             self.downloaders.removeObj(hd);
+            self._windowLength --;
         }
         self.checkoutDownloaders();
     });
     hd.on('data',function (buffer, start, end, speed) {
 
         var index = self._calIndex(start);
-        console.log('httpDownloader' + hd.uri +' ondata range:'+start+'-'+end+' at index:'+index);
+        console.log('httpDownloader' + hd.uri +' ondata range:'+start+'-'+end+' at index:'+index+' speed:'+hd.meanSpeed);
         var size = end - start + 1;
         if (!self.bitfield.get(index)){
             self.bitfield.set(index,true);
@@ -928,8 +999,11 @@ Dispatcher.prototype._setupHttp = function (hd) {
             try {
                 self.store.put(index, buffer);
             } catch (e){
-
+                console.error('store error:'+e);
             }
+            //test
+            
+
             self._checkDone();
             if (self.useMonitor) {
                 self.downloaded += size;
@@ -969,7 +1043,7 @@ Dispatcher.prototype._setupDC = function (jd) {
     jd.on('data',function (buffer, start, end, speed) {
 
         var index = self._calIndex(start);
-        console.log('pear_webrtc '+jd.dc_id+' ondata range:'+start+'-'+end+' at index:'+index);
+        console.log('pear_webrtc '+jd.dc_id+' ondata range:'+start+'-'+end+' at index:'+index+' speed:'+jd.meanSpeed);
         var size = end - start + 1;
         if (!self.bitfield.get(index)){
             self.bitfield.set(index,true);
@@ -1034,6 +1108,7 @@ Dispatcher.prototype.addTorrent = function (torrent) {
     if (torrent.pieces.length !== this.chunks) return;
     this.torrent = torrent;
     torrent.pear_downloaded = 0;
+    console.log('addTorrent _windowOffset:' + self._windowOffset);
     if (self._windowOffset + 10 < torrent.pieces.length-1) {
         torrent.select(self._windowOffset+10, torrent.pieces.length-1, 1000, function () {
 
@@ -1150,14 +1225,17 @@ Dispatcher.prototype.autoSlide = function () {
 };
 
 Dispatcher.prototype._shouldFetchNextSegment = function() {
-
+    var self = this;
     // if (self.bufferedPos === -1) return true;
+    // console.log('this.video.buffered.end(this._bufferedPos):'+this.video.buffered.end(this._bufferedPos)+' this.video.currentTime:'+this.video.currentTime)
     try {
-        return (this.video.buffered.end(this._bufferedPos) - this.video.currentTime) < this._slideInterval;
+        this._interval2BufPos = this.video.buffered.end(this._bufferedPos) - this.video.currentTime;
+        return this._interval2BufPos < this._slideInterval;
     } catch (e) {
         console.warn('_shouldFetchNextSegment exception');
         return true;
-    }
+        // return false;
+    };
 };
 
 Dispatcher.prototype._clearAllQueues = function () {
@@ -1174,15 +1252,6 @@ Dispatcher.prototype._abortAll = function () {
     }
 };
 
-Dispatcher.prototype.sortDownloaders = function () {
-
-    this.downloaders.sort(function (a, b) {           //从大到小排列
-        var weigthA = a.type === 'server' ? a.meanSpeed*a.weight : a.meanSpeed;
-        var weigthB = b.type === 'server' ? b.meanSpeed*b.weight : b.meanSpeed;
-        return weigthB - weigthA;
-    });
-};
-
 function noop () {}
 
 Array.prototype.removeObj = function (_obj) {
@@ -1197,11 +1266,18 @@ Array.prototype.removeObj = function (_obj) {
     }
 };
 
-Array.prototype.getMeanSpeed = function (typeArr) {              //根据传输的类型来计算平均速度
+Array.prototype.getMeanSpeed = function (typeArr) {              //根据传输的类型(不传则计算所有节点)来计算平均速度
     var sum = 0;
     var length = 0;
-    for (var i = 0; i < this.length; i++) {
-        if (typeArr.indexOf(this[i].type) >= 0) {
+    if (typeArr) {
+        for (var i = 0; i < this.length; i++) {
+            if (typeArr.indexOf(this[i].type) >= 0) {
+                sum+=this[i].meanSpeed;
+                length ++;
+            }
+        }
+    } else {
+        for (var i = 0; i < this.length; i++) {
             sum+=this[i].meanSpeed;
             length ++;
         }
@@ -1275,6 +1351,7 @@ FileStream.prototype._notify = function () {
     self._notifying = true;
 
     var p = self._piece;
+    console.log('FileStream get piece:' + p);
     self._dispatcher.store.get(p, function (err, buffer) {
         self._notifying = false;
         if (self.destroyed) return;
@@ -1440,7 +1517,7 @@ function HttpDownloader(uri, type, opts) {
     this.startTime = 0;
     this.endTime = 0;
     this.speed = 0;                 //当前速度
-    this.meanSpeed = 0;             //平均速度
+    this.meanSpeed = -1;             //平均速度
     this.counter = 0;               //记录下载的次数
     this.weight = type === 'server' ? 0.7 : 1.0;           //下载排序时的权重系数
     this.isAsync = opts.isAsync || false;                  //默认并行下载
@@ -1465,13 +1542,13 @@ HttpDownloader.prototype.select = function (start, end) {
             this._getChunk(start, end);
         }
     }
-    if (this.queue.length >= 3) {
-        this.clearQueue();
-        this.weight -= 0.1;
-        if (this.weight < 0.1) {
-            this.emit('error');
-        }
-    }
+    // if (this.queue.length >= 3) {
+    //     this.clearQueue();
+    //     this.weight -= 0.1;
+    //     if (this.weight < 0.1) {
+    //         this.emit('error');
+    //     }
+    // }
 };
 
 HttpDownloader.prototype.abort = function () {
@@ -1537,11 +1614,11 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
     };
     // xhr.ontimeout = function (_) {
     //     console.log('HttpDownloader ' + self.uri + ' timeout');
-    //     // self.emit('error');
-    //     self.weight -= 0.2;
-    //     if (self.weight < 0.1) {
-    //         self.emit('error');
-    //     }
+    //     self.emit('error');
+    //     // self.weight -= 0.2;
+    //     // if (self.weight < 0.1) {
+    //     //     self.emit('error');
+    //     // }
     // };
     xhr.send();
 };
@@ -4129,14 +4206,28 @@ WebConn.prototype.destroy = function () {
 
 module.exports = NodeFilter;
 
-function NodeFilter(nodesArray, cb) {
+/*
+    nodesArray: {uri: string type: string}
+    cb: function
+    range: {start: number end: number}
+ */
+
+function NodeFilter(nodesArray, cb, range) {
 
     // var ipArray = array.unique();
     var doneCount = 0;
     var usefulNodes = [];
     var fileLength = 0;
+    if (!range) {
+        range = {
+            start: 0,
+            end: nodesArray.length
+        }
+    } else if (range.end > nodesArray.length) {
+        range.end = nodesArray.length;
+    }
 
-    for (var i=0;i<nodesArray.length;++i) {
+    for (var i=range.start;i<range.end;++i) {
 
         try {
             connectTest(nodesArray[i]);
@@ -4172,7 +4263,11 @@ function NodeFilter(nodesArray, cb) {
 
     function chenkDone() {
 
-        if (doneCount === nodesArray.length) {
+        // if (doneCount === nodesArray.length) {
+        //     cb(usefulNodes, fileLength);
+        // }
+
+        if (doneCount === (range.end-range.start)) {
             cb(usefulNodes, fileLength);
         }
     }
@@ -5230,7 +5325,7 @@ function RTCDownloader(config) {
     self.startTime = 0;
     self.endTime = 0;
     self.speed = 0;                 //当前速度
-    self.meanSpeed = 0;             //平均速度
+    self.meanSpeed = -1;             //平均速度
     self.counter = 0;               //记录下载的次数
     self.weight = 1.0;              //下载排序时的权重系数
     self.simpleRTC = new SimpleRTC();
@@ -5262,13 +5357,13 @@ RTCDownloader.prototype.select = function (start, end) {
         // console.log('pear_webrtc startDownloading:'+start+'-'+end);
         self.startDownloading(start,end);
     }
-    if (self.queue.length >= 3) {
-        self.clearQueue();
-        self.weight -= 0.1;
-        if (self.weight < 0.1) {
-            self.emit('error');
-        }
-    }
+    // if (self.queue.length >= 3) {
+    //     self.clearQueue();
+    //     self.weight -= 0.1;
+    //     if (self.weight < 0.1) {
+    //         self.emit('error');
+    //     }
+    // }
 };
 
 RTCDownloader.prototype.startDownloading = function (start, end) {
@@ -5302,22 +5397,31 @@ RTCDownloader.prototype._receive = function (chunk) {
 
     var headerInfo = self._getHeaderInfo(uint8);
     // console.log('headerInfo:'+JSON.stringify(headerInfo));
+
     if (headerInfo) {
 
         if (headerInfo.value){
 
-            // console.log('self.chunkStore.push');
+            // console.log(self.mac+' headerInfo.start:'+headerInfo.start);
+            // if (headerInfo.start === self.lastChunkEnd + 1){
+            //
+            //     // self.chunkStore.push(uint8);
+            //     self.lastChunkEnd = headerInfo.end;
+            // } else {
+            //     console.error('RTCDownloader' +self.mac+ ' error start:' + headerInfo.start + ' lastChunkEnd:' + self.lastChunkEnd);
+            //     // self.emit('error');
+            // }
 
             self.chunkStore.push(uint8);
         } else if (headerInfo.begin) {
-
+            // console.log(self.mac+' headerInfo.begin:'+self.downloading);
             self.emit('start');
             self.chunkStore = [];
         } else if (headerInfo.done) {
-
+            // console.log(self.mac+' headerInfo.done:'+self.downloading);
             // console.log('self.chunkStore done');
             var finalArray = [], length = self.chunkStore.length;
-            self.downloading = false;
+            // self.downloading = false;
             self.end = headerInfo.end;
 
             self.start = self._getHeaderInfo(self.chunkStore[0]).start;
@@ -5339,8 +5443,9 @@ RTCDownloader.prototype._receive = function (chunk) {
                     finalArray.push(Buffer.from(value));
                 }
             }
-
+            // console.log('RTCDownloader' +self.mac+ ' emit data start:' + self.start + ' end:' + self.end);
             self.emit('data',Buffer.concat(finalArray), self.start, self.end, self.speed);
+            self.downloading = false;
             if (self.queue.length>0) {             //如果下载队列不为空
                 var pair = self.queue.shift();
                 self.startDownloading(pair[0], pair[1]);
@@ -5354,6 +5459,7 @@ RTCDownloader.prototype._receive = function (chunk) {
     } else {
         self.emit('error');
     }
+
 
 };
 
@@ -5371,7 +5477,7 @@ RTCDownloader.prototype.close = function () {
 
 RTCDownloader.prototype.clearQueue = function () {              //清空下载队列
 
-    this.downloading = false;
+    // this.downloading = false;
     if (this.queue.length > 0) {
         this.queue = [];
     }

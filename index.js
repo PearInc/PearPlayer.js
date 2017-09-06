@@ -45,8 +45,9 @@ function PearPlayer(selector, token, opts) {
     self.useTorrent = (opts.useTorrent === false)? false : true;
     self.magnetURI = opts.magnetURI || undefined;
     self.trackers = opts.trackers && Array.isArray(opts.trackers) && opts.trackers.length > 0 ? opts.trackers : null;
+    self.sources = opts.sources && Array.isArray(opts.sources) && opts.sources.length > 0 ? opts.sources : null;
     self.autoPlay = (opts.autoplay === false)? false : true;
-    self.dataChannels = opts.dataChannels || 2;
+    self.dataChannels = opts.dataChannels || 10;
     self.peerId = getPeerId();
     self.isPlaying = false;
     self.fileLength = 0;
@@ -81,24 +82,42 @@ PearPlayer.prototype._start = function () {
         self.useDataChannel = false;
     }
 
-    //test
-    // var nodes = [];
+    if (self.sources) {                     //如果用户指定下载源
 
-    // self._startPlaying(nodes);
+        self.sources = self.sources.map(function (source) {
 
+            return {uri: source, type: 'server'};
+        });
+        nodeFilter(self.sources, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
 
-    self._getNodes(self.token, function (nodes) {
-        console.log('_getNodes:'+JSON.stringify(nodes));
-        // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
-        if (nodes) {
-            self._startPlaying(nodes);
-            // if (self.useDataChannel) {
-            //     self._pearSignalHandshake();
-            // }
-        } else {
-            self._fallBack();
-        }
-    });
+            var length = nodes.length;
+            console.log('nodes:'+JSON.stringify(nodes));
+
+            if (length) {
+                self.fileLength = fileLength;
+                console.log('nodeFilter fileLength:'+fileLength);
+
+                self._startPlaying(nodes);
+            } else {
+
+                self._fallBack();
+            }
+        }, {start: 0, end: 30});
+    } else {
+
+        self._getNodes(self.token, function (nodes) {
+            console.log('_getNodes:'+JSON.stringify(nodes));
+            // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
+            if (nodes) {
+                self._startPlaying(nodes);
+                // if (self.useDataChannel) {
+                //     self._pearSignalHandshake();
+                // }
+            } else {
+                self._fallBack();
+            }
+        });
+    }
 };
 
 PearPlayer.prototype._getNodes = function (token, cb) {
@@ -132,40 +151,8 @@ PearPlayer.prototype._getNodes = function (token, cb) {
             console.log(this.response);
             var res = JSON.parse(this.response);
             // console.log(res.nodes);
-            if (!res.nodes){
+            if (!res.nodes || res.nodes.length <= 2){      //如果没有可用节点或节点数<=2则回源
                 cb(null);
-                // var allNodes = [];
-                // allNodes.push({uri: 'https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_165.mp4', type: 'node'});           //examples
-                // allNodes.push({uri: 'https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_165.mp4', type: 'node'});           //examples
-                // allNodes.push({uri: 'https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_165.mp4', type: 'node'});           //examples
-                // console.log('allNodes:'+JSON.stringify(allNodes));
-                // nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
-                //
-                //     var length = nodes.length;
-                //     console.log('nodes:'+JSON.stringify(nodes));
-                //
-                //     if (length) {
-                //         self.fileLength = fileLength;
-                //         console.log('nodeFilter fileLength:'+fileLength);
-                //         // self.nodes = nodes;
-                //         if (length <= 2) {
-                //             // fallBack(nodes[0]);
-                //             nodes.push({uri: self.src, type: 'server'});
-                //             cb(nodes);
-                //             // self._fallBack();           //test
-                //         } else if (nodes.length >= 20){
-                //             nodes = nodes.slice(0, 20);
-                //             cb(nodes);
-                //         } else {
-                //             cb(nodes);
-                //         }
-                //     } else {
-                //         // self._fallBack();
-                //         cb(null);
-                //     }
-                // });
-
-
             } else {
                 var nodes = res.nodes;
                 var allNodes = [];
@@ -191,7 +178,8 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                     }
                 }
                 console.log('allNodes:'+JSON.stringify(allNodes));
-
+                self.nodes = allNodes;
+                if (allNodes.length === 0) cb(null);
                 nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
 
                     var length = nodes.length;
@@ -216,7 +204,7 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                         // self._fallBack();
                         cb(null);
                     }
-                });
+                }, {start: 0, end: 10});
             }
         } else {
             // self._fallBack();
@@ -238,24 +226,6 @@ PearPlayer.prototype._fallBack = function (url) {
     if (this.autoPlay) {
         this.video.play();
     }
-
-    // nodeFilter([{uri: this.src, type: 'server'}], function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
-    //
-    //     var length = nodes.length;
-    //     console.log('nodes:'+JSON.stringify(nodes));
-    //
-    //     if (length) {
-    //         self.fileLength = fileLength;
-    //         console.log('nodeFilter fileLength:'+fileLength);
-    //         self._startPlaying(nodes);
-    //         if (self.useDataChannel) {
-    //             self._pearSignalHandshake();
-    //         }
-    //     } else {
-    //         // self._fallBack();
-    //         self.emit('exception', {errCode: 2, errMsg: 'Access video source fail'});
-    //     }
-    // });
 
     this.isPlaying = true;
 };
@@ -369,6 +339,21 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
         self.emit('begin', self.fileLength, chunks);
 
+        if (self.useDataChannel) {
+            self._pearSignalHandshake();
+        }
+
+        nodeFilter(self.nodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+
+            if (nodes.length) {
+
+                nodes.map(function (item) {
+
+                    var hd = new HttpDownloader(item.uri, item.type);
+                    d.addNode(hd);
+                });
+            }
+        }, {start: 10, end: 30});
     });
 
     var file = new File(d, fileConfig);
@@ -399,9 +384,9 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
     d.on('loadedmetadata', function () {
 
-        if (self.useDataChannel) {
-            self._pearSignalHandshake();
-        }
+        // if (self.useDataChannel) {
+        //     self._pearSignalHandshake();
+        // }
 
         if (self.useTorrent && self.magnetURI) {
             var client = new WebTorrent();
@@ -412,8 +397,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
             client.add(self.magnetURI, {
                     announce: self.trackers || [
                         "wss://tracker.openwebtorrent.com",
-                        "wss://tracker.btorrent.xyz",
-                        "wss://tracker.fastcast.nz"
+                        "wss://tracker.btorrent.xyz"
                     ],
                     store: d.store,
                     bitfield: d.bitfield
@@ -430,7 +414,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     d.on('needmorenodes', function () {
         console.log('request more nodes');
         self._getNodes(self.token, function (nodes) {
-            console.log('_getNodes:'+JSON.stringify(nodes));
+            console.log('needmorenodes _getNodes:'+JSON.stringify(nodes));
             if (nodes) {
                 // d.addNodes(nodes);
                 for (var i=0;i<nodes.length;++i) {
@@ -439,6 +423,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
                     d.addNode(hd);
                 }
             } else {
+                console.log('noMoreNodes');
                 d.noMoreNodes = true;
             }
         });

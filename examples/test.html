@@ -7,13 +7,13 @@
 </head>
 <body>
 <div id="main">
-    <video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/free/planet.mp4" controls>-->
-    <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-Planet_Earth_II.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-planet.earth.ii.s01e04.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_172.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/free/SoundOfMusic.mp4" controls>-->
-        <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_100.mp4" controls>-->
-        <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_140.mp4" controls>-->
-        <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_165.mp4" controls>-->
+        <video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-sintel-1024-surround.mp4" controls>
+        <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-planet.earth.ii.s01e04.720p.ffmpeg.mp4" controls>-->
     </video>
 </div>
 <!--<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest/dist/pear-player.min.js"></script>-->
@@ -22,18 +22,20 @@
 <script>
 
     //第一个参数为video标签的id或class
-    var player = new PearPlayer('#pearvideo','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwZWFyIjoicGVhci1yZXN0ZnVsLWFwaS0zMzQ0IiwiZXhwIjoxNTAyOTY0ODkyLCJqdGkiOiIxOTIuMTY4LjEuMTA0OjU5MDI0IiwiaXNzIjoiZm9nLWxvZ2luLWFwaSIsInN1YiI6ImFkbWluIn0.eBHCzp2P6grg6rqI9JLW0rg68goVeou0mOQLf7NWfNI', {
+    var player = new PearPlayer('#pearvideo', {
         type: 'mp4',
         algorithm: 'firstaid',      //核心算法,默认firstaid
         autoplay: true,             //是否自动播发视频,默认true
         interval: 5000,             //滑动窗口的时间间隔,单位毫秒,默认10s
-        auto: true,                //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,默认false
+        auto: false,                //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,默认false
         slideInterval: 20,          //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
         useDataChannel: true,       //是否开启data channel,默认true
-        dataChannels: 10,            //创建data channel的最大数量,默认2
+        dataChannels: 10,            //创建data channel的最大数量,默认10
         useTorrent: true,           //是否开启Browser P2P(基于Webtorrent)，默认true
 //                    magnetURI: magnetURI,       //可手动传入magnetURI，需先将useTorrent设为true
 //                    trackers:["wss://tracker.openwebtorrent.com"],    //可手动传入tracker服务器，需先将useTorrent设为true
+        sources: [],
+        //指定下载源，增加这个字段后pearplayer不会再向后台请求节点，建议下载源多于5个以保证流畅播放
         useMonitor: true             //是否开启monitor,会稍微影响性能,默认false
     });
 
