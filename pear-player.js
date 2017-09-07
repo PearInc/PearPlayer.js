@@ -871,6 +871,7 @@ Dispatcher.prototype._checkDone = function () {
         }
         if (!done) break
     }
+    console.log('_checkDone self.done:'+self.done+' done:'+done);
     if (!self.done && done) {
         self.done = true;
         // console.log('dispatcher done');
@@ -918,7 +919,7 @@ Dispatcher.prototype._fillWindow = function () {
     //         return item.meanSpeed === -1 || item.meanSpeed >= mean*0.5;
     //     })
     // }
-    if (self._interval2BufPos > self._slideInterval*2/3) {
+    if (self._interval2BufPos > self._slideInterval*2/3) {            //在缓冲流畅的情况下不使用server节点
         sortedNodes = sortedNodes.filter(function (item) {
             return item.type !== 'server';
         })
@@ -931,7 +932,6 @@ Dispatcher.prototype._fillWindow = function () {
     while (count !== self._windowLength){
         console.log('_fillWindow _windowLength:'+self._windowLength + ' downloadersLength:' + self.downloaders.length);
         if (index >= self.chunks){
-
             break;
         }
 
