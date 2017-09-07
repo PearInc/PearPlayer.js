@@ -7,12 +7,12 @@
 </head>
 <body>
 <div id="main">
-    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>-->
+    <video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>
     <!--<video id="pearvideo" src="https://qq.webrtc.win/free/planet.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-planet.earth.ii.s01e04.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_172.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/free/SoundOfMusic.mp4" controls>-->
-        <video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-sintel-1024-surround.mp4" controls>
+        <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-sintel-1024-surround.mp4" controls>-->
         <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-planet.earth.ii.s01e04.720p.ffmpeg.mp4" controls>-->
     </video>
 </div>
@@ -27,7 +27,6 @@
         algorithm: 'firstaid',      //核心算法,默认firstaid
         autoplay: true,             //是否自动播发视频,默认true
         interval: 5000,             //滑动窗口的时间间隔,单位毫秒,默认10s
-        auto: false,                //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,默认false
         slideInterval: 20,          //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
         useDataChannel: true,       //是否开启data channel,默认true
         dataChannels: 10,            //创建data channel的最大数量,默认10

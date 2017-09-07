@@ -48,7 +48,7 @@ function PearPlayer(selector, token, opts) {
     self.trackers = opts.trackers && Array.isArray(opts.trackers) && opts.trackers.length > 0 ? opts.trackers : null;
     self.sources = opts.sources && Array.isArray(opts.sources) && opts.sources.length > 0 ? opts.sources : null;
     self.autoPlay = (opts.autoplay === false)? false : true;
-    self.dataChannels = opts.dataChannels || 3;
+    self.dataChannels = opts.dataChannels || 10;
     self.peerId = getPeerId();
     self.isPlaying = false;
     self.fileLength = 0;
@@ -677,14 +677,14 @@ Dispatcher.prototype._init = function () {
         if (self.downloaders.length === 1) {               //如果只有一个downloader,则改为串行下载
             self.downloaders[0].isAsync = false;
         }
-        self.bufferingCount ++;
-        console.info('bufferingCount:' + self.bufferingCount);
-        if (self.bufferingCount >= 5) {
-            self.startFrom(0, false);
-            self.autoSlide();
-            self.slide = noop;
-            self.bufferingCount = Number.MIN_VALUE;
-        }
+        // self.bufferingCount ++;
+        // console.info('bufferingCount:' + self.bufferingCount);
+        // if (self.bufferingCount >= 5) {
+        //     self.startFrom(0, false);
+        //     self.autoSlide();
+        //     self.slide = noop;
+        //     self.bufferingCount = Number.MIN_VALUE;
+        // }
 
     });
 
@@ -918,6 +918,11 @@ Dispatcher.prototype._fillWindow = function () {
     //         return item.meanSpeed === -1 || item.meanSpeed >= mean*0.5;
     //     })
     // }
+    if (self._interval2BufPos > self._slideInterval*2/3) {
+        sortedNodes = sortedNodes.filter(function (item) {
+            return item.type !== 'server';
+        })
+    }
 
     var count = 0;
     console.log('_fillWindow _windowOffset:' + self._windowOffset + ' downloaders:'+self.downloaders.length);
@@ -984,7 +989,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
 
         if (self.downloaders.length > self._windowLength) {
             self.downloaders.removeObj(hd);
-            self._windowLength --;
+            if (self._windowLength > 3) self._windowLength --;
         }
         self.checkoutDownloaders();
     });
@@ -1083,7 +1088,7 @@ Dispatcher.prototype._setupDC = function (jd) {
         console.warn('jd error '+ jd.mac);
         jd.close();
         self.downloaders.removeObj(jd);
-        if (self._windowLength >3) {
+        if (self._windowLength > 3) {
             self._windowLength --;
         }
         self.checkoutDownloaders();
@@ -1511,7 +1516,7 @@ function HttpDownloader(uri, type, opts) {
     EventEmitter.call(this);
     opts = opts || {};
     this.uri = uri;
-    this.type = type;               //server node  browser
+    this.type = type;               //server node
     this.downloading = false;       //是否正在下载
     this.queue = [];                //下载队列
     this.startTime = 0;
@@ -5380,7 +5385,7 @@ RTCDownloader.prototype.startDownloading = function (start, end) {
         // "end":10*1024*1024
     };
     console.log("pear_send_file : " + JSON.stringify(str));
-    if (self.useMonitor) self.startTime=(new Date()).getTime();
+    self.startTime=(new Date()).getTime();
     self.simpleRTC.send(JSON.stringify(str));
 };
 
@@ -5428,14 +5433,14 @@ RTCDownloader.prototype._receive = function (chunk) {
 
             self.end = self._getHeaderInfo(self.chunkStore[self.chunkStore.length-1]).end;
 
-            if (self.useMonitor) {
-                self.endTime = (new Date()).getTime();
-                // self.speed = Math.floor(((self.end - self.start) * 1000) / ((self.endTime - self.startTime) * 1024));  //单位: KB/s
-                self.speed = Math.floor((self.end - self.start) / (self.endTime - self.startTime));  //单位: KB/s
-                console.info('pear_webrtc speed:' + self.speed*10 + 'KB/s');
-                self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
-                console.log('datachannel '+self.dc_id+' meanSpeed:' + self.meanSpeed + 'KB/s');
-            }
+
+            self.endTime = (new Date()).getTime();
+            // self.speed = Math.floor(((self.end - self.start) * 1000) / ((self.endTime - self.startTime) * 1024));  //单位: KB/s
+            self.speed = Math.floor((self.end - self.start + 1) / (self.endTime - self.startTime));  //单位: KB/s
+            console.info('pear_webrtc speed:' + self.speed*10 + 'KB/s');
+            self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
+            console.log('datachannel '+self.dc_id+' meanSpeed:' + self.meanSpeed + 'KB/s');
+
             for (var i = 0; i < length; i++) {
                 if (!!self.chunkStore[i]) {
                     var value = self.chunkStore[i].subarray(256);
