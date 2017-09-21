@@ -38,7 +38,7 @@
 <br>
 Demo演示地址：https://qq.webrtc.win/watch
 
-![multisources](fig/bitmap.jpeg)
+![multisources](fig/bitmap_cn.png)
 
 ## 使用方法
 
