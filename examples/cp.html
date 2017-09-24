@@ -10,8 +10,11 @@
     <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>-->
         <!--<video id="pearvideo" src="https://qq.webrtc.win/free/planet.mp4" controls>-->
         <!--<video id="pearvideo" src="https://qq.webrtc.win/free/SoundOfMusic.mp4" controls>-->
-        <video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-sintel-1024-surround.mp4" controls>
+        <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-sintel-1024-surround.mp4" controls>-->
         <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_60.mp4" controls>-->
+    <!--<video id="pearvideo" src="http://p2p.ali.fastweb.com.cn/test.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/music/Say_You_Wont_Let_Go.mp4" controls>-->
+    <video id="pearvideo" src="https://p2p.ali.fastweb.com.cn/test2.mp4" controls>
     </video>
 </div>
 <!--<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest/dist/pear-player.min.js"></script>-->
@@ -23,7 +26,7 @@
     var xhr = new XMLHttpRequest();
     xhr.open("POST", 'https://api.webrtc.win:6601/v1/customer/login');
     var data = JSON.stringify({
-        user:'test',
+        username:'test',
         password:'123456'
     });
     xhr.timeout = 2000;
@@ -41,7 +44,7 @@
                     interval: 5000,             //滑动窗口的时间间隔,单位毫秒,默认10s
                     auto: false,                //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,默认false
                     slideInterval: 20,          //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
-                    useDataChannel: true,       //是否开启data channel,默认true
+                    useDataChannel: false,       //是否开启data channel,默认true
                     dataChannels: 10,            //创建data channel的最大数量,默认2
                     useTorrent: true,           //是否开启Browser P2P(基于Webtorrent)，默认true
 //                    magnetURI: magnetURI,       //可手动传入magnetURI，需先将useTorrent设为true

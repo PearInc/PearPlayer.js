@@ -47,7 +47,7 @@ function PearPlayer(selector, token, opts) {
     self.trackers = opts.trackers && Array.isArray(opts.trackers) && opts.trackers.length > 0 ? opts.trackers : null;
     self.sources = opts.sources && Array.isArray(opts.sources) && opts.sources.length > 0 ? opts.sources : null;
     self.autoPlay = (opts.autoplay === false)? false : true;
-    self.dataChannels = opts.dataChannels || 10;
+    self.dataChannels = opts.dataChannels || 20;
     self.peerId = getPeerId();
     self.isPlaying = false;
     self.fileLength = 0;
@@ -62,14 +62,34 @@ function PearPlayer(selector, token, opts) {
         chunkSize: opts.chunkSize && (opts.chunkSize%BLOCK_LENGTH === 0 ? opts.chunkSize : Math.ceil(opts.chunkSize/BLOCK_LENGTH)*BLOCK_LENGTH),   //每个chunk的大小,默认1M
         interval: opts.interval,     //滑动窗口的时间间隔,单位毫秒,默认10s,
         slideInterval: opts.slideInterval,
-        auto: opts.auto,
+        autoplay: opts.autoplay,
         useMonitor: self.useMonitor
     };
     // console.log('self.dispatcherConfig:'+self.dispatcherConfig.chunkSize);
 
+    //info
+    self.connectedDC = 0;
+    self.usefulDC = 0;
+
+    self._debugInfo = {
+        totalDCs: 0,
+        connectedDCs: 0,
+        usefulDCs: 0,
+        totalHTTP: 0,
+        totalHTTPS: 0,
+        usefulHTTPAndHTTPS: 0,
+        windowOffset: 0,
+        windowLength: 0,
+        signalServerConnected: false
+    }
+
     self._start();
 
 }
+
+Object.defineProperty(PearPlayer.prototype, 'debugInfo', {
+    get: function () { return this._debugInfo }
+});
 
 PearPlayer.prototype._start = function () {
     var self = this;
@@ -94,7 +114,7 @@ PearPlayer.prototype._start = function () {
             console.log('nodes:'+JSON.stringify(nodes));
 
             if (length) {
-                self.fileLength = fileLength;
+                // self.fileLength = fileLength;
                 console.log('nodeFilter fileLength:'+fileLength);
 
                 self._startPlaying(nodes);
@@ -145,66 +165,91 @@ PearPlayer.prototype._getNodes = function (token, cb) {
         // self._fallBack();
         cb(null);
     };
+    xhr.onerror = function () {
+        self._fallBack();
+    };
     xhr.onload = function () {
         if (this.status >= 200 && this.status < 300 || this.status == 304) {
 
             console.log(this.response);
+
             var res = JSON.parse(this.response);
             // console.log(res.nodes);
-            if (!res.nodes || res.nodes.length <= 2){      //如果没有可用节点或节点数<=2则回源
-                cb(null);
-            } else {
-                var nodes = res.nodes;
-                var allNodes = [];
-                var isLocationHTTP = location.protocol === 'http:' ? true : false;
-                for (var i=0; i<nodes.length; ++i){
-                    var protocol = nodes[i].protocol;
-                    if (protocol === 'webtorrent') {
-                        if (!self.magnetURI) {                     //如果用户没有指定magnetURI
-                            self.magnetURI = nodes[i].magnet_uri;
-                            console.log('_getNodes magnetURI:'+nodes[i].magnet_uri);
-                        }
-                    } else {
-                        if (isLocationHTTP || protocol !== 'http') {
-                            var host = nodes[i].host;
-                            var type = nodes[i].type;
-                            var path = self.urlObj.host + self.urlObj.path;
-                            var url = protocol+'://'+host+'/'+path;
-                            if (!self.nodeSet.has(url)) {
-                                allNodes.push({uri: url, type: type});
-                                self.nodeSet.add(url);
+            if (res.size) {                         //如果filesize大于0
+                // self.fileLength = res.size;           //test
+
+                // if (self.useDataChannel) {
+                //     self._pearSignalHandshake();
+                // }
+
+                if (!res.nodes){      //如果没有可用节点则回源
+                    // cb(null);
+                    cb([{uri: self.src, type: 'server'}]);
+                } else {
+
+                    var nodes = res.nodes;
+                    var allNodes = [];
+                    var isLocationHTTP = location.protocol === 'http:' ? true : false;
+                    var httpsCount = 0;
+                    var httpCount = 0;
+                    for (var i=0; i<nodes.length; ++i) {
+                        var protocol = nodes[i].protocol;
+                        if (protocol === 'webtorrent') {
+                            if (!self.magnetURI) {                     //如果用户没有指定magnetURI
+                                self.magnetURI = nodes[i].magnet_uri;
+                                console.log('_getNodes magnetURI:'+nodes[i].magnet_uri);
+                            }
+                        } else {
+                            protocol === 'https' ? httpsCount++ : httpCount++;
+                            if (isLocationHTTP || protocol !== 'http') {
+                                var host = nodes[i].host;
+                                var type = nodes[i].type;
+                                var path = self.urlObj.host + self.urlObj.path;
+                                var url = protocol+'://'+host+'/'+path;
+                                if (!self.nodeSet.has(url)) {
+                                    allNodes.push({uri: url, type: type});
+                                    self.nodeSet.add(url);
+                                }
                             }
                         }
                     }
-                }
-                console.log('allNodes:'+JSON.stringify(allNodes));
-                self.nodes = allNodes;
-                if (allNodes.length === 0) cb(null);
-                nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
 
-                    var length = nodes.length;
-                    console.log('nodes:'+JSON.stringify(nodes));
+                    self._debugInfo.totalHTTPS = httpsCount;
+                    self._debugInfo.totalHTTP = httpCount;
 
-                    if (length) {
-                        self.fileLength = fileLength;
-                        console.log('nodeFilter fileLength:'+fileLength);
-                        // self.nodes = nodes;
-                        if (length <= 2) {
-                            // fallBack(nodes[0]);
-                            nodes.push({uri: self.src, type: 'server'});
-                            cb(nodes);
-                            // self._fallBack();           //test
-                        } else if (nodes.length >= 20){
-                            nodes = nodes.slice(0, 20);
-                            cb(nodes);
+                    console.log('allNodes:'+JSON.stringify(allNodes));
+                    self.nodes = allNodes;
+                    if (allNodes.length === 0) cb([{uri: self.src, type: 'server'}]);
+                    nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+                        // nodes = [];                                            //test
+                        var length = nodes.length;
+                        console.log('nodes:'+JSON.stringify(nodes));
+
+                        self._debugInfo.usefulHTTPAndHTTPS = length;
+
+                        if (length) {
+                            self.fileLength = fileLength;
+                            // console.log('nodeFilter fileLength:'+fileLength);
+                            // self.nodes = nodes;
+                            if (length <= 2) {
+                                // fallBack(nodes[0]);
+                                nodes.push({uri: self.src, type: 'server'});
+                                cb(nodes);
+                                // self._fallBack();           //test
+                            } else if (nodes.length >= 20){
+                                nodes = nodes.slice(0, 20);
+                                cb(nodes);
+                            } else {
+                                cb(nodes);
+                            }
                         } else {
-                            cb(nodes);
+                            // self._fallBack();
+                            cb([{uri: self.src, type: 'server'}]);
                         }
-                    } else {
-                        // self._fallBack();
-                        cb(null);
-                    }
-                }, {start: 0, end: 10});
+                    }, {start: 0, end: 10});
+                }
+            } else {
+                cb(null);
             }
         } else {
             // self._fallBack();
@@ -233,11 +278,13 @@ PearPlayer.prototype._fallBack = function (url) {
 PearPlayer.prototype._pearSignalHandshake = function () {
     var self = this;
     var dcCount = 0;                            //目前建立的data channel数量
-
+    console.log('_pearSignalHandshake');
     var websocket = new WebSocket('wss://signal.webrtc.win:7601/wss');
+    // var websocket = new WebSocket('wss://183.60.40.104:9600/wss');
     self.websocket = websocket;
     websocket.onopen = function() {
-        console.log('websocket connection opened!');
+        // console.log('websocket connection opened!');
+        self._debugInfo.signalServerConnected = true;
         var hash = md5(self.urlObj.host + self.urlObj.path);
         websocket.push(JSON.stringify({
             "action": "get",
@@ -264,6 +311,9 @@ PearPlayer.prototype._pearSignalHandshake = function () {
         console.log("[simpleRTC] websocket message is: " + JSON.stringify(message));
         // message = message.nodes[1];
         var nodes = message.nodes;
+
+        self._debugInfo.totalDCs = nodes.length;
+
         for (var i=0;i<nodes.length;++i) {
             var node = nodes[i];
             if (!node.errorcode) {
@@ -299,11 +349,11 @@ PearPlayer.prototype.initDC = function (message) {
         console.log('[jd] signal:' + JSON.stringify(message));
         self.websocket.send(JSON.stringify(message));
     });
-    jd.on('connect',function () {
-        // if (!self.isPlaying) {
-        //
-        //     self._startPlaying(self.fileLength, self.nodes);
-        // }
+    jd.once('connect',function () {
+
+        self._debugInfo.connectedDCs ++;
+        self._debugInfo.usefulDCs ++;
+
         self.dispatcher.addDataChannel(jd);
         // if (self.websocket) {
         //     self.websocket.close();
@@ -334,14 +384,18 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     var d = new Dispatcher(self.dispatcherConfig);
     self.dispatcher = d;
 
+    if (self.useDataChannel) {
+        self._pearSignalHandshake();
+    }
+
     //{errCode: 1, errMsg: 'This browser do not support WebRTC communication'}
     d.once('ready', function (chunks) {
 
         self.emit('begin', self.fileLength, chunks);
 
-        if (self.useDataChannel) {
-            self._pearSignalHandshake();
-        }
+        // if (self.useDataChannel) {
+        //     self._pearSignalHandshake();
+        // }
 
         nodeFilter(self.nodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
 
@@ -360,13 +414,13 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
     self.file = file;
 
-    file.once('canplay', function () {
-        self.emit('canplay');
-        // console.log('66666666666666 canplay');
-        // if (self.autoPlay) {
-        //     self.video.play();
-        // }
-    });
+    // file.once('canplay', function () {
+    //     self.emit('canplay');
+    //     // console.log('66666666666666 canplay');
+    //     // if (self.autoPlay) {
+    //     //     self.video.play();
+    //     // }
+    // });
 
     file.renderTo(self.selector, {autoplay: self.autoPlay});
     // file.renderTo(self.selector, {autoplay: false});
@@ -382,17 +436,18 @@ PearPlayer.prototype._startPlaying = function (nodes) {
         // d.addNode(hd);
     });
 
-    d.on('loadedmetadata', function () {
+    d.on('loadedmetadata', function (metadata) {
 
         // if (self.useDataChannel) {
         //     self._pearSignalHandshake();
         // }
+        self.emit('metadata', metadata);
 
         if (self.useTorrent && self.magnetURI) {
             var client = new WebTorrent();
-            client.on('error', function () {
-
-            });
+            // client.on('error', function () {
+            //
+            // });
             console.log('magnetURI:'+self.magnetURI);
             client.add(self.magnetURI, {
                     announce: self.trackers || [
@@ -461,7 +516,8 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     });
     d.on('downloaded', function (downloaded) {
 
-        self.emit('progress', downloaded);
+        var progress = downloaded > 1.0 ? 1.0 : downloaded;
+        self.emit('progress', progress);
     });
     d.on('fograte', function (fogRate) {
 
@@ -491,6 +547,15 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     d.on('traffic', function (mac, size, type) {
 
         self.emit('traffic', mac, size, type);
+    });
+    d.on('datachannelerror', function () {
+
+        self._debugInfo.usefulDCs --;
+    });
+    d.on('fillwindow', function (windowOffset, windowLength) {
+
+        self._debugInfo.windowOffset = windowOffset;
+        self._debugInfo.windowLength = windowLength;
     });
 };
 
