@@ -35,7 +35,7 @@ To know more information [API document ](docs/get-started.md).<br/>
 <br>
 Demo：https://qq.webrtc.win/watch
 
-![multisources](fig/bitmap.png)
+![multisources](fig/bitmap_en.png)
 
 ## Quick Start
 
