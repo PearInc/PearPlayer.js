@@ -33,7 +33,7 @@ To know more information [API document ](docs/get-started.md).<br/>
 - Use easily like `<video>` label, can integrate [video.js](https://github.com/videojs/video.js)
 - Realize browser P2P ability（base on webtorrent）
 <br>
-Demo：https://qq.webrtc.win/watch
+Demo：https://demo.webrtc.win/pearplayer/
 
 ![multisources](fig/bitmap_en.png)
 
@@ -50,7 +50,7 @@ or
 ```
 suppose we want to use video label to paly（/tv/pear001.mp4）
 ```html
-<video id="pearvideo" src="https://qq.webrtc.win/tv/pear001.mp4" controls>
+<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>
 ```
 Final
 ```html
