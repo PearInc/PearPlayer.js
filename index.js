@@ -36,6 +36,9 @@ function PearPlayer(selector, token, opts) {
     if (!((opts.src && typeof opts.src === 'string') || self.video.src)) throw new Error('video src is not valid!');
     // if (!(config.token && typeof config.token === 'string')) throw new Error('token is not valid!');
 
+    console.time('视频播放延时：');
+    console.time('dispatcher初始化延时：');
+
     self.selector = selector;
     self.src = opts.src || self.video.src;
     self.urlObj = url.parse(self.src);
@@ -56,6 +59,7 @@ function PearPlayer(selector, token, opts) {
     self.dispatcher = null;
     self.JDMap = {};                           //根据dc的peer_id来获取jd的map
     self.nodeSet = new Set();                  //保存node的set
+    self.tempDCQueue = [];                     //暂时保存data channel的队列
     self.file = null;
     self.dispatcherConfig = {
 
@@ -63,7 +67,8 @@ function PearPlayer(selector, token, opts) {
         interval: opts.interval,     //滑动窗口的时间间隔,单位毫秒,默认10s,
         slideInterval: opts.slideInterval,
         autoplay: opts.autoplay,
-        useMonitor: self.useMonitor
+        useMonitor: self.useMonitor,
+        // auto: true
     };
     // console.log('self.dispatcherConfig:'+self.dispatcherConfig.chunkSize);
 
@@ -81,9 +86,15 @@ function PearPlayer(selector, token, opts) {
         windowOffset: 0,
         windowLength: 0,
         signalServerConnected: false
+    };
+
+    if (self.useDataChannel) {
+        self._pearSignalHandshake();
     }
 
     self._start();
+
+    self._monitorUpload();
 
 }
 
@@ -129,6 +140,7 @@ PearPlayer.prototype._start = function () {
             console.log('_getNodes:'+JSON.stringify(nodes));
             // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
             if (nodes) {
+
                 self._startPlaying(nodes);
                 // if (self.useDataChannel) {
                 //     self._pearSignalHandshake();
@@ -280,7 +292,7 @@ PearPlayer.prototype._pearSignalHandshake = function () {
     var dcCount = 0;                            //目前建立的data channel数量
     console.log('_pearSignalHandshake');
     var websocket = new WebSocket('wss://signal.webrtc.win:7601/wss');
-    // var websocket = new WebSocket('wss://183.60.40.104:9600/wss');
+    // var websocket = new WebSocket('ws://183.60.40.104:9600/ws');
     self.websocket = websocket;
     websocket.onopen = function() {
         // console.log('websocket connection opened!');
@@ -354,10 +366,16 @@ PearPlayer.prototype.initDC = function (message) {
         self._debugInfo.connectedDCs ++;
         self._debugInfo.usefulDCs ++;
 
-        self.dispatcher.addDataChannel(jd);
+        // self.dispatcher.addDataChannel(jd);
         // if (self.websocket) {
         //     self.websocket.close();
         // }
+
+        if (self.dispatcher) {
+            self.dispatcher.addDataChannel(jd);
+        } else {
+            self.tempDCQueue.push(jd);
+        }
     });
 
     return jd;
@@ -383,9 +401,13 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
     var d = new Dispatcher(self.dispatcherConfig);
     self.dispatcher = d;
-
-    if (self.useDataChannel) {
-        self._pearSignalHandshake();
+    console.timeEnd('dispatcher初始化延时：');
+    // if (self.useDataChannel) {
+    //     self._pearSignalHandshake();
+    // }
+    while (self.tempDCQueue.length) {
+        var jd = self.tempDCQueue.shift();
+        self.dispatcher.addDataChannel(jd);
     }
 
     //{errCode: 1, errMsg: 'This browser do not support WebRTC communication'}
@@ -414,13 +436,11 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
     self.file = file;
 
-    // file.once('canplay', function () {
-    //     self.emit('canplay');
-    //     // console.log('66666666666666 canplay');
-    //     // if (self.autoPlay) {
-    //     //     self.video.play();
-    //     // }
-    // });
+    file.once('canplay', function () {
+        // self.emit('canplay');
+        // console.log('66666666666666 canplay');
+        console.timeEnd('视频播放延时：');
+    });
 
     file.renderTo(self.selector, {autoplay: self.autoPlay});
     // file.renderTo(self.selector, {autoplay: false});
@@ -557,6 +577,54 @@ PearPlayer.prototype._startPlaying = function (nodes) {
         self._debugInfo.windowOffset = windowOffset;
         self._debugInfo.windowLength = windowLength;
     });
+};
+
+PearPlayer.prototype._monitorUpload = function () {
+    var self = this;
+    var info = this._debugInfo;
+    setInterval(function () {
+        // console.log('_monitorUpload:'+(info.connectedDCs/info.totalDCs).toFixed(2));
+        if (info.signalServerConnected) {
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", 'https://statdapi.webrtc.win:9800/statd');
+            var data = JSON.stringify({
+                "cmds":[
+                    {
+                        "key":"fogvdn.browser.monitor.totalDC",
+                        "value":info.totalDCs,
+                        "type":"counting"
+                    },
+                    {
+                        "key":"fogvdn.browser.monitor.connectedDC",
+                        "value":info.connectedDCs,
+                        "type":"counting"
+                    },
+                    {
+                        "key":"fogvdn.browser.monitor.errorDC",
+                        "value":info.connectedDCs - info.usefulDCs,
+                        "type":"counting"
+                    },
+                    {
+                        "key":"fogvdn.browser.monitor.connectRate",
+                        "value":(info.connectedDCs/info.totalDCs*10).toFixed(2),
+                        "type":"counting"
+                    }
+                ]
+            });
+            xhr.timeout = 2000;
+            xhr.onload = function () {
+                if (this.status >= 200 && this.status < 300) {
+
+
+                    console.log('sucess');
+                } else {
+                    // alert('请求出错!');
+                }
+            }
+            xhr.send(data);
+        }
+
+    }, 10000);
 };
 
 function getBrowserRTC () {

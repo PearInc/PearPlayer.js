@@ -37,6 +37,9 @@ function PearPlayer(selector, token, opts) {
     if (!((opts.src && typeof opts.src === 'string') || self.video.src)) throw new Error('video src is not valid!');
     // if (!(config.token && typeof config.token === 'string')) throw new Error('token is not valid!');
 
+    console.time('视频播放延时：');
+    console.time('dispatcher初始化延时：');
+
     self.selector = selector;
     self.src = opts.src || self.video.src;
     self.urlObj = url.parse(self.src);
@@ -57,6 +60,7 @@ function PearPlayer(selector, token, opts) {
     self.dispatcher = null;
     self.JDMap = {};                           //根据dc的peer_id来获取jd的map
     self.nodeSet = new Set();                  //保存node的set
+    self.tempDCQueue = [];                     //暂时保存data channel的队列
     self.file = null;
     self.dispatcherConfig = {
 
@@ -64,7 +68,8 @@ function PearPlayer(selector, token, opts) {
         interval: opts.interval,     //滑动窗口的时间间隔,单位毫秒,默认10s,
         slideInterval: opts.slideInterval,
         autoplay: opts.autoplay,
-        useMonitor: self.useMonitor
+        useMonitor: self.useMonitor,
+        // auto: true
     };
     // console.log('self.dispatcherConfig:'+self.dispatcherConfig.chunkSize);
 
@@ -82,9 +87,15 @@ function PearPlayer(selector, token, opts) {
         windowOffset: 0,
         windowLength: 0,
         signalServerConnected: false
+    };
+
+    if (self.useDataChannel) {
+        self._pearSignalHandshake();
     }
 
     self._start();
+
+    self._monitorUpload();
 
 }
 
@@ -130,6 +141,7 @@ PearPlayer.prototype._start = function () {
             console.log('_getNodes:'+JSON.stringify(nodes));
             // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
             if (nodes) {
+
                 self._startPlaying(nodes);
                 // if (self.useDataChannel) {
                 //     self._pearSignalHandshake();
@@ -281,7 +293,7 @@ PearPlayer.prototype._pearSignalHandshake = function () {
     var dcCount = 0;                            //目前建立的data channel数量
     console.log('_pearSignalHandshake');
     var websocket = new WebSocket('wss://signal.webrtc.win:7601/wss');
-    // var websocket = new WebSocket('wss://183.60.40.104:9600/wss');
+    // var websocket = new WebSocket('ws://183.60.40.104:9600/ws');
     self.websocket = websocket;
     websocket.onopen = function() {
         // console.log('websocket connection opened!');
@@ -355,10 +367,16 @@ PearPlayer.prototype.initDC = function (message) {
         self._debugInfo.connectedDCs ++;
         self._debugInfo.usefulDCs ++;
 
-        self.dispatcher.addDataChannel(jd);
+        // self.dispatcher.addDataChannel(jd);
         // if (self.websocket) {
         //     self.websocket.close();
         // }
+
+        if (self.dispatcher) {
+            self.dispatcher.addDataChannel(jd);
+        } else {
+            self.tempDCQueue.push(jd);
+        }
     });
 
     return jd;
@@ -384,9 +402,13 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
     var d = new Dispatcher(self.dispatcherConfig);
     self.dispatcher = d;
-
-    if (self.useDataChannel) {
-        self._pearSignalHandshake();
+    console.timeEnd('dispatcher初始化延时：');
+    // if (self.useDataChannel) {
+    //     self._pearSignalHandshake();
+    // }
+    while (self.tempDCQueue.length) {
+        var jd = self.tempDCQueue.shift();
+        self.dispatcher.addDataChannel(jd);
     }
 
     //{errCode: 1, errMsg: 'This browser do not support WebRTC communication'}
@@ -415,13 +437,11 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
     self.file = file;
 
-    // file.once('canplay', function () {
-    //     self.emit('canplay');
-    //     // console.log('66666666666666 canplay');
-    //     // if (self.autoPlay) {
-    //     //     self.video.play();
-    //     // }
-    // });
+    file.once('canplay', function () {
+        // self.emit('canplay');
+        // console.log('66666666666666 canplay');
+        console.timeEnd('视频播放延时：');
+    });
 
     file.renderTo(self.selector, {autoplay: self.autoPlay});
     // file.renderTo(self.selector, {autoplay: false});
@@ -560,6 +580,54 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     });
 };
 
+PearPlayer.prototype._monitorUpload = function () {
+    var self = this;
+    var info = this._debugInfo;
+    setInterval(function () {
+        // console.log('_monitorUpload:'+(info.connectedDCs/info.totalDCs).toFixed(2));
+        if (info.signalServerConnected) {
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", 'https://statdapi.webrtc.win:9800/statd');
+            var data = JSON.stringify({
+                "cmds":[
+                    {
+                        "key":"fogvdn.browser.monitor.totalDC",
+                        "value":info.totalDCs,
+                        "type":"counting"
+                    },
+                    {
+                        "key":"fogvdn.browser.monitor.connectedDC",
+                        "value":info.connectedDCs,
+                        "type":"counting"
+                    },
+                    {
+                        "key":"fogvdn.browser.monitor.errorDC",
+                        "value":info.connectedDCs - info.usefulDCs,
+                        "type":"counting"
+                    },
+                    {
+                        "key":"fogvdn.browser.monitor.connectRate",
+                        "value":(info.connectedDCs/info.totalDCs*10).toFixed(2),
+                        "type":"counting"
+                    }
+                ]
+            });
+            xhr.timeout = 2000;
+            xhr.onload = function () {
+                if (this.status >= 200 && this.status < 300) {
+
+
+                    console.log('sucess');
+                } else {
+                    // alert('请求出错!');
+                }
+            }
+            xhr.send(data);
+        }
+
+    }, 10000);
+};
+
 function getBrowserRTC () {
     if (typeof window === 'undefined') return null;
     var wrtc = {
@@ -653,7 +721,7 @@ function Dispatcher(config) {
 
     //减少重复下载
     self._interval2BufPos = 0;                                  //当前播放点距离缓冲前沿的时间，单位秒
-    self.lastStartIdx = -1;                                       //记录上个startFrom的索引
+    // self.lastStartIdx = -1;                                       //记录上个startFrom的索引
 
     //webrtc
     // self.usefulDCs = 0;                                         //可用的data channel节点数量
@@ -740,18 +808,18 @@ Dispatcher.prototype._init = function () {
 
 
     });
-    self.video.addEventListener('timeupdate', function () {
-
-        var bool = self._shouldFetchNextSegment();
-        // console.log('timeupdate:'+bool);
-        if (bool){
-            self.slide();
-            // console.log('timeupdate slide');
-            // self._throttle(self.slide,self);
-            // self._update();
-            self._lastSlideTime = self.video.currentTime;
-        }
-    });
+    // self.video.addEventListener('timeupdate', function () {            //test
+    //
+    //     var bool = self._shouldFetchNextSegment();
+    //     // console.log('timeupdate:'+bool);
+    //     if (bool){
+    //         self.slide();
+    //         // console.log('timeupdate slide');
+    //         // self._throttle(self.slide,self);
+    //         // self._update();
+    //         self._lastSlideTime = self.video.currentTime;
+    //     }
+    // });
     self.video.addEventListener('waiting', function () {
 
         console.info('waiting for buffer');
@@ -802,10 +870,10 @@ Dispatcher.prototype.startFrom = function (start, priority, notify) {  //start�
     //         return;
     //     }
     // }
-    if (start === self.lastStartIdx) {           //如果这次的start和上次一样，则不滑动窗口
-        return;
-    }
-    self.lastStartIdx = start;
+    // if (start === self.lastStartIdx) {           //如果这次的start和上次一样，则不滑动窗口
+    //     return;
+    // }
+    // self.lastStartIdx = start;
 
     priority = Number(priority) || 0;
     self._selections.push({
@@ -827,9 +895,9 @@ Dispatcher.prototype.deStartFrom = function (start, priority) {
     var self = this;
     if (self.destroyed) throw new Error('dispatcher is destroyed');
 
-    if (start === self.lastStartIdx) {           //如果这次的start和上次一样，则不deStartFrom
-        return;
-    }
+    // if (start === self.lastStartIdx) {           //如果这次的start和上次一样，则不deStartFrom
+    //     return;
+    // }
 
     priority = Number(priority) || 0;
     console.log('deselect '+start);
@@ -1153,7 +1221,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
                 self.downloaded += size;
                 self.emit('downloaded', self.downloaded/self.fileSize);
                 // hd.downloaded += size;
-                self.emit('traffic', hd.mac, size, 'HTTP');
+                self.emit('traffic', hd.mac, size, hd.type === 1 ? 'HTTP_Node' : 'HTTP_Server');
                 console.log('ondata hd.type:' + hd.type +' index:' + index);
                 if (hd.type === 1) {          //node
                     self.fogDownloaded += self.pieceLength;
@@ -1207,7 +1275,7 @@ Dispatcher.prototype._setupDC = function (jd) {
                 self.emit('buffersources', self.bufferSources);
                 self.emit('sourcemap', 'd', index);
                 // jd.downloaded += size;
-                self.emit('traffic', jd.mac, size, 'WebRTC');
+                self.emit('traffic', jd.mac, size, 'WebRTC_Node');
             }
         } else {
             console.log('重复下载');
@@ -1253,7 +1321,8 @@ Dispatcher.prototype.addTorrent = function (torrent) {
     torrent.pear_downloaded = 0;
     console.log('addTorrent _windowOffset:' + self._windowOffset);
     if (self._windowOffset + self._windowLength < torrent.pieces.length-1) {
-        torrent.critical(self._windowOffset+self._windowLength, torrent.pieces.length-1);
+        console.log('torrent select:' + (self._windowOffset+self._windowLength)+' to'+(torrent.pieces.length-1));
+        torrent.select(self._windowOffset+self._windowLength, torrent.pieces.length-1, 1000);
     }
     torrent.on('piecefromtorrent', function (index) {
 
@@ -1270,7 +1339,7 @@ Dispatcher.prototype.addTorrent = function (torrent) {
             self.bufferSources[index] = 'b';
             self.emit('buffersources', self.bufferSources);
             self.emit('sourcemap', 'b', index);
-            self.emit('traffic', 'Webtorrent', self.pieceLength, 'Browser');
+            self.emit('traffic', 'Webtorrent', self.pieceLength, 'WebRTC_Browser');
         }
     });
 
@@ -1420,15 +1489,17 @@ Array.prototype.getMeanSpeed = function (typeArr) {              //根据传输�
     var length = 0;
     if (typeArr) {
         for (var i = 0; i < this.length; i++) {
-            if (typeArr.indexOf(this[i].type) >= 0) {
+            if (typeArr.indexOf(this[i].type) >= 0 && this[i].meanSpeed > 0) {
                 sum+=this[i].meanSpeed;
                 length ++;
             }
         }
     } else {
         for (var i = 0; i < this.length; i++) {
-            sum+=this[i].meanSpeed;
-            length ++;
+            if (this[i].meanSpeed > 0) {
+                sum+=this[i].meanSpeed;
+                length ++;
+            }
         }
     }
     return Math.floor(sum/length);
@@ -1523,9 +1594,7 @@ FileStream.prototype._notify = function () {
         // console.log('pushing buffer of length:'+buffer.length);
         self._reading = false;
         self.push(buffer);
-        // if (p === self._dispatcher._windowLength/2) {
-        //     self.emit('canplay');
-        // }
+
         if (self._missing === 0) self.push(null);
     });
     self._piece += 1;
@@ -1561,6 +1630,7 @@ FileStream.prototype._ifCanPlay = function () {                   //缓存足够
     //     this._dispatcher.video.play();
     // }
     this._dispatcher.enoughInitBuffer = true;
+    this.emit('canplay');
 };
 
 function noop () {}
@@ -1578,7 +1648,6 @@ var stream = require('readable-stream');
 var FileStream = require('./file-stream');
 var streamToBlobURL = require('stream-to-blob-url');
 var streamToBuffer = require('stream-with-known-length-to-buffer');
-var WebTorrent = require('./pear-torrent');
 
 inherits(File, EventEmitter);
 
@@ -1613,23 +1682,15 @@ function File (dispatcher, file){
     this._dispatcher.elem = file.elem;
     this._dispatcher._init();
 
-
-    // this.getBuffer(function (err, buffer) {
-    //     console.log('file 开始做种...');
-    //     if (!err) {
-    //         var seeder = new WebTorrent();
-    //         seeder.seed(buffer, {'name': this.name}, function (torrent) {
-    //             console.log('file 做种成功：'+torrent.magnetURI);
-    //         })
-    //     }
-    // })
 };
 
 File.prototype.createReadStream = function (opts) {
     var self = this;
     // opts = opts || {};
-    // console.log('createReadStream');
-    // console.log(opts.start?opts.start:0);
+    console.log('createReadStream');
+    // console.log('start:'+(opts.start?opts.start:-1));
+    // console.log('end:'+(opts.end?opts.end:-1));
+    console.log(JSON.stringify(opts));
 
     // if (!opts) return;
 
@@ -1652,9 +1713,9 @@ File.prototype.createReadStream = function (opts) {
             self._dispatcher.deStartFrom(fileStream._startPiece, true);
         }
     });
-    // fileStream.once('canplay', function () {
-    //     self.emit('canplay');
-    // });
+    fileStream.once('canplay', function () {
+        self.emit('canplay');
+    });
     return fileStream;
 };
 
@@ -1685,7 +1746,7 @@ File.prototype._destroy = function () {
 
 
 }).call(this,require('_process'))
-},{"./file-stream":3,"./pear-torrent":14,"_process":131,"end-of-stream":42,"events":123,"inherits":48,"path":129,"readable-stream":83,"render-media":84,"stream-to-blob-url":96,"stream-with-known-length-to-buffer":98}],5:[function(require,module,exports){
+},{"./file-stream":3,"_process":131,"end-of-stream":42,"events":123,"inherits":48,"path":129,"readable-stream":83,"render-media":84,"stream-to-blob-url":96,"stream-with-known-length-to-buffer":98}],5:[function(require,module,exports){
 
 module.exports = HttpDownloader;
 
@@ -1713,6 +1774,7 @@ function HttpDownloader(uri, type, opts) {
     this.counter = 0;               //记录下载的次数
     this.weight = type === 'server' ? 0.7 : 1.0;           //下载排序时的权重系数
     this.isAsync = opts.isAsync || false;                  //默认并行下载
+    this.expectedLength = 1048576;     //期望返回的buffer长度
     //节点流量统计
     this.downloaded = 0;
     this.mac = this.uri.split('.')[0].split('//')[1];
@@ -1766,6 +1828,7 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
     var self = this;
     console.log('HttpDownloader _getChunk');
     self.downloading = true;
+    self.expectedLength = end - begin + 1;
     var xhr = new XMLHttpRequest();
     self._xhr = xhr;
     xhr.open("GET", self.uri);
@@ -1820,7 +1883,7 @@ HttpDownloader.prototype._handleChunk = function (range,data) {
     var start = range.split('-')[0];
     var end = range.split('-')[1];
     var buffer = Buffer.from(data);
-    this.emit('data', buffer, start, end, this.speed);
+    if (buffer.length === this.expectedLength) this.emit('data', buffer, start, end, this.speed);
 
 };
 
@@ -4438,6 +4501,7 @@ function NodeFilter(nodesArray, cb, range) {
             if (this.status >= 200 && this.status<300) {
                 usefulNodes.push(node);
                 fileLength = xhr.getResponseHeader('content-length');
+                console.log('NodeFilter fileLength:'+fileLength);
             }
             chenkDone();
         };
@@ -5355,11 +5419,18 @@ SimpleRTC.prototype.dataChannelEvents = function (channel) {
     };
 
     channel.onmessage = function (event) {
-        // console.log("Received message:"+ event.data);
-        // var li = document.createElement('li');
-        // li.innerHTML = 'Friend: '+event.data;
-        // firstPeerOutput.appendChild(li);
-        self.emit('data', event.data);
+
+        var data = event.data;
+        if (data instanceof Blob) {                       //兼容firefox 将返回的Blob类型转为ArrayBuffer
+            var fileReader = new FileReader();
+            fileReader.onload = function() {
+                // arrayBuffer = this.result;
+                self.emit('data', this.result);
+            };
+            fileReader.readAsArrayBuffer(data);
+        } else {
+            self.emit('data', data);
+        }
     };
 
     channel.onerror = function (err) {
@@ -5541,7 +5612,6 @@ RTCDownloader.prototype.messageFromDC = function (message) {          //由服�
 RTCDownloader.prototype.select = function (start, end) {
     var self = this;
     console.log('pear_webrtc'+self.dc_id+'select:'+start+'-'+end);
-    console.log('pear_webrtc ' + this.peer_id + ' queue:' + this.queue.length);
     if (self.downloading){
         // console.log('pear_webrtc queue.push:'+start+'-'+end);
         self.queue.push([start,end]);
@@ -5625,7 +5695,7 @@ RTCDownloader.prototype._receive = function (chunk) {
             self.endTime = (new Date()).getTime();
             // self.speed = Math.floor(((self.end - self.start) * 1000) / ((self.endTime - self.startTime) * 1024));  //单位: KB/s
             self.speed = Math.floor((self.end - self.start + 1) / (self.endTime - self.startTime));  //单位: KB/s
-            console.info('pear_webrtc speed:' + self.speed*10 + 'KB/s');
+            console.info('pear_webrtc speed:' + self.speed + 'KB/s');
             self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
             console.log('datachannel '+self.dc_id+' meanSpeed:' + self.meanSpeed + 'KB/s');
 

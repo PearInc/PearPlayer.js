@@ -10,8 +10,7 @@
     <video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>
     <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-demo-your-name.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-planet.earth.ii.s01e04.mp4" controls>-->
-    <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-SoundOfMusic_172.mp4" controls>-->
-    <!--<video id="pearvideo" src="https://qq.webrtc.win/free/SoundOfMusic.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-SoundOfMusic_172.mp4" controls>-->
         <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-sintel-1024-surround.mp4" controls>-->
         <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-planet.earth.ii.s01e04.720p.ffmpeg.mp4" controls>-->
         <!--<video id="pearvideo" src="https://qq.webrtc.win/music/Say_You_Wont_Let_Go.mp4" controls>-->
@@ -34,7 +33,7 @@
         useTorrent: true,           //是否开启Browser P2P(基于Webtorrent)，默认true
 //                    magnetURI: magnetURI,       //可手动传入magnetURI，需先将useTorrent设为true
 //                    trackers:["wss://tracker.openwebtorrent.com"],    //可手动传入tracker服务器，需先将useTorrent设为true
-        sources: [],
+//        sources: [],
         //指定下载源，增加这个字段后pearplayer不会再向后台请求节点，建议下载源多于5个以保证流畅播放
         useMonitor: true,             //是否开启monitor,会稍微影响性能,默认false
         chunkSize: 1024*1024
@@ -51,7 +50,7 @@
     player.on('traffic', onTraffic);                  //节点流量统计,每次下载buffer都会触发该事件
     player.on('sourcemap', onSourceMap);          //记录每个buffer的下载源类型，其中s: server   n: node  d: data channel  b: browser
     player.on('metadata', onMetaData);
-    console.log('7777777777777777');
+
     function onBegin(fileLength, chunks) {
         console.log('start downloading buffer by first aid, file length is:' + fileLength/1024/1024 + ' total chunks:' + chunks);
     }
