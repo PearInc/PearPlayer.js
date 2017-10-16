@@ -53,7 +53,7 @@ Demo演示地址：https://demo.webrtc.win/pearplayer
 ```
 假设用video标签播放（/tv/pear001.mp4）这个视频，HTML如下所示：
 ```html
-<video id="pearvideo" src="https://qq.webrtc.win/tv/pear001.mp4" controls>
+<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>
 ```
 只需要如下几行代码，即可将PearPlayer绑定到video标签：
 ```html
