@@ -12,7 +12,7 @@ var RTCDownloader = require('./lib/webrtc-downloader-bin');
 var getPeerId = require('./lib/peerid-generator');
 var url = require('url');
 var File = require('./lib/file');
-var NodeFilter = require('./lib/node-filter');
+var nodeFilter = require('./lib/node-filter');
 var inherits = require('inherits');
 var EventEmitter = require('events').EventEmitter;
 var Set = require('./lib/set');
@@ -37,9 +37,8 @@ function PearPlayer(selector, token, opts) {
     if (!((opts.src && typeof opts.src === 'string') || self.video.src)) throw new Error('video src is not valid!');
     // if (!(config.token && typeof config.token === 'string')) throw new Error('token is not valid!');
 
-    // console.time('视频播放延时：');
-    // console.time('dispatcher初始化延时：');
-    self.playDelayStart = (new Date()).getTime();
+    console.time('视频播放延时：');
+    console.time('dispatcher初始化延时：');
 
     self.selector = selector;
     self.src = opts.src || self.video.src;
@@ -87,8 +86,7 @@ function PearPlayer(selector, token, opts) {
         usefulHTTPAndHTTPS: 0,
         windowOffset: 0,
         windowLength: 0,
-        signalServerConnected: false,
-        playDelay: 0
+        signalServerConnected: false
     };
 
     if (self.useDataChannel) {
@@ -122,7 +120,7 @@ PearPlayer.prototype._start = function () {
 
             return {uri: source, type: 'server'};
         });
-        NodeFilter(self.sources, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+        nodeFilter(self.sources, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
 
             var length = nodes.length;
             console.log('nodes:'+JSON.stringify(nodes));
@@ -191,6 +189,11 @@ PearPlayer.prototype._getNodes = function (token, cb) {
             var res = JSON.parse(this.response);
             // console.log(res.nodes);
             if (res.size) {                         //如果filesize大于0
+                // self.fileLength = res.size;           //test
+
+                // if (self.useDataChannel) {
+                //     self._pearSignalHandshake();
+                // }
 
                 if (!res.nodes){      //如果没有可用节点则回源
                     // cb(null);
@@ -230,7 +233,7 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                     console.log('allNodes:'+JSON.stringify(allNodes));
                     self.nodes = allNodes;
                     if (allNodes.length === 0) cb([{uri: self.src, type: 'server'}]);
-                    NodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+                    nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
                         // nodes = [];                                            //test
                         var length = nodes.length;
                         console.log('nodes:'+JSON.stringify(nodes));
@@ -238,7 +241,7 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                         self._debugInfo.usefulHTTPAndHTTPS = length;
 
                         if (length) {
-                            self.fileLength =  res.size;
+                            self.fileLength = fileLength;
                             // console.log('nodeFilter fileLength:'+fileLength);
                             // self.nodes = nodes;
                             if (length <= 2) {
@@ -253,10 +256,10 @@ PearPlayer.prototype._getNodes = function (token, cb) {
                                 cb(nodes);
                             }
                         } else {
-                            self._fallBack();
-                            // cb([{uri: self.src, type: 'server'}]);
+                            // self._fallBack();
+                            cb([{uri: self.src, type: 'server'}]);
                         }
-                    }, {start: 0, end: 10, expectedLength: res.size});
+                    }, {start: 0, end: 10});
                 }
             } else {
                 cb(null);
@@ -290,7 +293,7 @@ PearPlayer.prototype._pearSignalHandshake = function () {
     var dcCount = 0;                            //目前建立的data channel数量
     console.log('_pearSignalHandshake');
     var websocket = new WebSocket('wss://signal.webrtc.win:7601/wss');
-    // var websocket = new WebSocket('ws://signal.webrtc.win:9600/ws');           //test
+    // var websocket = new WebSocket('ws://183.60.40.104:9600/ws');
     self.websocket = websocket;
     websocket.onopen = function() {
         // console.log('websocket connection opened!');
@@ -340,9 +343,6 @@ PearPlayer.prototype._pearSignalHandshake = function () {
             }
         }
     };
-    // websocket.onclose = function () {
-    //     alert('websocket关闭');
-    // }
 };
 
 PearPlayer.prototype.initDC = function (message) {
@@ -352,7 +352,7 @@ PearPlayer.prototype.initDC = function (message) {
         peer_id: self.peerId,
         chunkSize: 32*1024,
         host: self.urlObj.host,
-        uri: self.urlObj.pathname,
+        uri: self.urlObj.path,
         useMonitor: self.useMonitor
     };
 
@@ -396,13 +396,13 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     var fileConfig = {
         length: self.fileLength,
         offset: 0,
-        name: self.urlObj.pathname,
+        name: self.urlObj.path,
         elem: self.selector
     };
 
     var d = new Dispatcher(self.dispatcherConfig);
     self.dispatcher = d;
-    // console.timeEnd('dispatcher初始化延时：');
+    console.timeEnd('dispatcher初始化延时：');
     // if (self.useDataChannel) {
     //     self._pearSignalHandshake();
     // }
@@ -420,7 +420,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
         //     self._pearSignalHandshake();
         // }
 
-        NodeFilter(self.nodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+        nodeFilter(self.nodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
 
             if (nodes.length) {
 
@@ -440,9 +440,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     file.once('canplay', function () {
         // self.emit('canplay');
         // console.log('66666666666666 canplay');
-        // console.timeEnd('视频播放延时：');
-        self.playDelayEnd = (new Date()).getTime();
-        self._debugInfo.playDelay = (self.playDelayEnd - self.playDelayStart);
+        console.timeEnd('视频播放延时：');
     });
 
     file.renderTo(self.selector, {autoplay: self.autoPlay});
@@ -475,8 +473,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
             client.add(self.magnetURI, {
                     announce: self.trackers || [
                         "wss://tracker.openwebtorrent.com",
-                        "wss://tracker.btorrent.xyz",
-                        'wss://tracker.webrtc.win'
+                        "wss://tracker.btorrent.xyz"
                     ],
                     store: d.store,
                     bitfield: d.bitfield
@@ -674,8 +671,7 @@ function Dispatcher(config) {
 
     var self = this;
 
-    if (!config.initialDownloaders) throw new Error('initialDownloaders is required');
-    if (!config.fileSize) throw new Error('fileSize is required');
+    if (!(config.initialDownloaders && config.fileSize)) throw new Error('config is not completed');
     self.fileSize = config.fileSize;
     self.initialDownloaders = config.initialDownloaders;
     self.pieceLength = config.chunkSize || 1*1024*1024;
@@ -1859,14 +1855,7 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
                     self._getChunk(pair[0], pair[1]);
                 }
             }
-            var header = this.getResponseHeader("Content-Range");
-            if (header) {
-                var range = header.split(" ",2)[1].split('/',1)[0];
-            } else {
-                self.emit('error');
-                return;
-            }
-
+            var range = this.getResponseHeader("Content-Range").split(" ",2)[1].split('/',1)[0];
             // console.log('xhr.onload range:'+range);
             // self.emit('done');
             self._handleChunk(range,this.response);
@@ -4475,25 +4464,25 @@ module.exports = NodeFilter;
 /*
     nodesArray: {uri: string type: string}
     cb: function
-    config: {start: number end: number expectedLength: number}
+    range: {start: number end: number}
  */
 
-function NodeFilter(nodesArray, cb, config) {
+function NodeFilter(nodesArray, cb, range) {
 
     // var ipArray = array.unique();
     var doneCount = 0;
     var usefulNodes = [];
     var fileLength = 0;
-    if (!config) {
-        config = {
+    if (!range) {
+        range = {
             start: 0,
             end: nodesArray.length
         }
-    } else if (config.end > nodesArray.length) {
-        config.end = nodesArray.length;
+    } else if (range.end > nodesArray.length) {
+        range.end = nodesArray.length;
     }
 
-    for (var i = config.start;i < config.end;++i) {
+    for (var i=range.start;i<range.end;++i) {
 
         try {
             connectTest(nodesArray[i]);
@@ -4510,12 +4499,9 @@ function NodeFilter(nodesArray, cb, config) {
         xhr.onload = function () {
             doneCount ++;
             if (this.status >= 200 && this.status<300) {
+                usefulNodes.push(node);
                 fileLength = xhr.getResponseHeader('content-length');
-                if ( !config.expectedLength || (config.expectedLength && (fileLength == config.expectedLength))) {
-                    console.log('NodeFilter fileLength:'+fileLength+' expectedLength:'+config.expectedLength);
-                    usefulNodes.push(node);
-                }
-
+                console.log('NodeFilter fileLength:'+fileLength);
             }
             chenkDone();
         };
@@ -4537,8 +4523,7 @@ function NodeFilter(nodesArray, cb, config) {
         //     cb(usefulNodes, fileLength);
         // }
 
-        if (doneCount === (config.end-config.start)) {
-            console.log('usefulNodes.length:'+usefulNodes.length);
+        if (doneCount === (range.end-range.start)) {
             cb(usefulNodes, fileLength);
         }
     }
@@ -5330,7 +5315,6 @@ function SimpleRTC(config) {
 SimpleRTC.prototype.signal = function (event) {
 
     console.log('[pear_webrtc] event.type' + event.type);
-    console.log('event JSON: ' + JSON.stringify(event));
     if (event.type === 'offer') {
         this.receiveOffer(event);
     } else if (event.type === 'answer') {
