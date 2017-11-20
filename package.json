@@ -27,7 +27,7 @@
     "pull-from-github": "git pull",
     "push-to-github": "git add . && git commit -m 'update' && git push",
     "npm-publish": "npm publish",
-    "copy-to-downloader-project": "cp -r ./src/* ../test/src"
+    "copy-to-downloader-project": "cp -r ./src/* ../PearDownloader.js/src"
   },
   "author": "Xie Ting Pear Limited",
   "license": "ISC",

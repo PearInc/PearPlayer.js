@@ -15,5 +15,4 @@ function PearDownloader(urlStr, token, opts) {
     // if (!(self instanceof PearPlayer)) return new PearPlayer(selector, opts);
     if (typeof token === 'object') return PearDownloader(urlStr, '', token);
     Worker.call(self, urlStr, token, opts);
-
 }
