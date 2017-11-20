@@ -18,7 +18,7 @@
 <br>
 ![multisources](fig/fogvdn_multisources.png)
 
-只需将`pear-player.min.js`通过`<script>`标签导入到HTML就可以使用。 参考以下[代码示例](#使用方法)，也可以查看[`/examples/player-test.html`](/examples/player-test.html)来了解使用方法。
+只需将`pear-player.min.js`通过`<script>`标签导入到HTML就可以使用。 参考以下[代码示例](#快速开始)，也可以查看[`/examples/player-test.html`](/examples/player-test.html)来了解使用方法。
 
 信令部分以及WebRTC部分使用了精心设计的协议，实现此部分可以参考[API文档](docs/get-started.md)。<br/>
 
