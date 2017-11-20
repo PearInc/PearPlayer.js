@@ -1,6 +1,6 @@
 {
   "name": "pearplayer",
-  "version": "2.2.6",
+  "version": "2.3.6",
   "description": "",
   "main": "index.js",
   "dependencies": {
@@ -22,7 +22,7 @@
     "del": "^2.0.2"
   },
   "scripts": {
-    "build-player": "browserify index.player.js -s PearPlayer > pear-player.js",
+    "build-player": "browserify index.player.js -s PearPlayer > ./dist/pear-player.js",
     "uglify-player": "browserify -s PearPlayer -e  ./index.player.js | babili > ./dist/pear-player.min.js",
     "pull-from-github": "git pull",
     "push-to-github": "git add . && git commit -m 'update' && git push",
@@ -30,7 +30,7 @@
     "copy-to-downloader-project": "cp -r ./src/* ../PearDownloader.js/src"
   },
   "author": "Xie Ting Pear Limited",
-  "license": "ISC",
+  "license": "MIT",
   "homepage": "https://pear.hk",
   "keywords": [
     "WebRTC",
