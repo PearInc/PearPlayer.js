@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pear Player</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<div id="main">
+    <video id="pearvideo" controls>
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Corporate-Video-V5.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-demo-your-name.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-planet.earth.ii.s01e04.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-SoundOfMusic_172.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-sintel-1024-surround.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-planet.earth.ii.s01e04.720p.ffmpeg.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/music/Say_You_Wont_Let_Go.mp4" controls>-->
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Corporate-Video.mp4" controls>-->
+    </video>
+</div>
+<!--<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest/dist/pear-player.min.js"></script>-->
+<script src="../pear-player.js"></script>
+<!--<script src="../dist/pear-player.min.js"></script>-->
+<script>
+
+    //第一个参数为video标签的id或class
+    var player = new PearPlayer('#pearvideo', {
+        src: 'https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4',
+        scheduler: 'IdleFirst',      //节点调度算法，默认IdleFirst，其它内置调度算法有“WebRTCFirst“和”CloudFirst”
+        autoplay: true,             //是否自动播发视频,默认true
+        interval: 5000,             //滑动窗口的时间间隔,单位毫秒,默认10s
+        useDataChannel: true,       //是否开启data channel,默认true
+        dataChannels: 20,           //创建data channel的最大数量,默认20
+        useTorrent: true,           //是否开启Browser P2P(基于Webtorrent)，默认true
+//      magnetURI: 'magnet:?xt=...',       //可手动传入magnetURI，需先将useTorrent设为true
+//      trackers:["wss://tracker.openwebtorrent.com"],    //可手动传入tracker服务器，需先将useTorrent设为true
+        sources: [],                 //指定下载源，增加这个字段后pearplayer不会再向后台请求节点，建议下载源多于5个以保证流畅播放
+        useMonitor: true,            //是否开启monitor,会稍微影响性能,默认false
+        BTMode: false                //是否开启纯BT下载模式（基于webtorrent），默认false
+    });
+
+    player.on('exception', onException);               //播放器出现异常时的回调函数
+    player.on('begin', onBegin);　　　　　　　　　　　　　 //开始下载时触发
+    player.on('progress', onProgress);                 //回调目前的下载进度
+    player.on('cloudspeed', onCloudSpeed);             //来自cloud节点的HTTP的瞬时下载速度
+    player.on('fogspeed', onFogSpeed);                 //来自fog的节点（包括HTTP和WebRTC）的瞬时下载速度
+    player.on('fograte', onWebRTCRate);　　　　　　　　　 //fog节点的下载比率（下载的字节数除以总的字节数）
+    player.on('buffersources', onBufferSources);       //buffer map，记录每个buffer的下载源类型，其中s: server   n: node  d: data channel  b: browser
+    player.on('done', onDone);　　　　　　　　           //结束下载时触发
+    player.on('traffic', onTraffic);                  //节点流量统计,每次下载buffer都会触发该事件
+    player.on('sourcemap', onSourceMap);          //记录每个buffer的下载源类型，其中s: server   n: node  d: data channel  b: browser
+    player.on('metadata', onMetaData);
+    player.on('canplay', onCanPlay);
+
+    function onBegin(fileLength, chunks) {
+        console.log('start downloading buffer by first aid, file length is:' + fileLength/1024/1024 + ' total chunks:' + chunks);
+    }
+
+    function onProgress(downloaded) {
+        console.log('Progress: ' + (downloaded * 100).toFixed(1) + '%');
+    }
+
+    function onCloudSpeed(speed) {
+        console.log('Cloud download speed: ' + speed + 'KBps');
+    }
+
+    function onFogSpeed(speed) {
+        console.log('Fog download speed: ' + speed + 'KBps');
+    }
+
+    function onWebRTCRate(p2pRate) {
+        console.log('Fog Ratio: ' + (p2pRate * 100).toFixed(1) + '%');
+    }
+
+    function onDone() {
+        console.log('finished downloading buffer by first aid');
+
+    }
+
+    function onException(exception) {
+        var errCode = exception.errCode;
+        switch (errCode) {
+            case 1:
+                console.log(exception.errMsg);
+                break
+        }
+    }
+    function onBufferSources(bufferSources) {            //s: server   n: node  d: data channel  b: browser
+        console.log('Current Buffer Sources:' + bufferSources);
+        console.log(JSON.stringify(player.debugInfo));
+    }
+    function onTraffic(mac, size, type) {
+        console.log('type:'+type+' mac:'+mac+' downloaded:'+size/1024/1024+'MB');
+    }
+
+    function onSourceMap(sourceType, index) {
+        console.log('Received source type:' + sourceType + ' index:' + index);
+    }
+    function onMetaData(metadata) {
+        console.log('metadata bitrate:'+metadata.bitrate/1024+' KB/s');
+    }
+    function onCanPlay(delay) {
+        console.log('canplay delay:' + delay);
+    }
+</script>
+</body>
+
+</html>

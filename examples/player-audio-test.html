@@ -2,19 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Pear Player</title>
+    <title>Audio</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
 <div id="main">
-    <video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>
-    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-demo-your-name.mp4" controls>-->
-    <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-planet.earth.ii.s01e04.mp4" controls>-->
-    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-SoundOfMusic_172.mp4" controls>-->
-        <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-sintel-1024-surround.mp4" controls>-->
-        <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-planet.earth.ii.s01e04.720p.ffmpeg.mp4" controls>-->
-        <!--<video id="pearvideo" src="https://qq.webrtc.win/music/Say_You_Wont_Let_Go.mp4" controls>-->
-    </video>
+    <audio id="pearvideo" controls>
+        您的浏览器不支持 audio 标签。
+    </audio>
 </div>
 <!--<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest/dist/pear-player.min.js"></script>-->
 <script src="../pear-player.js"></script>
@@ -23,20 +18,18 @@
 
     //第一个参数为video标签的id或class
     var player = new PearPlayer('#pearvideo', {
-        type: 'mp4',
-        algorithm: 'firstaid',      //核心算法,默认firstaid
+        src: "https://qq.webrtc.win/picture/Pear-Demo-audio.mp3",
+        scheduler: 'WebRTCFirst',      //节点调度算法,默认WebRTCFirst
         autoplay: true,             //是否自动播发视频,默认true
         interval: 5000,             //滑动窗口的时间间隔,单位毫秒,默认10s
-        slideInterval: 20,          //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
         useDataChannel: true,       //是否开启data channel,默认true
-        dataChannels: 20,            //创建data channel的最大数量,默认10
+        dataChannels: 20,           //创建data channel的最大数量,默认10
         useTorrent: true,           //是否开启Browser P2P(基于Webtorrent)，默认true
-//                    magnetURI: magnetURI,       //可手动传入magnetURI，需先将useTorrent设为true
-//                    trackers:["wss://tracker.openwebtorrent.com"],    //可手动传入tracker服务器，需先将useTorrent设为true
-//        sources: [],
-        //指定下载源，增加这个字段后pearplayer不会再向后台请求节点，建议下载源多于5个以保证流畅播放
-        useMonitor: true,             //是否开启monitor,会稍微影响性能,默认false
-        chunkSize: 1024*1024
+//      magnetURI: 'magnet:?xt=...',       //可手动传入magnetURI，需先将useTorrent设为true
+//      trackers:["wss://tracker.openwebtorrent.com"],    //可手动传入tracker服务器，需先将useTorrent设为true
+        sources: [],                 //指定下载源，增加这个字段后pearplayer不会再向后台请求节点，建议下载源多于5个以保证流畅播放
+        useMonitor: true,            //是否开启monitor,会稍微影响性能,默认false
+        BTMode: false                //是否开启纯BT下载模式（基于webtorrent），默认false
     });
 
     player.on('exception', onException);               //播放器出现异常时的回调函数
@@ -50,6 +43,7 @@
     player.on('traffic', onTraffic);                  //节点流量统计,每次下载buffer都会触发该事件
     player.on('sourcemap', onSourceMap);          //记录每个buffer的下载源类型，其中s: server   n: node  d: data channel  b: browser
     player.on('metadata', onMetaData);
+    player.on('canplay', onCanPlay);
 
     function onBegin(fileLength, chunks) {
         console.log('start downloading buffer by first aid, file length is:' + fileLength/1024/1024 + ' total chunks:' + chunks);
@@ -68,7 +62,7 @@
     }
 
     function onWebRTCRate(p2pRate) {
-        console.log('Fog Rate: ' + (p2pRate * 100).toFixed(1) + '%');
+        console.log('Fog Ratio: ' + (p2pRate * 100).toFixed(1) + '%');
     }
 
     function onDone() {
@@ -97,6 +91,9 @@
     }
     function onMetaData(metadata) {
         console.log('metadata bitrate:'+metadata.bitrate/1024+' KB/s');
+    }
+    function onCanPlay(delay) {
+        console.log('canplay delay:' + delay);
     }
 </script>
 </body>
