@@ -25,7 +25,6 @@ function HttpDownloader(uri, type, opts) {
     this.counter = 0;               //记录下载的次数
     this.weight = type === 'server' ? 0.7 : 1.0;           //下载排序时的权重系数
     this.isAsync = opts.isAsync || false;                  //默认并行下载
-    this.expectedLength = 1048576;     //期望返回的buffer长度
     //节点流量统计
     this.downloaded = 0;
     this.mac = this.uri.split('.')[0].split('//')[1];
@@ -79,7 +78,6 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
     var self = this;
     console.log('HttpDownloader _getChunk');
     self.downloading = true;
-    self.expectedLength = end - begin + 1;
     var xhr = new XMLHttpRequest();
     self._xhr = xhr;
     xhr.open("GET", self.uri);
@@ -134,7 +132,7 @@ HttpDownloader.prototype._handleChunk = function (range,data) {
     var start = range.split('-')[0];
     var end = range.split('-')[1];
     var buffer = Buffer.from(data);
-    if (buffer.length === this.expectedLength) this.emit('data', buffer, start, end, this.speed);
+    this.emit('data', buffer, start, end, this.speed);
 
 };
 

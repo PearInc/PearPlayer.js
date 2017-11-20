@@ -5,11 +5,12 @@ var eos = require('end-of-stream');
 var EventEmitter = require('events').EventEmitter;
 var path = require('path');
 var inherits = require('inherits');
-var render = require('render-media');
+var mime = require('render-media/lib/mime.json')
 var stream = require('readable-stream');
 var FileStream = require('./file-stream');
 var streamToBlobURL = require('stream-to-blob-url');
 var streamToBuffer = require('stream-with-known-length-to-buffer');
+// var WebTorrent = require('./pear-torrent');
 
 inherits(File, EventEmitter);
 
@@ -17,7 +18,7 @@ function File (dispatcher, file){
     EventEmitter.call(this);
 
     this._dispatcher = dispatcher;
-    this.seeder = null;
+    // this.seeder = null;
     this._destroyed = false;
 
     this.name = file.name;
@@ -42,17 +43,15 @@ function File (dispatcher, file){
 
     this._dispatcher.path = this.path;
     this._dispatcher.elem = file.elem;
-    this._dispatcher._init();
+    // this._dispatcher._init();
 
 };
 
 File.prototype.createReadStream = function (opts) {
     var self = this;
     // opts = opts || {};
-    console.log('createReadStream');
-    // console.log('start:'+(opts.start?opts.start:-1));
-    // console.log('end:'+(opts.end?opts.end:-1));
-    console.log(JSON.stringify(opts));
+    // console.log('createReadStream');
+    // console.log(opts.start?opts.start:0);
 
     // if (!opts) return;
 
@@ -65,27 +64,28 @@ File.prototype.createReadStream = function (opts) {
     }
 
     var fileStream = new FileStream(self, opts);
-    self._dispatcher.startFrom(fileStream._startPiece, true, function () {
-        fileStream._notify();
+    self._dispatcher.select(fileStream._startPiece, fileStream._endPiece, true, function () {
+        fileStream._notify()
     });
+    // self._dispatcher.startFrom(fileStream._startPiece, true, function () {
+    //     fileStream._notify();
+    // });
     // self._dispatcher._updateAfterSeek();
     eos(fileStream, function () {
         if (self._destroyed) return;
         if (!self._dispatcher.destroyed) {
-            self._dispatcher.deStartFrom(fileStream._startPiece, true);
+            self._dispatcher.deselect(fileStream._startPiece, fileStream._endPiece, true);
+            // self._dispatcher.deStartFrom(fileStream._startPiece, true);
         }
-    });
-    fileStream.once('canplay', function () {
-        self.emit('canplay');
     });
     return fileStream;
 };
 
-File.prototype.renderTo = function (elem, opts, cb) {
-
-    render.render(this, elem, opts, cb);
-
-};
+// File.prototype.renderTo = function (elem, opts, cb) {
+//
+//     render.render(this, elem, opts, cb);
+//
+// };
 
 File.prototype.getBuffer = function (cb) {
     streamToBuffer(this.createReadStream(), this.length, cb)
@@ -96,8 +96,13 @@ File.prototype.getBlobURL = function (cb) {
     streamToBlobURL(this.createReadStream(), this._getMimeType(), cb)
 };
 
+File.prototype.getProgressiveBlobURL = function (cb) {
+    // if (typeof window === 'undefined') throw new Error('browser-only method')
+    streamToBlobURL(this.createReadStream({start: 0, end: this._dispatcher.downloaded}), this._getMimeType(), cb)
+};
+
 File.prototype._getMimeType = function () {
-    return render.mime[path.extname(this.name).toLowerCase()]
+    return mime[path.extname(this.name).toLowerCase()]
 };
 
 File.prototype._destroy = function () {

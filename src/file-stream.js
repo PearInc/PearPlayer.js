@@ -59,8 +59,8 @@ FileStream.prototype._notify = function () {
 
     if (self._notifying) return;
 
-    self._ifCanPlay();
-    if (!this._dispatcher.enoughInitBuffer) return;
+    // self._ifCanPlay();
+    // if (!this._dispatcher.enoughInitBuffer) return;
     self._notifying = true;
 
     var p = self._piece;
@@ -84,7 +84,9 @@ FileStream.prototype._notify = function () {
         // console.log('pushing buffer of length:'+buffer.length);
         self._reading = false;
         self.push(buffer);
-
+        // if (p === self._dispatcher._windowLength/2) {
+        //     self.emit('canplay');
+        // }
         if (self._missing === 0) self.push(null);
     });
     self._piece += 1;
@@ -99,7 +101,7 @@ FileStream.prototype._destroy = function (err, onclose) {
     this.destroyed = true;
 
     if (!this._dispatcher.destroyed) {
-        this._dispatcher.deStartFrom(this._startPiece, true);
+        this._dispatcher.deselect(this._startPiece, this._endPiece, true);
     }
     console.log('FileStream destroy');
     if (err) this.emit('error', err);
@@ -107,20 +109,19 @@ FileStream.prototype._destroy = function (err, onclose) {
     if (onclose) onclose();
 };
 
-FileStream.prototype._ifCanPlay = function () {                   //缓存足够的buffer后才播放
-    if (this._dispatcher.enoughInitBuffer) return;
-    var bitfield = this._dispatcher.bitfield;
-    console.log('this._dispatcher.normalWindowLength:'+this._dispatcher.normalWindowLength);
-    for (var i=this._startPiece;i<this._startPiece+this._dispatcher.normalWindowLength;i++) {
-        if (!bitfield.get(i)) {
-            return;
-        }
-    }
-    // if (this._dispatcher.autoplay) {
-    //     this._dispatcher.video.play();
-    // }
-    this._dispatcher.enoughInitBuffer = true;
-    this.emit('canplay');
-};
+// FileStream.prototype._ifCanPlay = function () {                   //缓存足够的buffer后才播放
+//     if (this._dispatcher.enoughInitBuffer) return;
+//     var bitfield = this._dispatcher.bitfield;
+//     console.log('this._dispatcher.normalWindowLength:'+this._dispatcher.normalWindowLength);
+//     for (var i=this._startPiece;i<this._startPiece+this._dispatcher.normalWindowLength;i++) {
+//         if (!bitfield.get(i)) {
+//             return;
+//         }
+//     }
+//     // if (this._dispatcher.autoplay) {
+//     //     this._dispatcher.video.play();
+//     // }
+//     this._dispatcher.enoughInitBuffer = true;
+// };
 
 function noop () {}

@@ -1,16 +1,16 @@
 
 /*
- 用于调度HttpDownloader和RTCDownloader
+ 该模块用于调度HttpDownloader和RTCDownloader
 
  config:{
 
  initialDownloaders: [],  //初始的httpdownloader数组,必须
  chunkSize: number,       //每个chunk的大小,默认1M
  fileSize: number,        //下载文件的总大小,必须
- interval: number,        //滑动窗口的时间间隔,单位毫秒,默认10s
- auto: boolean,           //true为连续下载buffer,false则是只有当前播放时间与已缓冲时间小于slideInterval时下载buffer,默认false
- slideInterval: number,   //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
- useMonitor: boolean      //开启监控器,默认关闭
+ interval: number,        //滑动窗口的时间间隔,单位毫秒,默认5s
+ auto: boolean,           //true为连续下载buffer
+ useMonitor: boolean,      //开启监控器,默认关闭
+ scheduler: function       //节点调度算法
  }
  */
 module.exports = Dispatcher;
@@ -28,14 +28,13 @@ function Dispatcher(config) {
 
     var self = this;
 
-    if (!(config.initialDownloaders && config.fileSize)) throw new Error('config is not completed');
+    if (!(config.initialDownloaders && config.fileSize && config.scheduler)) throw new Error('config is not completed');
     self.fileSize = config.fileSize;
     self.initialDownloaders = config.initialDownloaders;
     self.pieceLength = config.chunkSize || 1*1024*1024;
-    self.interval = config.interval || 10000;
-    self._slideInterval = config.slideInterval || 20;           //当前播放点距离缓冲前沿多少秒时滑动窗口
+    self.interval = config.interval || 5000;
     self.auto = config.auto || false;
-    self.autoplay = config.autoplay === false ? false : true;
+    // self.auto = true;
     self.useMonitor = config.useMonitor || false;
     self.downloaded = 0;
     self.fogDownloaded = 0;                         //通过data channel下载的字节数
@@ -53,45 +52,34 @@ function Dispatcher(config) {
 
     self._selections = [];                           //下载队列
     self._store = FSChunkStore;
-    self.elem = null;                          //video标签的id
-    self.video = null;
     self.path = '';
-    self._bufferedPos = 0;                     //当前所在的缓冲区间
-    self._lastSlideTime = -5;                  //上次滑动窗口的时间
+
     self.bufferSources = new Array(self.chunks);    //记录每个buffer下载的方式
     self.slide = null;
     self.bufferingCount = 0;                   //视频卡的次数
     self.noMoreNodes = false;                   //是否已没有新的节点可获取
 
+    self.startTime = (new Date()).getTime();      //用于计算平均速度
+
     //firstaid参数自适应
     self._windowLength = self.initialDownloaders.length <= 8 ? self.initialDownloaders.length : 8;
     // self._windowLength = 15;
     // self._colddown = self._windowLength;                        //窗口滑动的冷却时间
-    self._colddown = self._windowLength;                        //窗口滑动的冷却时间
+    self._colddown = 5;                        //窗口滑动的冷却时间
     self.downloaders = [];
-    self.bitrate = 0;                         //码率
-    self.normalWindowLength = 5;              //根据码率算出的window length
-    self.enoughInitBuffer = false;            //是否有足够初始buffer
 
     //webtorrent
     self.torrent = null;
 
-    //减少重复下载
-    self._interval2BufPos = 0;                                  //当前播放点距离缓冲前沿的时间，单位秒
-    // self.lastStartIdx = -1;                                       //记录上个startFrom的索引
-
     //webrtc
     // self.usefulDCs = 0;                                         //可用的data channel节点数量
+
+    //scheduler
+    self.scheduler = config.scheduler;
 };
 
 Dispatcher.prototype._init = function () {
     var self = this;
-
-    // for (var i=0;i<self.initialDownloaders.length;++i){
-    //     var hd = self.initialDownloaders[i];
-    //     self._setupHttp(hd);
-    //     self.downloaders.push(hd);
-    // }
 
     self.downloaders = self.initialDownloaders.map(function (item){
 
@@ -111,158 +99,68 @@ Dispatcher.prototype._init = function () {
     self.queue = [];                     //初始化下载队列
     // self._slide();
     if (self.auto) {
-        self.startFrom(0, false);
+        // self.startFrom(0, false);
+        self.select(0, self.chunks-1, true);
         self.autoSlide();
         self.slide = noop;
     } else {
-        self.slide = this._throttle(this._slide, this);
+        // self.slide = this._throttle(this._slide, this);
     }
-
-    //初始化video
-    self.video = document.querySelector(self.elem);
-    self.video.addEventListener('loadedmetadata', function () {
-
-        console.info('loadedmetadata duration:' + self.video.duration);
-        self.bitrate = Math.ceil(self.fileSize/self.video.duration);
-        self._windowLength = Math.ceil(self.bitrate * 15 / self.pieceLength);       //根据码率和时间间隔来计算窗口长度
-        self.normalWindowLength = self._windowLength;
-        if (self._windowLength < 3) {
-            self._windowLength = 3;
-        } else if (self._windowLength > 15) {
-            self._windowLength = 15;
-        }
-        // self._colddown = 5/self._slideInterval*self._interval2BufPos + 5;                        //窗口滑动的冷却时间
-        // self._colddown = self._windowLength*2;
-        self._colddown = 5;
-        self.emit('loadedmetadata', {'bitrate': self.bitrate, 'duration': self.video.duration});
-    });
-    // self.video.addEventListener('canplay', function () {
-    //
-    //
-    // });
-    self.video.addEventListener('seeked', function () {
-        console.info('video seeked');
-
-        var currentTime = Math.floor(self.video.currentTime);
-        for (var index=0;index<self.video.buffered.length;++index) {
-            // console.log('currentTime:' + currentTime + ' Math.floor(self.video.buffered.start(index)):' + Math.floor(self.video.buffered.start(index)));
-            if (currentTime >= Math.floor(self.video.buffered.start(index))) {
-
-                self._bufferedPos = index;
-                // console.log('_bufferedPos:' + self._bufferedPos);
-            }
-            // self.bufferedPos = self.video.buffered.length-1;
-        }
-        // self._slide();
-        // if (!self.video.paused && self.autoplay && self.video.buffered.end(self._bufferedPos) > self.video.currentTime) {
-        //     self.video.pause();
-        //     self.enoughInitBuffer = false;
-        //     self.intervalId = setInterval(function () {
-        //         console.log('init setInterval');
-        //         self.slide();
-        //     }, self._colddown*1000);
-        // }
-
-
-    });
-    // self.video.addEventListener('timeupdate', function () {            //test
-    //
-    //     var bool = self._shouldFetchNextSegment();
-    //     // console.log('timeupdate:'+bool);
-    //     if (bool){
-    //         self.slide();
-    //         // console.log('timeupdate slide');
-    //         // self._throttle(self.slide,self);
-    //         // self._update();
-    //         self._lastSlideTime = self.video.currentTime;
-    //     }
-    // });
-    self.video.addEventListener('waiting', function () {
-
-        console.info('waiting for buffer');
-        // self.requestMoreNodes();
-        for (var j=0;j<self.downloaders.length;++j) {
-            console.log('downloaders type:' + self.downloaders[j].type + ' mean speed:' +self.downloaders[j].meanSpeed);
-        }
-        if (self.downloaders.length === 1) {               //如果只有一个downloader,则改为串行下载
-            self.downloaders[0].isAsync = false;
-        }
-        // self.bufferingCount ++;
-        // console.info('bufferingCount:' + self.bufferingCount);
-        // if (self.bufferingCount >= 5) {
-        //     self.startFrom(0, false);
-        //     self.autoSlide();
-        //     self.slide = noop;
-        //     self.bufferingCount = Number.MIN_VALUE;
-        // }
-
-    });
 
     //初始化buffersources
     for (var k=0;k<self.bufferSources;++k) {
         self.bufferSources[k] = null;
     }
 
-    self.intervalId = setInterval(function () {
-        console.log('init setInterval');
-        self.slide();
-    }, self._colddown*1000);
+    //计算平均速度
+    setInterval(function () {
+        if (!self.done) {
+            var endTime = (new Date()).getTime();
+            var meanSpeed = self.downloaded/(endTime-self.startTime);        //单位: KB/s
+            self.emit('meanspeed', meanSpeed);
+        }
+    }, 2000);
 
     self.ready = true;
     self.emit('ready', self.chunks);
 };
 
-Dispatcher.prototype.startFrom = function (start, priority, notify) {  //start和end是指index
+Dispatcher.prototype.select = function (start, end, priority, notify) {
     var self = this;
     if (self.destroyed) throw new Error('dispatcher is destroyed');
 
-    // var length = self._selections.length;
-    // if ( length > 0) {
-    //
-    //     var s = self._selections[length-1];
-    //     // var start = s.from + s.offset;
-    //     console.log('start:'+self._calIndex(start)+' s.from:'+self._calIndex(s.from));
-    //     if (self._calIndex(start) === self._calIndex(s.from)) {
-    //         console.log('startFrom return');
-    //         return;
-    //     }
-    // }
-    // if (start === self.lastStartIdx) {           //如果这次的start和上次一样，则不滑动窗口
-    //     return;
-    // }
-    // self.lastStartIdx = start;
-
+    if (start < 0 || end < start || self.chunks.length <= end) {
+        throw new Error('invalid selection ', start, ':', end)
+    }
     priority = Number(priority) || 0;
+
+    console.log('select %s-%s (priority %s)', start, end, priority);
+
     self._selections.push({
         from: start,
-        to: self.chunks-1,
+        to: end,
         offset: 0,
         priority: priority,
         notify: notify || noop
     });
-    console.log('Dispatcher startFrom');
-    self._selections.sort(function (a, b) {           //从小到大排列
+
+    self._selections.sort(function (a, b) {           //从小到大排序
         return a.priority - b.priority
-    });
-    // console.log('self._selections'+JSON.stringify(self._selections));
-    self._updateSelections();
+    })
+
+    self._updateSelections()
 };
 
-Dispatcher.prototype.deStartFrom = function (start, priority) {
+Dispatcher.prototype.deselect = function (start, end, priority) {
     var self = this;
     if (self.destroyed) throw new Error('dispatcher is destroyed');
 
-    // if (start === self.lastStartIdx) {           //如果这次的start和上次一样，则不deStartFrom
-    //     return;
-    // }
-
     priority = Number(priority) || 0;
-    console.log('deselect '+start);
-    self._clearAllQueues();
-    self._abortAll();
+    console.log('deselect %s-%s (priority %s)', start, end, priority);
+    // self._clearAllQueues();
     for (var i = 0; i < self._selections.length; ++i) {
         var s = self._selections[i];
-        if (s.from === start && s.to === self.chunks-1 && s.priority === priority) {
+        if (s.from === start && s.to === end && s.priority === priority) {
             self._selections.splice(i, 1);
             break
         }
@@ -274,9 +172,8 @@ Dispatcher.prototype.deStartFrom = function (start, priority) {
 Dispatcher.prototype._slide = function () {
     var self = this;
 
-    // if (self.done || self.video.paused) return;
     if (self.done) return;
-    // console.log('[dispatcher] slide window downloader length:'+self.downloaders.length);
+    console.log('[dispatcher] slide window downloader length:'+self.downloaders.length);
     self._fillWindow();
 };
 
@@ -286,8 +183,6 @@ Dispatcher.prototype._slide = function () {
 Dispatcher.prototype._updateSelections = function () {
     var self = this;
     if (!self.ready || self.destroyed) return;
-
-    if (!self.ready) return;
 
     process.nextTick(function () {
         self._gcSelections()
@@ -303,28 +198,8 @@ Dispatcher.prototype._updateSelections = function () {
 Dispatcher.prototype._gcSelections = function () {
     var self = this;
 
-    // for (var i = 0; i < self._selections.length; ++i) {
-    //     var s = self._selections[i];
-    //     var oldOffset = s.offset;
-    //
-    //     // check for newly downloaded pieces in selection
-    //     while (self.bitfield.get(s.from + s.offset) && s.from + s.offset < s.to) {
-    //         s.offset += 1
-    //     }
-    //
-    //     if (oldOffset !== s.offset) s.notify();
-    //     if (s.to !== s.from + s.offset) continue;
-    //     if (!self.bitfield.get(s.from + s.offset)) continue;
-    //
-    //     self._selections.splice(i, 1); // remove fully downloaded selection
-    //     i -= 1; // decrement i to offset splice
-    //
-    //     s.notify();
-    // }
-
-    // for (var i = 0; i < self._selections.length; ++i) {
-    //test
-        var s = self._selections[self._selections.length-1];
+    for (var i = 0; i < self._selections.length; ++i) {
+        var s = self._selections[i];
         var oldOffset = s.offset;
 
         // check for newly downloaded pieces in selection
@@ -332,22 +207,37 @@ Dispatcher.prototype._gcSelections = function () {
             s.offset += 1
         }
         self._windowOffset = s.from + s.offset;
-        // if (self.video.paused && self.autoplay) {                 //只有缓存一定数量的buffer才开始播放，避免卡顿
-        //     var shouldBuffering = Math.ceil(self.bitrate * 15 / self.pieceLength);
-        //     if (shouldBuffering > 0 && self._windowOffset >= shouldBuffering) {
-        //         console.log('_gcSelections self._windowOffset:'+self._windowOffset);
-        //         self.video.play();
-        //     }
-        // }
-
         if (oldOffset !== s.offset) s.notify();
-        // if (s.to !== s.from + s.offset) continue;
-        // if (!self.bitfield.get(s.from + s.offset)) continue;
-        //
-        // self._selections.splice(i, 1); // remove fully downloaded selection
-        // i -= 1; // decrement i to offset splice
+        if (s.to !== s.from + s.offset) continue;
+        if (!self.bitfield.get(s.from + s.offset)) continue;
+
+        self._selections.splice(i, 1); // remove fully downloaded selection
+        i -= 1; // decrement i to offset splice
 
         s.notify();
+    }
+
+    // for (var i = 0; i < self._selections.length; ++i) {
+    //test
+    //     var length = self._selections.length;
+    //     if (!length) return;
+    //     var s = self._selections[self._selections.length-1];
+    //     var oldOffset = s.offset;
+    //
+    //     // check for newly downloaded pieces in selection
+    //     while (self.bitfield.get(s.from + s.offset) && s.from + s.offset < s.to) {
+    //         s.offset += 1
+    //     }
+    //     self._windowOffset = s.from + s.offset;
+    //
+    //     if (oldOffset !== s.offset) s.notify();
+    //     // if (s.to !== s.from + s.offset) continue;
+    //     // if (!self.bitfield.get(s.from + s.offset)) continue;
+    //     //
+    //     // self._selections.splice(i, 1); // remove fully downloaded selection
+    //     // i -= 1; // decrement i to offset splice
+    //
+    //     s.notify();
     // }
 
     // self._windowOffset = s.from + s.offset;
@@ -365,10 +255,11 @@ Dispatcher.prototype._update = function () {
     if ( length > 0) {
 
         // console.log('_update self._selections:'+JSON.stringify(self._selections));
-        var s = self._selections[length-1];
+        // var s = self._selections[length-1];
+        var s = self._selections[0];
         var start = s.from + s.offset;
-        // // var end = s.to;
-        self._windowOffset = start;
+        var end = s.to;
+        // self._windowOffset = start;
         console.log('current _windowOffset:' + self._windowOffset);
         self._slide();
         // self.slide();
@@ -383,15 +274,23 @@ Dispatcher.prototype._checkDone = function () {
     // is the torrent done? (if all current selections are satisfied, or there are
     // no selections, then torrent is done)
     var done = true;
-    for (var i = 0; i < self._selections.length; i++) {
-        var selection = self._selections[i];
-        for (var piece = 0; piece <= selection.to; piece++) {
-            if (!self.bitfield.get(piece)) {
-                done = false;
-                break
-            }
+    // console.log('_selections.length:'+self._selections.length);
+    // for (var i = 0; i < self._selections.length; i++) {
+    //     var selection = self._selections[i];
+    //     for (var piece = selection.from; piece <= selection.to; piece++) {
+    //         if (!self.bitfield.get(piece)) {
+    //             done = false;
+    //             break
+    //         }
+    //     }
+    //     if (!done) break
+    // }
+    for (var i = 0; i < self.chunks; i++) {
+        if (!self.bitfield.get(i)) {
+            // self._windowOffset = i;
+            done = false;
+            break
         }
-        if (!done) break
     }
     console.log('_checkDone self.done:'+self.done+' done:'+done);
     if (!self.done && done) {
@@ -433,27 +332,15 @@ Dispatcher.prototype._getNodes = function (index) {      //返回节点构成的
 Dispatcher.prototype._fillWindow = function () {
     var self = this;
 
-    var sortedNodes = sortByIdleFirst(this.downloaders);     //已经按某种策略排好序的节点数组，按优先级降序
-    // var sortedNodes = sortByDataChannelFirst(this.downloaders);     //已经按某种策略排好序的节点数组，按优先级降序
+
+    var sortedNodes = self.scheduler(this.downloaders,
+        {
+            windowLength: self._windowLength,
+            windowOffset: self._windowOffset
+        }
+    );     //已经按某种策略排好序的节点数组，按优先级降序
+
     if (sortedNodes.length === 0) return;
-    // if (sortedNodes.length > 10) {
-    //     var mean = sortedNodes.getMeanSpeed();
-    //     sortedNodes = sortedNodes.filter(function (item) {
-    //         return item.meanSpeed === -1 || item.meanSpeed >= mean*0.5;
-    //     })
-    // }
-    // console.log('usefulDCs:'+self.usefulDCs);
-    // if (self.usefulDCs >= self.normalWindowLength && self._interval2BufPos >= self._slideInterval*2/3) { //在缓冲流畅的情况下只使用datachannel节点
-    //     sortedNodes = sortedNodes.filter(function (item) {
-    //         return item.type === 2;
-    //     })
-    // }
-    //
-    // if (self._interval2BufPos > self._slideInterval/2) {            //在非紧急情况下不使用server节点
-    //     sortedNodes = sortedNodes.filter(function (item) {
-    //         return item.type !== 0;
-    //     })
-    // }
 
     var count = 0;
     console.log('_fillWindow _windowOffset:' + self._windowOffset + ' downloaders:'+self.downloaders.length);
@@ -466,7 +353,7 @@ Dispatcher.prototype._fillWindow = function () {
             // console.warn('index >= self.chunks');
             break;
         }
-
+        console.log('index:'+index);
         // if (count >= sortedNodes.length) break;
 
         if (!self.bitfield.get(index)) {
@@ -483,58 +370,6 @@ Dispatcher.prototype._fillWindow = function () {
 
         }
         index ++;
-    }
-
-
-    function sortByIdleFirst(arr) {                         //负载均衡策略，空闲状态的优先级高
-
-        // arr.sort(function (a, b) {           //从大到小排列
-        //
-        //     return b.meanSpeed - a.meanSpeed;
-        // });
-
-        var idles = arr.filter(function (item) {         //datachannel优先级 > node > server
-            return item.downloading === false;
-        }).sort(function (a, b) {
-            return b.type - a.type;
-        });
-
-        var busys = arr.filter(function (item) {
-            return item.downloading === true && item.queue.length <= 1;
-        }).sort(function (a, b) {
-            return a.queue.length - b.queue.length;
-        });
-
-        var ret = idles.concat(busys);
-        for (var i=0;i<ret.length;++i) {
-            console.log('index:'+i+' type:'+ret[i].type+' queue:'+ret[i].queue.length);
-        }
-
-        return ret;
-    }
-
-    function sortByDataChannelFirst(arr) {                         //负载均衡策略，空闲状态的优先级高
-
-        arr.sort(function (a, b) {           //从大到小排列
-
-            return b.meanSpeed - a.meanSpeed;
-        });
-
-        var idleDCs = arr.filter(function (item) {
-            return item.downloading === false && item.type === 2;
-        });
-
-        var idleOthers = arr.filter(function (item) {
-            return item.downloading === false && item.type !== 2;
-        });
-
-
-        var busys = arr.filter(function (item) {
-            return item.downloading === true;
-        }).sort(function (a, b) {
-            return a.queue.length - b.queue.length;
-        });
-        return idleDCs.concat(idleOthers).concat(busys);
     }
 
 };
@@ -556,7 +391,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
 
         if (self.downloaders.length > self._windowLength) {
             self.downloaders.removeObj(hd);
-            if (self._windowLength > self.normalWindowLength) self._windowLength --;
+            if (self._windowLength > self._windowLength) self._windowLength --;
         }
         self.checkoutDownloaders();
     });
@@ -571,7 +406,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
 
             self.store.put(index, buffer);
 
-            
+
 
             self._checkDone();
             if (self.useMonitor) {
@@ -583,10 +418,10 @@ Dispatcher.prototype._setupHttp = function (hd) {
                 if (hd.type === 1) {          //node
                     self.fogDownloaded += self.pieceLength;
                     self.emit('fograte', self.fogDownloaded/self.downloaded);
-                    self.emit('fogspeed', self.downloaders.getMeanSpeed([1, 2]));
+                    self.emit('fogspeed', self.downloaders.getCurrentSpeed([1, 2]));
                     hd.type === 1 ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
                 } else {
-                    self.emit('cloudspeed', self.downloaders.getMeanSpeed([0]));
+                    self.emit('cloudspeed', self.downloaders.getCurrentSpeed([0]));
                     self.bufferSources[index] = 's'
                 }
                 self.emit('buffersources', self.bufferSources);
@@ -627,7 +462,7 @@ Dispatcher.prototype._setupDC = function (jd) {
                 console.log('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
                 self.emit('downloaded', self.downloaded/self.fileSize);
                 self.emit('fograte', self.fogDownloaded/self.downloaded);
-                self.emit('fogspeed', self.downloaders.getMeanSpeed([1,2]));
+                self.emit('fogspeed', self.downloaders.getCurrentSpeed([1,2]));
                 self.bufferSources[index] = 'd';
                 self.emit('buffersources', self.bufferSources);
                 self.emit('sourcemap', 'd', index);
@@ -678,8 +513,7 @@ Dispatcher.prototype.addTorrent = function (torrent) {
     torrent.pear_downloaded = 0;
     console.log('addTorrent _windowOffset:' + self._windowOffset);
     if (self._windowOffset + self._windowLength < torrent.pieces.length-1) {
-        console.log('torrent select:' + (self._windowOffset+self._windowLength)+' to'+(torrent.pieces.length-1));
-        torrent.select(self._windowOffset+self._windowLength, torrent.pieces.length-1, 1000);
+        torrent.critical(self._windowOffset+self._windowLength, torrent.pieces.length-1);
     }
     torrent.on('piecefromtorrent', function (index) {
 
@@ -692,7 +526,7 @@ Dispatcher.prototype.addTorrent = function (torrent) {
             self.emit('downloaded', self.downloaded/self.fileSize);
             self.emit('fograte', self.fogDownloaded/self.downloaded);
             // console.log('torrent.downloadSpeed:'+torrent.downloadSpeed/1024);
-            self.emit('fogspeed', self.downloaders.getMeanSpeed([1, 2]) + torrent.downloadSpeed/1024);
+            self.emit('fogspeed', self.downloaders.getCurrentSpeed([1, 2]) + torrent.downloadSpeed/1024);
             self.bufferSources[index] = 'b';
             self.emit('buffersources', self.bufferSources);
             self.emit('sourcemap', 'b', index);
@@ -762,7 +596,7 @@ Dispatcher.prototype.destroy = function () {
     self.emit('close');
 
     self.store = null;
-    // self.video = null;
+
     console.info('Dispatcher destroyed');
 };
 
@@ -787,34 +621,14 @@ Dispatcher.prototype.autoSlide = function () {
         self._slide();
         self._checkDone();
         if (!self.done && !self.destroyed){
-            setTimeout(arguments.callee, self._colddown*1000);
+            setTimeout(arguments.callee, self.interval);
         }
-    }, self._colddown*1000);
-};
-
-Dispatcher.prototype._shouldFetchNextSegment = function() {
-    var self = this;
-    if (self.enoughInitBuffer) {
-        clearInterval(self.intervalId);
-        // if (self.bufferedPos === -1) return true;
-        // console.log('this.video.buffered.end(this._bufferedPos):'+this.video.buffered.end(this._bufferedPos)+' this.video.currentTime:'+this.video.currentTime)
-        try {
-            this._interval2BufPos = this.video.buffered.end(this._bufferedPos) - this.video.currentTime;
-            return this._interval2BufPos < this._slideInterval;
-        } catch (e) {
-            console.warn('_shouldFetchNextSegment exception:'+e);
-            // setTimeout(function () {
-            //     console.log('_shouldFetchNextSegmentd setTimeout');
-            //     self._shouldFetchNextSegment();
-            // }, 1000);
-            return true;
-            // return false;
-        };
-    }
+    }, self.interval);
 };
 
 Dispatcher.prototype._clearAllQueues = function () {
 
+    console.log('clearAllQueues');
     for (var k=0;k<this.downloaders.length;++k) {
         this.downloaders[k].clearQueue();
     }
@@ -846,19 +660,34 @@ Array.prototype.getMeanSpeed = function (typeArr) {              //根据传输�
     var length = 0;
     if (typeArr) {
         for (var i = 0; i < this.length; i++) {
-            if (typeArr.indexOf(this[i].type) >= 0 && this[i].meanSpeed > 0) {
+            if (typeArr.indexOf(this[i].type) >= 0) {
                 sum+=this[i].meanSpeed;
                 length ++;
             }
         }
     } else {
         for (var i = 0; i < this.length; i++) {
-            if (this[i].meanSpeed > 0) {
-                sum+=this[i].meanSpeed;
-                length ++;
-            }
+            sum+=this[i].meanSpeed;
+            length ++;
         }
     }
     return Math.floor(sum/length);
+};
+
+Array.prototype.getCurrentSpeed = function (typeArr) {              //根据传输的类型(不传则计算所有节点)来计算瞬时速度
+    var sum = 0;
+    var length = 0;
+    if (typeArr) {
+        for (var i = 0; i < this.length; i++) {
+            if (typeArr.indexOf(this[i].type) >= 0) {
+                sum+=this[i].meanSpeed;
+            }
+        }
+    } else {
+        for (var i = 0; i < this.length; i++) {
+            sum+=this[i].meanSpeed;
+        }
+    }
+    return Math.floor(sum);
 };
 

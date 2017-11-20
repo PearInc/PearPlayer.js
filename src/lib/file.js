@@ -5,10 +5,10 @@ var EventEmitter = require('events').EventEmitter
 var FileStream = require('./file-stream')
 var inherits = require('inherits')
 var path = require('path')
-var render = require('render-media')
+// var render = require('render-media')
 var stream = require('readable-stream')
-var streamToBlob = require('stream-to-blob')
-var streamToBlobURL = require('stream-to-blob-url')
+// var streamToBlob = require('stream-to-blob')
+// var streamToBlobURL = require('stream-to-blob-url')
 var streamToBuffer = require('stream-with-known-length-to-buffer')
 
 inherits(File, EventEmitter)
@@ -97,29 +97,29 @@ File.prototype.getBuffer = function (cb) {
   streamToBuffer(this.createReadStream(), this.length, cb)
 }
 
-File.prototype.getBlob = function (cb) {
-  if (typeof window === 'undefined') throw new Error('browser-only method')
-  streamToBlob(this.createReadStream(), this._getMimeType(), cb)
-}
+// File.prototype.getBlob = function (cb) {
+//   if (typeof window === 'undefined') throw new Error('browser-only method')
+//   streamToBlob(this.createReadStream(), this._getMimeType(), cb)
+// }
 
-File.prototype.getBlobURL = function (cb) {
-  if (typeof window === 'undefined') throw new Error('browser-only method')
-  streamToBlobURL(this.createReadStream(), this._getMimeType(), cb)
-}
+// File.prototype.getBlobURL = function (cb) {
+//   if (typeof window === 'undefined') throw new Error('browser-only method')
+//   streamToBlobURL(this.createReadStream(), this._getMimeType(), cb)
+// }
 
-File.prototype.appendTo = function (elem, opts, cb) {
-  if (typeof window === 'undefined') throw new Error('browser-only method')
-  render.append(this, elem, opts, cb)
-}
+// File.prototype.appendTo = function (elem, opts, cb) {
+//   if (typeof window === 'undefined') throw new Error('browser-only method')
+//   render.append(this, elem, opts, cb)
+// }
 
-File.prototype.renderTo = function (elem, opts, cb) {
-  if (typeof window === 'undefined') throw new Error('browser-only method')
-  render.render(this, elem, opts, cb)
-}
+// File.prototype.renderTo = function (elem, opts, cb) {
+//   if (typeof window === 'undefined') throw new Error('browser-only method')
+//   render.render(this, elem, opts, cb)
+// }
 
-File.prototype._getMimeType = function () {
-  return render.mime[path.extname(this.name).toLowerCase()]
-}
+// File.prototype._getMimeType = function () {
+//   return render.mime[path.extname(this.name).toLowerCase()]
+// }
 
 File.prototype._destroy = function () {
   this._destroyed = true

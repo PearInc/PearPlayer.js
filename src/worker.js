@@ -1,47 +1,51 @@
 /**
- * Created by Tim on 17-6-6.
+ * Created by xieting on 2017/11/9.
  */
 
-module.exports = PearPlayer;
+module.exports = Worker;
 
 var md5 = require('blueimp-md5');
-var Dispatcher = require('./lib/dispatcher');
-var HttpDownloader = require('./lib/http-downloader');
-var RTCDownloader = require('./lib/webrtc-downloader-bin');
-var getPeerId = require('./lib/peerid-generator');
+var Dispatcher = require('./dispatcher');
+var HttpDownloader = require('./http-downloader');
+var RTCDownloader = require('./webrtc-downloader-bin');
+var getPeerId = require('./peerid-generator');
 var url = require('url');
-var File = require('./lib/file');
-var nodeFilter = require('./lib/node-filter');
+var File = require('./file');
+var nodeFilter = require('./node-filter');
 var inherits = require('inherits');
 var EventEmitter = require('events').EventEmitter;
-var Set = require('./lib/set');
-var WebTorrent = require('./lib/pear-torrent');
+var Set = require('./set');
+var WebTorrent = require('./pear-torrent');
+var Scheduler = require('./node-scheduler');
 
+// var WEBSOCKET_ADDR = 'ws://signal.webrtc.win:9600/ws';             //test
+var WEBSOCKET_ADDR = 'wss://signal.webrtc.win:7601/wss';
+var GETNODES_ADDR = 'https://api.webrtc.win:6601/v1/customer/nodes';
 var BLOCK_LENGTH = 32 * 1024;
 
-inherits(PearPlayer, EventEmitter);
+inherits(Worker, EventEmitter);
 
-function PearPlayer(selector, token, opts) {
+function Worker(urlStr, token, opts) {
     var self = this;
-    if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
+
     // if (!(self instanceof PearPlayer)) return new PearPlayer(selector, opts);
-    if (typeof token === 'object') return PearPlayer(selector, '', token);
+    if (typeof token === 'object') return Worker(urlStr, '', token);
     EventEmitter.call(self);
     opts = opts || {};
-    self.video = document.querySelector(selector);
     // token = '';
-    if (typeof selector !== 'string') throw new Error('video selector must be a string!');
     // if (typeof token !== 'string') throw new Error('token must be a string!');
     // if (!(opts.type && opts.type === 'mp4')) throw new Error('only mp4 is supported!');
-    if (!((opts.src && typeof opts.src === 'string') || self.video.src)) throw new Error('video src is not valid!');
+    // if (!((opts.src && typeof opts.src === 'string') || self.video.src)) throw new Error('video src is not valid!');
     // if (!(config.token && typeof config.token === 'string')) throw new Error('token is not valid!');
 
-    console.time('视频播放延时：');
-    console.time('dispatcher初始化延时：');
+    //player
+    self.render = opts.render;
+    self.selector = opts.selector;
+    self.autoplay = opts.autoplay === false ? false : true;
 
-    self.selector = selector;
-    self.src = opts.src || self.video.src;
+    self.src = urlStr;
     self.urlObj = url.parse(self.src);
+    self.scheduler = opts.scheduler || 'IdleFirst';
     self.token = token;
     self.useDataChannel = (opts.useDataChannel === false)? false : true;
     self.useMonitor = (opts.useMonitor === true)? true : false;
@@ -49,7 +53,7 @@ function PearPlayer(selector, token, opts) {
     self.magnetURI = opts.magnetURI || undefined;
     self.trackers = opts.trackers && Array.isArray(opts.trackers) && opts.trackers.length > 0 ? opts.trackers : null;
     self.sources = opts.sources && Array.isArray(opts.sources) && opts.sources.length > 0 ? opts.sources : null;
-    self.autoPlay = (opts.autoplay === false)? false : true;
+    self.auto = (opts.auto === false) ? false : true;
     self.dataChannels = opts.dataChannels || 20;
     self.peerId = getPeerId();
     self.isPlaying = false;
@@ -60,17 +64,22 @@ function PearPlayer(selector, token, opts) {
     self.JDMap = {};                           //根据dc的peer_id来获取jd的map
     self.nodeSet = new Set();                  //保存node的set
     self.tempDCQueue = [];                     //暂时保存data channel的队列
+    self.fileName = self.urlObj.path;
     self.file = null;
     self.dispatcherConfig = {
 
         chunkSize: opts.chunkSize && (opts.chunkSize%BLOCK_LENGTH === 0 ? opts.chunkSize : Math.ceil(opts.chunkSize/BLOCK_LENGTH)*BLOCK_LENGTH),   //每个chunk的大小,默认1M
-        interval: opts.interval,     //滑动窗口的时间间隔,单位毫秒,默认10s,
-        slideInterval: opts.slideInterval,
-        autoplay: opts.autoplay,
+        interval: opts.interval,                                 //滑动窗口的时间间隔,单位毫秒,默认10s,
+        auto: self.auto,
         useMonitor: self.useMonitor,
-        // auto: true
+        scheduler: Scheduler[self.scheduler]
     };
-    // console.log('self.dispatcherConfig:'+self.dispatcherConfig.chunkSize);
+
+    if (self.useDataChannel) {
+        self._pearSignalHandshake();
+    }
+    //candidate
+    self.candidateMap = {};
 
     //info
     self.connectedDC = 0;
@@ -88,21 +97,15 @@ function PearPlayer(selector, token, opts) {
         signalServerConnected: false
     };
 
-    if (self.useDataChannel) {
-        self._pearSignalHandshake();
-    }
-
     self._start();
-
-    self._monitorUpload();
 
 }
 
-Object.defineProperty(PearPlayer.prototype, 'debugInfo', {
+Object.defineProperty(Worker.prototype, 'debugInfo', {
     get: function () { return this._debugInfo }
 });
 
-PearPlayer.prototype._start = function () {
+Worker.prototype._start = function () {
     var self = this;
     if (!getBrowserRTC()) {
         self.emit('exception', {errCode: 1, errMsg: 'This browser do not support WebRTC communication'});
@@ -138,9 +141,7 @@ PearPlayer.prototype._start = function () {
 
         self._getNodes(self.token, function (nodes) {
             console.log('_getNodes:'+JSON.stringify(nodes));
-            // nodes = [{uri: 'https://000c29d049f4.webrtc.win:64892/qq.webrtc.win/free/planet.mp4', type: 'node'}]; //test
             if (nodes) {
-
                 self._startPlaying(nodes);
                 // if (self.useDataChannel) {
                 //     self._pearSignalHandshake();
@@ -152,11 +153,16 @@ PearPlayer.prototype._start = function () {
     }
 };
 
-PearPlayer.prototype._getNodes = function (token, cb) {
+Worker.prototype._fallBack = function () {
+
+    console.log('PearDownloader _fallBack');
+}
+
+Worker.prototype._getNodes = function (token, cb) {
     var self = this;
 
     var postData = {
-        client_ip:'127.0.0.1',
+        client_ip:'116.77.208.118',
         host: self.urlObj.host,
         uri: self.urlObj.path
     };
@@ -170,7 +176,7 @@ PearPlayer.prototype._getNodes = function (token, cb) {
     })(postData);
 
     var xhr = new XMLHttpRequest();
-    xhr.open("GET", 'https://api.webrtc.win:6601/v1/customer/nodes'+postData);
+    xhr.open("GET", GETNODES_ADDR+postData);
     xhr.timeout = 2000;
     xhr.setRequestHeader('X-Pear-Token', self.token);
     xhr.ontimeout = function() {
@@ -271,28 +277,11 @@ PearPlayer.prototype._getNodes = function (token, cb) {
     xhr.send();
 };
 
-PearPlayer.prototype._fallBack = function (url) {
-    var self = this;
-
-    if (this.isPlaying) return;
-    if (url) {
-        this.video.src = url;
-    } else {
-        this.video.src = this.src;
-    }
-    if (this.autoPlay) {
-        this.video.play();
-    }
-
-    this.isPlaying = true;
-};
-
-PearPlayer.prototype._pearSignalHandshake = function () {
+Worker.prototype._pearSignalHandshake = function () {
     var self = this;
     var dcCount = 0;                            //目前建立的data channel数量
     console.log('_pearSignalHandshake');
-    var websocket = new WebSocket('wss://signal.webrtc.win:7601/wss');
-    // var websocket = new WebSocket('ws://183.60.40.104:9600/ws');
+    var websocket = new WebSocket(WEBSOCKET_ADDR);
     self.websocket = websocket;
     websocket.onopen = function() {
         // console.log('websocket connection opened!');
@@ -322,29 +311,51 @@ PearPlayer.prototype._pearSignalHandshake = function () {
         var message = JSON.parse(e.data);
         console.log("[simpleRTC] websocket message is: " + JSON.stringify(message));
         // message = message.nodes[1];
-        var nodes = message.nodes;
+        if (message.action === 'candidate' && message.type === 'end') {
 
-        self._debugInfo.totalDCs = nodes.length;
-
-        for (var i=0;i<nodes.length;++i) {
-            var node = nodes[i];
-            if (!node.errorcode) {
-                if (dcCount === self.dataChannels) break;
-                console.log('dc message:'+JSON.stringify(node))
-                if (!self.JDMap[node.peer_id]) {
-                    self.JDMap[node.peer_id] = self.initDC(node);
-                    dcCount ++;
-                } else {
-                    console.log('datachannel 重复');
+            for (var peerId in self.candidateMap) {
+                if (message.peer_id === peerId) {
+                    // console.log('self.candidateMap[peerId]:'+self.candidateMap[peerId]);
+                    self.JDMap[peerId].candidatesFromWS(self.candidateMap[peerId]);
                 }
-            } else {
-                console.log('dc error message:'+JSON.stringify(message))
+            }
+        } else if (message.nodes) {
+            var nodes = message.nodes;
+
+            self._debugInfo.totalDCs = nodes.length;
+
+            for (var i=0;i<nodes.length;++i) {
+                var offer = nodes[i];
+                if (!offer.errorcode) {
+                    if (dcCount === self.dataChannels) break;
+                    console.log('dc message:'+JSON.stringify(offer))
+                    if (!self.JDMap[offer.peer_id]) {
+                        self.candidateMap[offer.peer_id] = makeCandidateArr(offer.sdp.sdp);
+
+                        offer.sdp.sdp = offer.sdp.sdp.split('a=candidate')[0];
+                        console.log('initDC:'+JSON.stringify(offer));
+                        self.JDMap[offer.peer_id] = self.initDC(offer);
+
+                        //test
+                        // console.log('self.candidateMap[node.peer_id]:'+JSON.stringify(self.candidateMap[node.peer_id]));
+                        // self.JDMap[node.peer_id].candidatesFromWS(self.candidateMap[node.peer_id]);
+
+                        dcCount ++;
+                    } else {
+                        console.log('datachannel 重复');
+                    }
+                } else {
+                    console.log('dc error message:'+JSON.stringify(message))
+                }
             }
         }
     };
+    // websocket.onclose = function () {
+    //     alert('websocket关闭');
+    // }
 };
 
-PearPlayer.prototype.initDC = function (message) {
+Worker.prototype.initDC = function (offer) {
     var self = this;
 
     var dc_config = {
@@ -356,7 +367,7 @@ PearPlayer.prototype.initDC = function (message) {
     };
 
     var jd = new RTCDownloader(dc_config);
-    jd.messageFromDC(message)
+    jd.offerFromWS(offer)
     jd.on('signal',function (message) {
         console.log('[jd] signal:' + JSON.stringify(message));
         self.websocket.send(JSON.stringify(message));
@@ -365,11 +376,6 @@ PearPlayer.prototype.initDC = function (message) {
 
         self._debugInfo.connectedDCs ++;
         self._debugInfo.usefulDCs ++;
-
-        // self.dispatcher.addDataChannel(jd);
-        // if (self.websocket) {
-        //     self.websocket.close();
-        // }
 
         if (self.dispatcher) {
             self.dispatcher.addDataChannel(jd);
@@ -381,7 +387,7 @@ PearPlayer.prototype.initDC = function (message) {
     return jd;
 };
 
-PearPlayer.prototype._startPlaying = function (nodes) {
+Worker.prototype._startPlaying = function (nodes) {
     var self = this;
     console.log('start playing');
     self.dispatcherConfig.initialDownloaders = [];
@@ -401,10 +407,7 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
     var d = new Dispatcher(self.dispatcherConfig);
     self.dispatcher = d;
-    console.timeEnd('dispatcher初始化延时：');
-    // if (self.useDataChannel) {
-    //     self._pearSignalHandshake();
-    // }
+
     while (self.tempDCQueue.length) {
         var jd = self.tempDCQueue.shift();
         self.dispatcher.addDataChannel(jd);
@@ -412,6 +415,9 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
     //{errCode: 1, errMsg: 'This browser do not support WebRTC communication'}
     d.once('ready', function (chunks) {
+
+
+        console.log('---666666666666666666666---');
 
         self.emit('begin', self.fileLength, chunks);
 
@@ -436,14 +442,13 @@ PearPlayer.prototype._startPlaying = function (nodes) {
 
     self.file = file;
 
-    file.once('canplay', function () {
-        // self.emit('canplay');
-        // console.log('66666666666666 canplay');
-        console.timeEnd('视频播放延时：');
-    });
+    file._dispatcher._init();
 
-    file.renderTo(self.selector, {autoplay: self.autoPlay});
-    // file.renderTo(self.selector, {autoplay: false});
+    console.log('self.autoPlay:'+self.autoplay);
+
+    if (self.render) {
+        self.render.render(file, self.selector, {autoplay: self.autoplay});
+    }
 
     self.isPlaying = true;
 
@@ -454,36 +459,6 @@ PearPlayer.prototype._startPlaying = function (nodes) {
         // var hd = new HttpDownloader(self.src, 'server');
         // // d.addNodes([{uri: self.src, type: 'server'}]);
         // d.addNode(hd);
-    });
-
-    d.on('loadedmetadata', function (metadata) {
-
-        // if (self.useDataChannel) {
-        //     self._pearSignalHandshake();
-        // }
-        self.emit('metadata', metadata);
-
-        if (self.useTorrent && self.magnetURI) {
-            var client = new WebTorrent();
-            // client.on('error', function () {
-            //
-            // });
-            console.log('magnetURI:'+self.magnetURI);
-            client.add(self.magnetURI, {
-                    announce: self.trackers || [
-                        "wss://tracker.openwebtorrent.com",
-                        "wss://tracker.btorrent.xyz"
-                    ],
-                    store: d.store,
-                    bitfield: d.bitfield
-                },
-                function (torrent) {
-                    console.log('Torrent:', torrent);
-
-                    d.addTorrent(torrent);
-                }
-            );
-        }
     });
 
     d.on('needmorenodes', function () {
@@ -539,6 +514,10 @@ PearPlayer.prototype._startPlaying = function (nodes) {
         var progress = downloaded > 1.0 ? 1.0 : downloaded;
         self.emit('progress', progress);
     });
+    d.on('meanspeed', function (meanSpeed) {
+
+        self.emit('meanspeed', meanSpeed);
+    });
     d.on('fograte', function (fogRate) {
 
         self.emit('fograte', fogRate);
@@ -579,54 +558,6 @@ PearPlayer.prototype._startPlaying = function (nodes) {
     });
 };
 
-PearPlayer.prototype._monitorUpload = function () {
-    var self = this;
-    var info = this._debugInfo;
-    setInterval(function () {
-        // console.log('_monitorUpload:'+(info.connectedDCs/info.totalDCs).toFixed(2));
-        if (info.signalServerConnected) {
-            var xhr = new XMLHttpRequest();
-            xhr.open("POST", 'https://statdapi.webrtc.win:9800/statd');
-            var data = JSON.stringify({
-                "cmds":[
-                    {
-                        "key":"fogvdn.browser.monitor.totalDC",
-                        "value":info.totalDCs,
-                        "type":"counting"
-                    },
-                    {
-                        "key":"fogvdn.browser.monitor.connectedDC",
-                        "value":info.connectedDCs,
-                        "type":"counting"
-                    },
-                    {
-                        "key":"fogvdn.browser.monitor.errorDC",
-                        "value":info.connectedDCs - info.usefulDCs,
-                        "type":"counting"
-                    },
-                    {
-                        "key":"fogvdn.browser.monitor.connectRate",
-                        "value":(info.connectedDCs/info.totalDCs*10).toFixed(2),
-                        "type":"counting"
-                    }
-                ]
-            });
-            xhr.timeout = 2000;
-            xhr.onload = function () {
-                if (this.status >= 200 && this.status < 300) {
-
-
-                    console.log('sucess');
-                } else {
-                    // alert('请求出错!');
-                }
-            }
-            xhr.send(data);
-        }
-
-    }, 10000);
-};
-
 function getBrowserRTC () {
     if (typeof window === 'undefined') return null;
     var wrtc = {
@@ -635,5 +566,37 @@ function getBrowserRTC () {
     };
     if (!wrtc.RTCPeerConnection) return null;
     return wrtc
+}
+
+function makeCandidateArr(sdp) {
+    var rawArr = sdp.split('\r\n');
+
+    var ufrag_reg = /^(a=ice-ufrag)/;
+    var ice_ufrag;
+    for (var i=0; i<rawArr.length; ++i) {
+        if (ufrag_reg.test(rawArr[i])) {
+            ice_ufrag = rawArr[i].split(':')[1];
+            break
+        }
+    }
+
+    var reg = /^(a=candidate)/;
+    var candidateArr = [];
+
+    for (var i=0; i<rawArr.length; ++i) {
+        if (reg.test(rawArr[i])) {
+            rawArr[i] += ' generation 0 ufrag ' + ice_ufrag + ' network-cost 50';
+            var candidates = {
+                "sdpMid":"data",
+                "sdpMLineIndex":0
+            };
+            candidates.candidate = rawArr[i].substring(2);
+            candidateArr.push(candidates);
+        }
+    }
+
+    console.log('candidateArr:'+JSON.stringify(candidateArr));
+
+    return candidateArr;
 }
 

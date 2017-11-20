@@ -52,13 +52,21 @@ function RTCDownloader(config) {
 
 };
 
-RTCDownloader.prototype.messageFromDC = function (message) {          //由服务器传来的data channel的offer、peer_id、offer_id等信息
+RTCDownloader.prototype.offerFromWS = function (offer) {          //由服务器传来的data channel的offer、peer_id、offer_id等信息
     var self = this;
 
-    self.message = message;
-    console.log('[webrtc] messageFromDC:' + JSON.stringify(message));
-    self.dc_id = message.peer_id;
-    self.simpleRTC.signal(message.sdp);
+    self.message = offer;
+    console.log('[webrtc] messageFromDC:' + JSON.stringify(offer));
+    self.dc_id = offer.peer_id;
+    self.simpleRTC.signal(offer.sdp);
+};
+
+RTCDownloader.prototype.candidatesFromWS = function (candidates) {
+
+    for (var i=0; i<candidates.length; ++i) {
+        console.log('receiveIceCandidate:'+candidates[i]);
+        this.simpleRTC.receiveIceCandidate(candidates[i]);
+    }
 };
 
 RTCDownloader.prototype.select = function (start, end) {
@@ -167,7 +175,7 @@ RTCDownloader.prototype._receive = function (chunk) {
                 self.startDownloading(pair[0], pair[1]);
             }
         } else if (headerInfo.action) {
-             //心跳信息
+            //心跳信息
         } else {
             console.log('RTC error msg:'+JSON.stringify(headerInfo));
             self.emit('error');
@@ -234,6 +242,7 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
             message.sdps = data;
         } else if(data.candidate){
             message.action = 'candidate';
+            console.log('signal candidate:'+JSON.stringify(data));
             message.candidates = data;
         }
 

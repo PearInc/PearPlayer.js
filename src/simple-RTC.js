@@ -33,7 +33,7 @@ function SimpleRTC(config) {
     self.sdp = "";
 
     self.isDataChannelCreating = false;
-    self.iceServers = [{url:'stun:stun.ekiga.net'},{url:'stun:stun.ideasip.com'}];
+    self.iceServers = [ {url:'stun:stun.miwifi.com'},{url:'stun:stun.ekiga.net'},{url:'stun:stun.ideasip.com'}];
     self.pc_config = {
         iceServers: self.iceServers
     };
@@ -44,6 +44,7 @@ function SimpleRTC(config) {
 SimpleRTC.prototype.signal = function (event) {
 
     console.log('[pear_webrtc] event.type' + event.type);
+    console.log('event JSON: ' + JSON.stringify(event));
     if (event.type === 'offer') {
         this.receiveOffer(event);
     } else if (event.type === 'answer') {
@@ -99,7 +100,7 @@ SimpleRTC.prototype.createPeerConnect = function () {
                 // createDatachannel();
             }
         }
-        console.log("iceGatheringState: "+ self.peerConnection.iceGatheringState);
+        // console.log("iceGatheringState: "+ self.peerConnection.iceGatheringState);
     };
 
     this.peerConnection.oniceconnectionstatechange = function (evt) {
@@ -120,6 +121,14 @@ SimpleRTC.prototype.createPeerConnect = function () {
         self.dataChannel = evt.channel;
         console.log(this.dataChannel.label+"dc state: "+ self.dataChannel.readyState);
         self.dataChannelEvents(this.dataChannel);
+    };
+
+    this.peerConnection.onicegatheringstatechange = function() {
+        if (self.peerConnection.iceGatheringState === 'complete') {
+            self.emit('signal', {
+                "candidate":"completed"
+            });
+        }
     }
 };
 
@@ -230,7 +239,7 @@ SimpleRTC.prototype.send = function (data) {
 
     try {
         this.dataChannel.send(data);
-        // console.log("[pear_webrtc] send data：" + data);
+        console.log("[pear_webrtc] send data：" + data);
     } catch (e){
         console.log("dataChannel send error："+e.message);
     }

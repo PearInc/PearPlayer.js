@@ -44,7 +44,6 @@ function NodeFilter(nodesArray, cb, range) {
             if (this.status >= 200 && this.status<300) {
                 usefulNodes.push(node);
                 fileLength = xhr.getResponseHeader('content-length');
-                console.log('NodeFilter fileLength:'+fileLength);
             }
             chenkDone();
         };
