@@ -40,6 +40,18 @@ Demo演示地址：https://demo.webrtc.win/pearplayer
 
 ![multisources](fig/bitmap_cn.png)
 
+## 快速开始
+将以下代码拷贝到html中，打开网页，见证奇迹的时刻到了~
+```html
+<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest/dist/pear-player.min.js"></script>
+<video id="video" controls></video>
+<script>
+    var player = new PearPlayer('#video', {
+        src: 'https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4'
+    });
+</script>
+```
+
 ## 使用方法
 
 ### 导入js文件并绑定video标签
