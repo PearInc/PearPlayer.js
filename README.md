@@ -18,7 +18,7 @@
 <br>
 ![multisources](fig/fogvdn_multisources.png)
 
-只需将`pear-player.min.js`通过`<script>`标签导入到HTML就可以使用。 参考以下[代码示例](#使用方法)，也可以查看[`/examples/test.html`](/examples/test.html)来了解使用方法。
+只需将`pear-player.min.js`通过`<script>`标签导入到HTML就可以使用。 参考以下[代码示例](#使用方法)，也可以查看[`/examples/player-test.html`](/examples/player-test.html)来了解使用方法。
 
 信令部分以及WebRTC部分使用了精心设计的协议，实现此部分可以参考[API文档](docs/get-started.md)。<br/>
 
@@ -27,11 +27,11 @@
 - P2P能力基于**WebRTC**，无须安装任何插件
 - **播放流畅，加载快速**，严格测试，稳定可靠
 - 多协议(HTTP、HTTPS、WebRTC)、多源
-- 自行研发的调度算法，在保证用户流畅视频体验的前提下最大化P2P率
+- 自研的调度算法，在保证用户流畅视频体验的前提下最大化P2P率
 - 默认无需填参数（内部根据视频码率等作自适应），高级使用模式可自行调整算法和参数
 - 默认不会无限制缓冲，尽可能为CP用户节省带宽/流量
-- 支持Chrome、Firefox、Opera、等主流浏览器，不久将支持腾讯微信、X5/TBS、Safari11
-- 可选接入低成本、高可用性的Pear [FogVDN](https://github.com/PearInc/FogVDN)
+- 支持Chrome、Firefox、Opera、腾讯微信、X5/TBS等主流浏览器，不久将支持Safari11
+- 可选接入低成本、高可用性的Pear [Fog CDN](https://github.com/PearInc/FogVDN)
 - 协议默认通过TLS/DTLS全加密，无DPI特征；并可通过Pear Fog组件的动态端口映射进一步消除统计学特征
 - 像使用HTML5 `<video>`标签一样简单，并容易与[video.js](https://github.com/videojs/video.js)等流行播放框架集成
 - 目前已实现Browser P2P能力（基于WebTorrent）
@@ -66,9 +66,6 @@ var player = new PearPlayer('#pearvideo', opts);
 </script>
 ```
 恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！
-
-### 同其他播放框架集成：
-本播放器现已支持video.js，示例代码请移步[videojs.html](examples/videojs/videojs.html)
 
 ### 谁在用我们的产品？
 
