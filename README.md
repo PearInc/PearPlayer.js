@@ -43,7 +43,7 @@ Demo演示地址：https://demo.webrtc.win/pearplayer
 ## 快速开始
 将以下代码拷贝到html中，打开网页，见证奇迹的时刻到了~
 ```html
-<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest/dist/pear-player.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest"></script>
 <video id="video" controls></video>
 <script>
     var player = new PearPlayer('#video', {
@@ -61,7 +61,7 @@ Demo演示地址：https://demo.webrtc.win/pearplayer
 ```
 或者使用CDN：
 ```html
-<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest/dist/pear-player.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest"></script>
 ```
 假设用video标签播放（/tv/pear001.mp4）这个视频，HTML如下所示：
 ```html
