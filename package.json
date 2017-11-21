@@ -1,8 +1,8 @@
 {
   "name": "pearplayer",
-  "version": "2.3.6",
+  "version": "2.3.7",
   "description": "",
-  "main": "index.js",
+  "main": "./dist/pear-player.js",
   "dependencies": {
     "babili": "^0.1.4",
     "blueimp-md5": "^2.7.0",
