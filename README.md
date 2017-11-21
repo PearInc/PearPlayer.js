@@ -63,7 +63,7 @@ Demo演示地址：https://demo.webrtc.win/pearplayer
 ```html
 <script src="https://cdn.jsdelivr.net/npm/pearplayer@latest"></script>
 ```
-假设用video标签播放（/tv/pear001.mp4）这个视频，HTML如下所示：
+假设用video标签播放如下视频，HTML如下所示：
 ```html
 <video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>
 ```
