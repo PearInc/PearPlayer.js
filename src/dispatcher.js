@@ -56,13 +56,12 @@ function Dispatcher(config) {
 
     self.bufferSources = new Array(self.chunks);    //记录每个buffer下载的方式
     self.slide = null;
-    self.bufferingCount = 0;                   //视频卡的次数
     self.noMoreNodes = false;                   //是否已没有新的节点可获取
 
     self.startTime = (new Date()).getTime();      //用于计算平均速度
 
     //firstaid参数自适应
-    self._windowLength = self.initialDownloaders.length <= 8 ? self.initialDownloaders.length : 8;
+    self._windowLength = self.initialDownloaders.length <= 5 ? self.initialDownloaders.length : 5;
     // self._windowLength = 15;
     // self._colddown = self._windowLength;                        //窗口滑动的冷却时间
     self._colddown = 5;                        //窗口滑动的冷却时间

@@ -64,7 +64,7 @@ function Worker(urlStr, token, opts) {
     self.JDMap = {};                           //根据dc的peer_id来获取jd的map
     self.nodeSet = new Set();                  //保存node的set
     self.tempDCQueue = [];                     //暂时保存data channel的队列
-    self.fileName = self.urlObj.path;
+    self.fileName = self.urlObj.path.split('/').pop();
     self.file = null;
     self.dispatcherConfig = {
 

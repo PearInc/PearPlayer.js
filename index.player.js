@@ -8,17 +8,23 @@ var inherits = require('inherits');
 var render = require('render-media');
 var PearDownloader = require('./src/index.downloader');
 var WebTorrent = require('webtorrent');
+var version = require('./package.json').version;
 
 inherits(PearPlayer, PearDownloader);
 
 function PearPlayer(selector, token, opts) {
+
     var self = this;
     if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
     if (typeof token === 'object') return PearPlayer(selector, '', token);
+
+    console.info('version:'+version);
+
     if (typeof selector !== 'string') throw new Error('video selector must be a string!');
     self.video = document.querySelector(selector);
     opts.selector = selector;
     opts.render = render;
+    opts.interval = 3000;
 
     //monitor
     self.canPlayDelayStart = (new Date()).getTime();
@@ -56,19 +62,26 @@ PearPlayer.prototype.setupListeners = function () {
 
     self.video.addEventListener('loadedmetadata', function () {
 
-        // console.info('loadedmetadata duration:' + self.video.duration);
-        // self.bitrate = Math.ceil(self.fileSize/self.video.duration);
-        // self._windowLength = Math.ceil(self.bitrate * 15 / self.pieceLength);       //根据码率和时间间隔来计算窗口长度
+        var dispatcher = self.dispatcher;
+
+        // console.warn('loadedmetadata duration:' + self.video.duration);
+        var bitrate = Math.ceil(dispatcher.fileSize/self.video.duration);
+        var windowLength = Math.ceil(bitrate * 15 / dispatcher.pieceLength);       //根据码率和时间间隔来计算窗口长度
+        // console.warn('windowLength:'+windowLength);
+        // console.warn('dispatcher._windowLength:'+dispatcher._windowLength);
         // self.normalWindowLength = self._windowLength;
-        // if (self._windowLength < 3) {
-        //     self._windowLength = 3;
-        // } else if (self._windowLength > 15) {
-        //     self._windowLength = 15;
-        // }
-        // // self._colddown = 5/self._slideInterval*self._interval2BufPos + 5;                        //窗口滑动的冷却时间
-        // // self._colddown = self._windowLength*2;
+        if (windowLength < 3) {
+            windowLength = 3;
+        } else if (self._windowLength > 15) {
+            windowLength = 15;
+        }
+        dispatcher._windowLength = windowLength;
+        dispatcher.interval = 5000;
+        // console.warn('dispatcher._windowLength:'+dispatcher._windowLength);
+        // self._colddown = 5/self._slideInterval*self._interval2BufPos + 5;                        //窗口滑动的冷却时间
+        // self._colddown = self._windowLength*2;
         // self._colddown = 5;
-        // self.emit('metadata', {'bitrate': self.bitrate, 'duration': self.video.duration});
+        self.emit('metadata', {'bitrate': self.bitrate, 'duration': self.video.duration});
 
         // if (self.useTorrent && self.magnetURI) {
         //     var client = new WebTorrent();

@@ -95,7 +95,7 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
             self.endTime = (new Date()).getTime();
             // self.speed = Math.floor((event.total * 1000) / ((self.endTime - self.startTime) * 1024));  //单位: KB/s
             self.speed = Math.floor(event.total / (self.endTime - self.startTime));  //单位: KB/s
-            // console.log('http speed:' + self.speed + 'KB/s');
+            console.info('http speed:' + self.speed + 'KB/s');
             self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
             console.log('http '+self.uri+' meanSpeed:' + self.meanSpeed + 'KB/s');
             if (!self.isAsync) {
