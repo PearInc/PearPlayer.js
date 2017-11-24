@@ -12,6 +12,7 @@
 
 module.exports = RTCDownloader;
 
+var debug = require('debug')('pear:webrtc-downloader-bin');
 var Buffer = require('buffer/').Buffer;
 var SimpleRTC = require('./simple-RTC');
 var EventEmitter = require('events').EventEmitter;
@@ -56,7 +57,7 @@ RTCDownloader.prototype.offerFromWS = function (offer) {          //由服务器
     var self = this;
 
     self.message = offer;
-    console.log('[webrtc] messageFromDC:' + JSON.stringify(offer));
+    debug('[webrtc] messageFromDC:' + JSON.stringify(offer));
     self.dc_id = offer.peer_id;
     self.simpleRTC.signal(offer.sdp);
 };
@@ -64,19 +65,18 @@ RTCDownloader.prototype.offerFromWS = function (offer) {          //由服务器
 RTCDownloader.prototype.candidatesFromWS = function (candidates) {
 
     for (var i=0; i<candidates.length; ++i) {
-        console.log('receiveIceCandidate:'+candidates[i]);
         this.simpleRTC.receiveIceCandidate(candidates[i]);
     }
 };
 
 RTCDownloader.prototype.select = function (start, end) {
     var self = this;
-    console.log('pear_webrtc'+self.dc_id+'select:'+start+'-'+end);
+    debug('pear_webrtc'+self.dc_id+'select:'+start+'-'+end);
     if (self.downloading){
-        // console.log('pear_webrtc queue.push:'+start+'-'+end);
+        // debug('pear_webrtc queue.push:'+start+'-'+end);
         self.queue.push([start,end]);
     } else {
-        // console.log('pear_webrtc startDownloading:'+start+'-'+end);
+        // debug('pear_webrtc startDownloading:'+start+'-'+end);
         self.startDownloading(start,end);
     }
     // if (self.queue.length >= 3) {
@@ -101,7 +101,7 @@ RTCDownloader.prototype.startDownloading = function (start, end) {
         "end":end
         // "end":10*1024*1024
     };
-    console.log("pear_send_file : " + JSON.stringify(str));
+    debug("pear_send_file : " + JSON.stringify(str));
     self.startTime=(new Date()).getTime();
     self.expectedLength = end - start + 1;
     self.simpleRTC.send(JSON.stringify(str));
@@ -109,23 +109,23 @@ RTCDownloader.prototype.startDownloading = function (start, end) {
 
 RTCDownloader.prototype._receive = function (chunk) {
     var self = this;
-    // console.log('[simpleRTC] chunk type:'+typeof chunk);
+    // debug('[simpleRTC] chunk type:'+typeof chunk);
 
     var uint8 = new Uint8Array(chunk);
-    // console.log('uint8.length:'+uint8.length);
+    // debug('uint8.length:'+uint8.length);
     // if (!uint8) {
     //     self.emit('error');
     //     return;
     // }
 
     var headerInfo = self._getHeaderInfo(uint8);
-    // console.log('headerInfo:'+JSON.stringify(headerInfo));
+    // debug('headerInfo:'+JSON.stringify(headerInfo));
 
     if (headerInfo) {
 
         if (headerInfo.value){
 
-            // console.log(self.mac+' headerInfo.start:'+headerInfo.start);
+            // debug(self.mac+' headerInfo.start:'+headerInfo.start);
             // if (headerInfo.start === self.lastChunkEnd + 1){
             //
             //     // self.chunkStore.push(uint8);
@@ -137,12 +137,12 @@ RTCDownloader.prototype._receive = function (chunk) {
 
             self.chunkStore.push(uint8);
         } else if (headerInfo.begin) {
-            // console.log(self.mac+' headerInfo.begin:'+self.downloading);
+            // debug(self.mac+' headerInfo.begin:'+self.downloading);
             self.emit('start');
             self.chunkStore = [];
         } else if (headerInfo.done) {
-            // console.log(self.mac+' headerInfo.done:'+self.downloading);
-            // console.log('self.chunkStore done');
+            // debug(self.mac+' headerInfo.done:'+self.downloading);
+            // debug('self.chunkStore done');
             var finalArray = [], length = self.chunkStore.length;
             // self.downloading = false;
             self.end = headerInfo.end;
@@ -155,18 +155,18 @@ RTCDownloader.prototype._receive = function (chunk) {
             self.endTime = (new Date()).getTime();
             // self.speed = Math.floor(((self.end - self.start) * 1000) / ((self.endTime - self.startTime) * 1024));  //单位: KB/s
             self.speed = Math.floor((self.end - self.start + 1) / (self.endTime - self.startTime));  //单位: KB/s
-            console.info('pear_webrtc speed:' + self.speed + 'KB/s');
+            debug('pear_webrtc speed:' + self.speed + 'KB/s');
             self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
-            console.log('datachannel '+self.dc_id+' meanSpeed:' + self.meanSpeed + 'KB/s');
+            debug('datachannel '+self.dc_id+' meanSpeed:' + self.meanSpeed + 'KB/s');
 
             for (var i = 0; i < length; i++) {
                 if (!!self.chunkStore[i]) {
                     var value = self.chunkStore[i].subarray(256);
-                    // console.log('value.length:'+value.length);
+                    // debug('value.length:'+value.length);
                     finalArray.push(Buffer.from(value));
                 }
             }
-            // console.log('RTCDownloader' +self.mac+ ' emit data start:' + self.start + ' end:' + self.end);
+            // debug('RTCDownloader' +self.mac+ ' emit data start:' + self.start + ' end:' + self.end);
             var retBuf = Buffer.concat(finalArray);
             if (retBuf.length === self.expectedLength) self.emit('data', retBuf, self.start, self.end, self.speed);
             self.downloading = false;
@@ -177,7 +177,7 @@ RTCDownloader.prototype._receive = function (chunk) {
         } else if (headerInfo.action) {
             //心跳信息
         } else {
-            console.log('RTC error msg:'+JSON.stringify(headerInfo));
+            debug('RTC error msg:'+JSON.stringify(headerInfo));
             self.emit('error');
         }
     } else {
@@ -208,10 +208,10 @@ RTCDownloader.prototype.clearQueue = function () {              //清空下载�
 };
 
 RTCDownloader.prototype._getHeaderInfo = function (uint8arr) {
-    // console.log('_getHeaderInfo mac:'+this.mac);
+    // debug('_getHeaderInfo mac:'+this.mac);
     var sub = uint8arr.subarray(0, 256);
     var headerString =  String.fromCharCode.apply(String, sub);
-    // console.log('headerString:'+headerString)
+    // debug('headerString:'+headerString)
     return JSON.parse(headerString.split('}')[0]+'}');
 };
 
@@ -224,11 +224,11 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
     });
     simpleRTC.on('error', function (err)
     {
-        console.log('[simpleRTC] error', err);
+        debug('[simpleRTC] error', err);
         self.emit('error');
     });
     simpleRTC.on('signal', function (data) {
-        // console.log('[simpleRTC] SIGNAL', JSON.stringify(data));
+        // debug('[simpleRTC] SIGNAL', JSON.stringify(data));
 
         var message = {
             "peer_id":self.peer_id,
@@ -236,13 +236,13 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
             "offer_id":self.message.offer_id
         };
         self.mac = self.message.peer_id.replace(/:/g, '');
-        // console.log('webrtc mac:'+self.mac);
+        // debug('webrtc mac:'+self.mac);
         if (data.type == 'answer'){
             message.action = 'answer';
             message.sdps = data;
         } else if(data.candidate){
             message.action = 'candidate';
-            console.log('signal candidate:'+JSON.stringify(data));
+            debug('signal candidate:'+JSON.stringify(data));
             message.candidates = data;
         }
 
@@ -250,7 +250,7 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
         self.emit('signal',message);
     });
     simpleRTC.on('connect', function (state) {
-        console.info('[datachannel] '+self.dc_id+' CONNECT');
+        debug('[datachannel] '+self.dc_id+' CONNECT');
         // simpleRTC.send('[simpleRTC] PEER CONNECTED!');
         simpleRTC.startHeartbeat();                          //开始周期性发送心跳信息
         if (!self.connectFlag){

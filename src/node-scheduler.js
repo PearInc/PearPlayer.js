@@ -11,6 +11,7 @@
     slideInterval: number                                //当前播放点距离缓冲前沿多少秒时滑动窗口
  }
  */
+var debug = require('debug')('pear:node-scheduler');
 
 module.exports = {
 
@@ -71,7 +72,7 @@ module.exports = {
 
         var ret = idles.concat(busys);
         // for (var i=0;i<ret.length;++i) {
-        //     console.log('index:'+i+' type:'+ret[i].type+' queue:'+ret[i].queue.length);
+        //     debug('index:'+i+' type:'+ret[i].type+' queue:'+ret[i].queue.length);
         // }
         if (ret.length > info.windowLength) {
             ret = ret.filter(function (item) {
@@ -98,7 +99,7 @@ module.exports = {
 
         var ret = idles.concat(busys);
         // for (var i=0;i<ret.length;++i) {
-        //     console.log('index:'+i+' type:'+ret[i].type+' queue:'+ret[i].queue.length);
+        //     debug('index:'+i+' type:'+ret[i].type+' queue:'+ret[i].queue.length);
         // }
         if (ret.length > info.windowLength) {
             ret = ret.filter(function (item) {

@@ -4,11 +4,11 @@
 
 module.exports = PearPlayer;
 
+var debug = require('debug')('pear:player');
 var inherits = require('inherits');
 var render = require('render-media');
 var PearDownloader = require('./src/index.downloader');
 var WebTorrent = require('webtorrent');
-var version = require('./package.json').version;
 
 inherits(PearPlayer, PearDownloader);
 
@@ -17,8 +17,6 @@ function PearPlayer(selector, token, opts) {
     var self = this;
     if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
     if (typeof token === 'object') return PearPlayer(selector, '', token);
-
-    console.info('version:'+version);
 
     if (typeof selector !== 'string') throw new Error('video selector must be a string!');
     self.video = document.querySelector(selector);
@@ -35,7 +33,7 @@ function PearPlayer(selector, token, opts) {
 
         return client.add(opts.magnetURI, function (torrent) {
             // Got torrent metadata!
-            // console.log('Client is downloading:', torrent.infoHash)
+            // debug('Client is downloading:', torrent.infoHash)
 
             torrent.files.forEach(function (file) {
 
@@ -64,10 +62,8 @@ PearPlayer.prototype.setupListeners = function () {
 
         var dispatcher = self.dispatcher;
 
-        // console.warn('loadedmetadata duration:' + self.video.duration);
         var bitrate = Math.ceil(dispatcher.fileSize/self.video.duration);
         var windowLength = Math.ceil(bitrate * 15 / dispatcher.pieceLength);       //根据码率和时间间隔来计算窗口长度
-        // console.warn('windowLength:'+windowLength);
         // console.warn('dispatcher._windowLength:'+dispatcher._windowLength);
         // self.normalWindowLength = self._windowLength;
         if (windowLength < 3) {
@@ -88,7 +84,7 @@ PearPlayer.prototype.setupListeners = function () {
         //     // client.on('error', function () {
         //     //
         //     // });
-        //     console.log('magnetURI:'+self.magnetURI);
+        //     debug('magnetURI:'+self.magnetURI);
         //     client.add(self.magnetURI, {
         //             announce: self.trackers || [
         //                 "wss://tracker.openwebtorrent.com",
@@ -98,7 +94,7 @@ PearPlayer.prototype.setupListeners = function () {
         //             bitfield: d.bitfield
         //         },
         //         function (torrent) {
-        //             console.log('Torrent:', torrent);
+        //             debug('Torrent:', torrent);
         //
         //             d.addTorrent(torrent);
         //         }

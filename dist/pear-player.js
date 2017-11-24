@@ -5,11 +5,11 @@
 
 module.exports = PearPlayer;
 
+var debug = require('debug')('pear:player');
 var inherits = require('inherits');
 var render = require('render-media');
 var PearDownloader = require('./src/index.downloader');
 var WebTorrent = require('webtorrent');
-var version = require('./package.json').version;
 
 inherits(PearPlayer, PearDownloader);
 
@@ -18,8 +18,6 @@ function PearPlayer(selector, token, opts) {
     var self = this;
     if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
     if (typeof token === 'object') return PearPlayer(selector, '', token);
-
-    console.info('version:'+version);
 
     if (typeof selector !== 'string') throw new Error('video selector must be a string!');
     self.video = document.querySelector(selector);
@@ -36,7 +34,7 @@ function PearPlayer(selector, token, opts) {
 
         return client.add(opts.magnetURI, function (torrent) {
             // Got torrent metadata!
-            // console.log('Client is downloading:', torrent.infoHash)
+            // debug('Client is downloading:', torrent.infoHash)
 
             torrent.files.forEach(function (file) {
 
@@ -65,10 +63,8 @@ PearPlayer.prototype.setupListeners = function () {
 
         var dispatcher = self.dispatcher;
 
-        // console.warn('loadedmetadata duration:' + self.video.duration);
         var bitrate = Math.ceil(dispatcher.fileSize/self.video.duration);
         var windowLength = Math.ceil(bitrate * 15 / dispatcher.pieceLength);       //根据码率和时间间隔来计算窗口长度
-        // console.warn('windowLength:'+windowLength);
         // console.warn('dispatcher._windowLength:'+dispatcher._windowLength);
         // self.normalWindowLength = self._windowLength;
         if (windowLength < 3) {
@@ -89,7 +85,7 @@ PearPlayer.prototype.setupListeners = function () {
         //     // client.on('error', function () {
         //     //
         //     // });
-        //     console.log('magnetURI:'+self.magnetURI);
+        //     debug('magnetURI:'+self.magnetURI);
         //     client.add(self.magnetURI, {
         //             announce: self.trackers || [
         //                 "wss://tracker.openwebtorrent.com",
@@ -99,7 +95,7 @@ PearPlayer.prototype.setupListeners = function () {
         //             bitfield: d.bitfield
         //         },
         //         function (torrent) {
-        //             console.log('Torrent:', torrent);
+        //             debug('Torrent:', torrent);
         //
         //             d.addTorrent(torrent);
         //         }
@@ -109,7 +105,587 @@ PearPlayer.prototype.setupListeners = function () {
     });
 
 }
-},{"./package.json":108,"./src/index.downloader":113,"inherits":31,"render-media":67,"webtorrent":96}],2:[function(require,module,exports){
+},{"./src/index.downloader":113,"debug":2,"inherits":32,"render-media":67,"webtorrent":96}],2:[function(require,module,exports){
+(function (process){
+/**
+ * This is the web browser implementation of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
+
+exports = module.exports = require('./debug');
+exports.log = log;
+exports.formatArgs = formatArgs;
+exports.save = save;
+exports.load = load;
+exports.useColors = useColors;
+exports.storage = 'undefined' != typeof chrome
+               && 'undefined' != typeof chrome.storage
+                  ? chrome.storage.local
+                  : localstorage();
+
+/**
+ * Colors.
+ */
+
+exports.colors = [
+  '#0000CC', '#0000FF', '#0033CC', '#0033FF', '#0066CC', '#0066FF', '#0099CC',
+  '#0099FF', '#00CC00', '#00CC33', '#00CC66', '#00CC99', '#00CCCC', '#00CCFF',
+  '#3300CC', '#3300FF', '#3333CC', '#3333FF', '#3366CC', '#3366FF', '#3399CC',
+  '#3399FF', '#33CC00', '#33CC33', '#33CC66', '#33CC99', '#33CCCC', '#33CCFF',
+  '#6600CC', '#6600FF', '#6633CC', '#6633FF', '#66CC00', '#66CC33', '#9900CC',
+  '#9900FF', '#9933CC', '#9933FF', '#99CC00', '#99CC33', '#CC0000', '#CC0033',
+  '#CC0066', '#CC0099', '#CC00CC', '#CC00FF', '#CC3300', '#CC3333', '#CC3366',
+  '#CC3399', '#CC33CC', '#CC33FF', '#CC6600', '#CC6633', '#CC9900', '#CC9933',
+  '#CCCC00', '#CCCC33', '#FF0000', '#FF0033', '#FF0066', '#FF0099', '#FF00CC',
+  '#FF00FF', '#FF3300', '#FF3333', '#FF3366', '#FF3399', '#FF33CC', '#FF33FF',
+  '#FF6600', '#FF6633', '#FF9900', '#FF9933', '#FFCC00', '#FFCC33'
+];
+
+/**
+ * Currently only WebKit-based Web Inspectors, Firefox >= v31,
+ * and the Firebug extension (any Firefox version) are known
+ * to support "%c" CSS customizations.
+ *
+ * TODO: add a `localStorage` variable to explicitly enable/disable colors
+ */
+
+function useColors() {
+  // NB: In an Electron preload script, document will be defined but not fully
+  // initialized. Since we know we're in Chrome, we'll just detect this case
+  // explicitly
+  if (typeof window !== 'undefined' && window.process && window.process.type === 'renderer') {
+    return true;
+  }
+
+  // Internet Explorer and Edge do not support colors.
+  if (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().match(/(edge|trident)\/(\d+)/)) {
+    return false;
+  }
+
+  // is webkit? http://stackoverflow.com/a/16459606/376773
+  // document is undefined in react-native: https://github.com/facebook/react-native/pull/1632
+  return (typeof document !== 'undefined' && document.documentElement && document.documentElement.style && document.documentElement.style.WebkitAppearance) ||
+    // is firebug? http://stackoverflow.com/a/398120/376773
+    (typeof window !== 'undefined' && window.console && (window.console.firebug || (window.console.exception && window.console.table))) ||
+    // is firefox >= v31?
+    // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
+    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31) ||
+    // double check webkit in userAgent just in case we are in a worker
+    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/));
+}
+
+/**
+ * Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
+ */
+
+exports.formatters.j = function(v) {
+  try {
+    return JSON.stringify(v);
+  } catch (err) {
+    return '[UnexpectedJSONParseError]: ' + err.message;
+  }
+};
+
+
+/**
+ * Colorize log arguments if enabled.
+ *
+ * @api public
+ */
+
+function formatArgs(args) {
+  var useColors = this.useColors;
+
+  args[0] = (useColors ? '%c' : '')
+    + this.namespace
+    + (useColors ? ' %c' : ' ')
+    + args[0]
+    + (useColors ? '%c ' : ' ')
+    + '+' + exports.humanize(this.diff);
+
+  if (!useColors) return;
+
+  var c = 'color: ' + this.color;
+  args.splice(1, 0, c, 'color: inherit')
+
+  // the final "%c" is somewhat tricky, because there could be other
+  // arguments passed either before or after the %c, so we need to
+  // figure out the correct index to insert the CSS into
+  var index = 0;
+  var lastC = 0;
+  args[0].replace(/%[a-zA-Z%]/g, function(match) {
+    if ('%%' === match) return;
+    index++;
+    if ('%c' === match) {
+      // we only are interested in the *last* %c
+      // (the user may have provided their own)
+      lastC = index;
+    }
+  });
+
+  args.splice(lastC, 0, c);
+}
+
+/**
+ * Invokes `console.log()` when available.
+ * No-op when `console.log` is not a "function".
+ *
+ * @api public
+ */
+
+function log() {
+  // this hackery is required for IE8/9, where
+  // the `console.log` function doesn't have 'apply'
+  return 'object' === typeof console
+    && console.log
+    && Function.prototype.apply.call(console.log, console, arguments);
+}
+
+/**
+ * Save `namespaces`.
+ *
+ * @param {String} namespaces
+ * @api private
+ */
+
+function save(namespaces) {
+  try {
+    if (null == namespaces) {
+      exports.storage.removeItem('debug');
+    } else {
+      exports.storage.debug = namespaces;
+    }
+  } catch(e) {}
+}
+
+/**
+ * Load `namespaces`.
+ *
+ * @return {String} returns the previously persisted debug modes
+ * @api private
+ */
+
+function load() {
+  var r;
+  try {
+    r = exports.storage.debug;
+  } catch(e) {}
+
+  // If debug isn't set in LS, and we're in Electron, try to load $DEBUG
+  if (!r && typeof process !== 'undefined' && 'env' in process) {
+    r = process.env.DEBUG;
+  }
+
+  return r;
+}
+
+/**
+ * Enable namespaces listed in `localStorage.debug` initially.
+ */
+
+exports.enable(load());
+
+/**
+ * Localstorage attempts to return the localstorage.
+ *
+ * This is necessary because safari throws
+ * when a user disables cookies/localstorage
+ * and you attempt to access it.
+ *
+ * @return {LocalStorage}
+ * @api private
+ */
+
+function localstorage() {
+  try {
+    return window.localStorage;
+  } catch (e) {}
+}
+
+}).call(this,require('_process'))
+},{"./debug":3,"_process":143}],3:[function(require,module,exports){
+
+/**
+ * This is the common logic for both the Node.js and web browser
+ * implementations of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
+
+exports = module.exports = createDebug.debug = createDebug['default'] = createDebug;
+exports.coerce = coerce;
+exports.disable = disable;
+exports.enable = enable;
+exports.enabled = enabled;
+exports.humanize = require('ms');
+
+/**
+ * Active `debug` instances.
+ */
+exports.instances = [];
+
+/**
+ * The currently active debug mode names, and names to skip.
+ */
+
+exports.names = [];
+exports.skips = [];
+
+/**
+ * Map of special "%n" handling functions, for the debug "format" argument.
+ *
+ * Valid key names are a single, lower or upper-case letter, i.e. "n" and "N".
+ */
+
+exports.formatters = {};
+
+/**
+ * Select a color.
+ * @param {String} namespace
+ * @return {Number}
+ * @api private
+ */
+
+function selectColor(namespace) {
+  var hash = 0, i;
+
+  for (i in namespace) {
+    hash  = ((hash << 5) - hash) + namespace.charCodeAt(i);
+    hash |= 0; // Convert to 32bit integer
+  }
+
+  return exports.colors[Math.abs(hash) % exports.colors.length];
+}
+
+/**
+ * Create a debugger with the given `namespace`.
+ *
+ * @param {String} namespace
+ * @return {Function}
+ * @api public
+ */
+
+function createDebug(namespace) {
+
+  var prevTime;
+
+  function debug() {
+    // disabled?
+    if (!debug.enabled) return;
+
+    var self = debug;
+
+    // set `diff` timestamp
+    var curr = +new Date();
+    var ms = curr - (prevTime || curr);
+    self.diff = ms;
+    self.prev = prevTime;
+    self.curr = curr;
+    prevTime = curr;
+
+    // turn the `arguments` into a proper Array
+    var args = new Array(arguments.length);
+    for (var i = 0; i < args.length; i++) {
+      args[i] = arguments[i];
+    }
+
+    args[0] = exports.coerce(args[0]);
+
+    if ('string' !== typeof args[0]) {
+      // anything else let's inspect with %O
+      args.unshift('%O');
+    }
+
+    // apply any `formatters` transformations
+    var index = 0;
+    args[0] = args[0].replace(/%([a-zA-Z%])/g, function(match, format) {
+      // if we encounter an escaped % then don't increase the array index
+      if (match === '%%') return match;
+      index++;
+      var formatter = exports.formatters[format];
+      if ('function' === typeof formatter) {
+        var val = args[index];
+        match = formatter.call(self, val);
+
+        // now we need to remove `args[index]` since it's inlined in the `format`
+        args.splice(index, 1);
+        index--;
+      }
+      return match;
+    });
+
+    // apply env-specific formatting (colors, etc.)
+    exports.formatArgs.call(self, args);
+
+    var logFn = debug.log || exports.log || console.log.bind(console);
+    logFn.apply(self, args);
+  }
+
+  debug.namespace = namespace;
+  debug.enabled = exports.enabled(namespace);
+  debug.useColors = exports.useColors();
+  debug.color = selectColor(namespace);
+  debug.destroy = destroy;
+
+  // env-specific initialization logic for debug instances
+  if ('function' === typeof exports.init) {
+    exports.init(debug);
+  }
+
+  exports.instances.push(debug);
+
+  return debug;
+}
+
+function destroy () {
+  var index = exports.instances.indexOf(this);
+  if (index !== -1) {
+    exports.instances.splice(index, 1);
+    return true;
+  } else {
+    return false;
+  }
+}
+
+/**
+ * Enables a debug mode by namespaces. This can include modes
+ * separated by a colon and wildcards.
+ *
+ * @param {String} namespaces
+ * @api public
+ */
+
+function enable(namespaces) {
+  exports.save(namespaces);
+
+  exports.names = [];
+  exports.skips = [];
+
+  var i;
+  var split = (typeof namespaces === 'string' ? namespaces : '').split(/[\s,]+/);
+  var len = split.length;
+
+  for (i = 0; i < len; i++) {
+    if (!split[i]) continue; // ignore empty strings
+    namespaces = split[i].replace(/\*/g, '.*?');
+    if (namespaces[0] === '-') {
+      exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
+    } else {
+      exports.names.push(new RegExp('^' + namespaces + '$'));
+    }
+  }
+
+  for (i = 0; i < exports.instances.length; i++) {
+    var instance = exports.instances[i];
+    instance.enabled = exports.enabled(instance.namespace);
+  }
+}
+
+/**
+ * Disable debug output.
+ *
+ * @api public
+ */
+
+function disable() {
+  exports.enable('');
+}
+
+/**
+ * Returns true if the given mode name is enabled, false otherwise.
+ *
+ * @param {String} name
+ * @return {Boolean}
+ * @api public
+ */
+
+function enabled(name) {
+  if (name[name.length - 1] === '*') {
+    return true;
+  }
+  var i, len;
+  for (i = 0, len = exports.skips.length; i < len; i++) {
+    if (exports.skips[i].test(name)) {
+      return false;
+    }
+  }
+  for (i = 0, len = exports.names.length; i < len; i++) {
+    if (exports.names[i].test(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Coerce `val`.
+ *
+ * @param {Mixed} val
+ * @return {Mixed}
+ * @api private
+ */
+
+function coerce(val) {
+  if (val instanceof Error) return val.stack || val.message;
+  return val;
+}
+
+},{"ms":4}],4:[function(require,module,exports){
+/**
+ * Helpers.
+ */
+
+var s = 1000;
+var m = s * 60;
+var h = m * 60;
+var d = h * 24;
+var y = d * 365.25;
+
+/**
+ * Parse or format the given `val`.
+ *
+ * Options:
+ *
+ *  - `long` verbose formatting [false]
+ *
+ * @param {String|Number} val
+ * @param {Object} [options]
+ * @throws {Error} throw an error if val is not a non-empty string or a number
+ * @return {String|Number}
+ * @api public
+ */
+
+module.exports = function(val, options) {
+  options = options || {};
+  var type = typeof val;
+  if (type === 'string' && val.length > 0) {
+    return parse(val);
+  } else if (type === 'number' && isNaN(val) === false) {
+    return options.long ? fmtLong(val) : fmtShort(val);
+  }
+  throw new Error(
+    'val is not a non-empty string or a valid number. val=' +
+      JSON.stringify(val)
+  );
+};
+
+/**
+ * Parse the given `str` and return milliseconds.
+ *
+ * @param {String} str
+ * @return {Number}
+ * @api private
+ */
+
+function parse(str) {
+  str = String(str);
+  if (str.length > 100) {
+    return;
+  }
+  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(
+    str
+  );
+  if (!match) {
+    return;
+  }
+  var n = parseFloat(match[1]);
+  var type = (match[2] || 'ms').toLowerCase();
+  switch (type) {
+    case 'years':
+    case 'year':
+    case 'yrs':
+    case 'yr':
+    case 'y':
+      return n * y;
+    case 'days':
+    case 'day':
+    case 'd':
+      return n * d;
+    case 'hours':
+    case 'hour':
+    case 'hrs':
+    case 'hr':
+    case 'h':
+      return n * h;
+    case 'minutes':
+    case 'minute':
+    case 'mins':
+    case 'min':
+    case 'm':
+      return n * m;
+    case 'seconds':
+    case 'second':
+    case 'secs':
+    case 'sec':
+    case 's':
+      return n * s;
+    case 'milliseconds':
+    case 'millisecond':
+    case 'msecs':
+    case 'msec':
+    case 'ms':
+      return n;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Short format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function fmtShort(ms) {
+  if (ms >= d) {
+    return Math.round(ms / d) + 'd';
+  }
+  if (ms >= h) {
+    return Math.round(ms / h) + 'h';
+  }
+  if (ms >= m) {
+    return Math.round(ms / m) + 'm';
+  }
+  if (ms >= s) {
+    return Math.round(ms / s) + 's';
+  }
+  return ms + 'ms';
+}
+
+/**
+ * Long format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function fmtLong(ms) {
+  return plural(ms, d, 'day') ||
+    plural(ms, h, 'hour') ||
+    plural(ms, m, 'minute') ||
+    plural(ms, s, 'second') ||
+    ms + ' ms';
+}
+
+/**
+ * Pluralization helper.
+ */
+
+function plural(ms, n, name) {
+  if (ms < n) {
+    return;
+  }
+  if (ms < n * 1.5) {
+    return Math.floor(ms / n) + ' ' + name;
+  }
+  return Math.ceil(ms / n) + ' ' + name + 's';
+}
+
+},{}],5:[function(require,module,exports){
 var ADDR_RE = /^\[?([^\]]+)\]?:(\d+)$/ // ipv4/ipv6/hostname + port
 
 var cache = {}
@@ -134,7 +710,7 @@ module.exports.reset = function reset () {
   size = 0
 }
 
-},{}],3:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 'use strict'
 
 exports.byteLength = byteLength
@@ -250,7 +826,7 @@ function fromByteArray (uint8) {
   return parts.join('')
 }
 
-},{}],4:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 (function (Buffer){
 const INTEGER_START = 0x69 // 'i'
 const STRING_DELIM = 0x3A // ':'
@@ -422,7 +998,7 @@ decode.buffer = function () {
 module.exports = decode
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":132}],5:[function(require,module,exports){
+},{"buffer":132}],8:[function(require,module,exports){
 var Buffer = require('safe-buffer').Buffer
 
 /**
@@ -537,7 +1113,7 @@ encode.list = function (buffers, data) {
 
 module.exports = encode
 
-},{"safe-buffer":72}],6:[function(require,module,exports){
+},{"safe-buffer":72}],9:[function(require,module,exports){
 var bencode = module.exports
 
 bencode.encode = require('./encode')
@@ -553,7 +1129,7 @@ bencode.byteLength = bencode.encodingLength = function (value) {
   return bencode.encode(value).length
 }
 
-},{"./decode":4,"./encode":5}],7:[function(require,module,exports){
+},{"./decode":7,"./encode":8}],10:[function(require,module,exports){
 module.exports = function(haystack, needle, comparator, low, high) {
   var mid, cmp;
 
@@ -598,7 +1174,7 @@ module.exports = function(haystack, needle, comparator, low, high) {
   return ~low;
 }
 
-},{}],8:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 (function (Buffer){
 var Container = typeof Buffer !== "undefined" ? Buffer //in node, use buffers
 		: typeof Int8Array !== "undefined" ? Int8Array //in newer browsers, use webgl int8arrays
@@ -663,7 +1239,7 @@ BitField.prototype._grow = function(length) {
 if(typeof module !== "undefined") module.exports = BitField;
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":132}],9:[function(require,module,exports){
+},{"buffer":132}],12:[function(require,module,exports){
 module.exports = Wire
 
 var arrayRemove = require('unordered-array-remove')
@@ -1409,7 +1985,7 @@ function pull (requests, piece, offset, length) {
   return null
 }
 
-},{"bencode":6,"bitfield":8,"debug":22,"inherits":31,"randombytes":56,"readable-stream":66,"safe-buffer":72,"speedometer":78,"unordered-array-remove":91,"xtend":105}],10:[function(require,module,exports){
+},{"bencode":9,"bitfield":11,"debug":2,"inherits":32,"randombytes":56,"readable-stream":66,"safe-buffer":72,"speedometer":78,"unordered-array-remove":91,"xtend":105}],13:[function(require,module,exports){
 (function (process){
 module.exports = Client
 
@@ -1709,7 +2285,7 @@ Client.prototype._defaultAnnounceOpts = function (opts) {
 }
 
 }).call(this,require('_process'))
-},{"./lib/client/http-tracker":131,"./lib/client/udp-tracker":131,"./lib/client/websocket-tracker":12,"./lib/common":13,"_process":143,"debug":22,"events":135,"inherits":31,"once":49,"run-parallel":70,"safe-buffer":72,"simple-peer":75,"uniq":90,"url":164,"xtend":105}],11:[function(require,module,exports){
+},{"./lib/client/http-tracker":131,"./lib/client/udp-tracker":131,"./lib/client/websocket-tracker":15,"./lib/common":16,"_process":143,"debug":2,"events":135,"inherits":32,"once":49,"run-parallel":70,"safe-buffer":72,"simple-peer":75,"uniq":90,"url":164,"xtend":105}],14:[function(require,module,exports){
 module.exports = Tracker
 
 var EventEmitter = require('events').EventEmitter
@@ -1741,7 +2317,7 @@ Tracker.prototype.setInterval = function (intervalMs) {
   }
 }
 
-},{"events":135,"inherits":31}],12:[function(require,module,exports){
+},{"events":135,"inherits":32}],15:[function(require,module,exports){
 module.exports = WebSocketTracker
 
 var debug = require('debug')('bittorrent-tracker:websocket-tracker')
@@ -2187,7 +2763,7 @@ WebSocketTracker.prototype._createPeer = function (opts) {
 
 function noop () {}
 
-},{"../common":13,"./tracker":11,"debug":22,"inherits":31,"randombytes":56,"simple-peer":75,"simple-websocket":77,"xtend":105}],13:[function(require,module,exports){
+},{"../common":16,"./tracker":14,"debug":2,"inherits":32,"randombytes":56,"simple-peer":75,"simple-websocket":77,"xtend":105}],16:[function(require,module,exports){
 /**
  * Functions/constants needed by both the client and server.
  */
@@ -2215,7 +2791,7 @@ exports.hexToBinary = function (str) {
 var config = require('./common-node')
 extend(exports, config)
 
-},{"./common-node":131,"safe-buffer":72,"xtend/mutable":106}],14:[function(require,module,exports){
+},{"./common-node":131,"safe-buffer":72,"xtend/mutable":106}],17:[function(require,module,exports){
 (function (Buffer){
 /* global Blob, FileReader */
 
@@ -2240,7 +2816,7 @@ module.exports = function blobToBuffer (blob, cb) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":132}],15:[function(require,module,exports){
+},{"buffer":132}],18:[function(require,module,exports){
 (function (Buffer){
 var inherits = require('inherits');
 var Transform = require('readable-stream').Transform;
@@ -2295,7 +2871,7 @@ Block.prototype._flush = function () {
 };
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":132,"defined":24,"inherits":31,"readable-stream":66}],16:[function(require,module,exports){
+},{"buffer":132,"defined":25,"inherits":32,"readable-stream":66}],19:[function(require,module,exports){
 /*
  * JavaScript MD5
  * https://github.com/blueimp/JavaScript-MD5
@@ -2578,7 +3154,7 @@ Block.prototype._flush = function () {
   }
 }(this))
 
-},{}],17:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 /*!
  * The buffer module from node.js, for the browser.
  *
@@ -4286,7 +4862,7 @@ function numberIsNaN (obj) {
   return obj !== obj // eslint-disable-line no-self-compare
 }
 
-},{"base64-js":3,"ieee754":29}],18:[function(require,module,exports){
+},{"base64-js":6,"ieee754":30}],21:[function(require,module,exports){
 module.exports = ChunkStoreWriteStream
 
 var BlockStream = require('block-stream2')
@@ -4337,7 +4913,7 @@ ChunkStoreWriteStream.prototype.destroy = function (err) {
   this.emit('close')
 }
 
-},{"block-stream2":15,"inherits":31,"readable-stream":66}],19:[function(require,module,exports){
+},{"block-stream2":18,"inherits":32,"readable-stream":66}],22:[function(require,module,exports){
 var abs = Math.abs
 
 module.exports = closest
@@ -4357,7 +4933,7 @@ function closest (n, arr, rndx) {
   return rndx ? ndx : arr[ndx]
 }
 
-},{}],20:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -4468,7 +5044,7 @@ function objectToString(o) {
 }
 
 }).call(this,{"isBuffer":require("../../../../../../../../usr/local/lib/node_modules/browserify/node_modules/is-buffer/index.js")})
-},{"../../../../../../../../usr/local/lib/node_modules/browserify/node_modules/is-buffer/index.js":139}],21:[function(require,module,exports){
+},{"../../../../../../../../usr/local/lib/node_modules/browserify/node_modules/is-buffer/index.js":139}],24:[function(require,module,exports){
 (function (process,global,Buffer){
 module.exports = createTorrent
 module.exports.parseInput = parseInput
@@ -4963,407 +5539,14 @@ function getStreamStream (readable, file) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},require("buffer").Buffer)
-},{"_process":143,"bencode":6,"block-stream2":15,"buffer":132,"filestream/read":26,"flatten":27,"fs":129,"is-file":33,"junk":36,"multistream":47,"once":49,"path":141,"piece-length":52,"readable-stream":66,"run-parallel":70,"simple-sha1":76,"xtend":105}],22:[function(require,module,exports){
-(function (process){
-/**
- * This is the web browser implementation of `debug()`.
- *
- * Expose `debug()` as the module.
- */
-
-exports = module.exports = require('./debug');
-exports.log = log;
-exports.formatArgs = formatArgs;
-exports.save = save;
-exports.load = load;
-exports.useColors = useColors;
-exports.storage = 'undefined' != typeof chrome
-               && 'undefined' != typeof chrome.storage
-                  ? chrome.storage.local
-                  : localstorage();
-
-/**
- * Colors.
- */
-
-exports.colors = [
-  'lightseagreen',
-  'forestgreen',
-  'goldenrod',
-  'dodgerblue',
-  'darkorchid',
-  'crimson'
-];
-
-/**
- * Currently only WebKit-based Web Inspectors, Firefox >= v31,
- * and the Firebug extension (any Firefox version) are known
- * to support "%c" CSS customizations.
- *
- * TODO: add a `localStorage` variable to explicitly enable/disable colors
- */
-
-function useColors() {
-  // NB: In an Electron preload script, document will be defined but not fully
-  // initialized. Since we know we're in Chrome, we'll just detect this case
-  // explicitly
-  if (typeof window !== 'undefined' && window.process && window.process.type === 'renderer') {
-    return true;
-  }
-
-  // is webkit? http://stackoverflow.com/a/16459606/376773
-  // document is undefined in react-native: https://github.com/facebook/react-native/pull/1632
-  return (typeof document !== 'undefined' && document.documentElement && document.documentElement.style && document.documentElement.style.WebkitAppearance) ||
-    // is firebug? http://stackoverflow.com/a/398120/376773
-    (typeof window !== 'undefined' && window.console && (window.console.firebug || (window.console.exception && window.console.table))) ||
-    // is firefox >= v31?
-    // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31) ||
-    // double check webkit in userAgent just in case we are in a worker
-    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/));
-}
-
-/**
- * Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
- */
-
-exports.formatters.j = function(v) {
-  try {
-    return JSON.stringify(v);
-  } catch (err) {
-    return '[UnexpectedJSONParseError]: ' + err.message;
-  }
-};
-
-
-/**
- * Colorize log arguments if enabled.
- *
- * @api public
- */
-
-function formatArgs(args) {
-  var useColors = this.useColors;
-
-  args[0] = (useColors ? '%c' : '')
-    + this.namespace
-    + (useColors ? ' %c' : ' ')
-    + args[0]
-    + (useColors ? '%c ' : ' ')
-    + '+' + exports.humanize(this.diff);
-
-  if (!useColors) return;
-
-  var c = 'color: ' + this.color;
-  args.splice(1, 0, c, 'color: inherit')
-
-  // the final "%c" is somewhat tricky, because there could be other
-  // arguments passed either before or after the %c, so we need to
-  // figure out the correct index to insert the CSS into
-  var index = 0;
-  var lastC = 0;
-  args[0].replace(/%[a-zA-Z%]/g, function(match) {
-    if ('%%' === match) return;
-    index++;
-    if ('%c' === match) {
-      // we only are interested in the *last* %c
-      // (the user may have provided their own)
-      lastC = index;
-    }
-  });
-
-  args.splice(lastC, 0, c);
-}
-
-/**
- * Invokes `console.log()` when available.
- * No-op when `console.log` is not a "function".
- *
- * @api public
- */
-
-function log() {
-  // this hackery is required for IE8/9, where
-  // the `console.log` function doesn't have 'apply'
-  return 'object' === typeof console
-    && console.log
-    && Function.prototype.apply.call(console.log, console, arguments);
-}
-
-/**
- * Save `namespaces`.
- *
- * @param {String} namespaces
- * @api private
- */
-
-function save(namespaces) {
-  try {
-    if (null == namespaces) {
-      exports.storage.removeItem('debug');
-    } else {
-      exports.storage.debug = namespaces;
-    }
-  } catch(e) {}
-}
-
-/**
- * Load `namespaces`.
- *
- * @return {String} returns the previously persisted debug modes
- * @api private
- */
-
-function load() {
-  var r;
-  try {
-    r = exports.storage.debug;
-  } catch(e) {}
-
-  // If debug isn't set in LS, and we're in Electron, try to load $DEBUG
-  if (!r && typeof process !== 'undefined' && 'env' in process) {
-    r = process.env.DEBUG;
-  }
-
-  return r;
-}
-
-/**
- * Enable namespaces listed in `localStorage.debug` initially.
- */
-
-exports.enable(load());
-
-/**
- * Localstorage attempts to return the localstorage.
- *
- * This is necessary because safari throws
- * when a user disables cookies/localstorage
- * and you attempt to access it.
- *
- * @return {LocalStorage}
- * @api private
- */
-
-function localstorage() {
-  try {
-    return window.localStorage;
-  } catch (e) {}
-}
-
-}).call(this,require('_process'))
-},{"./debug":23,"_process":143}],23:[function(require,module,exports){
-
-/**
- * This is the common logic for both the Node.js and web browser
- * implementations of `debug()`.
- *
- * Expose `debug()` as the module.
- */
-
-exports = module.exports = createDebug.debug = createDebug['default'] = createDebug;
-exports.coerce = coerce;
-exports.disable = disable;
-exports.enable = enable;
-exports.enabled = enabled;
-exports.humanize = require('ms');
-
-/**
- * The currently active debug mode names, and names to skip.
- */
-
-exports.names = [];
-exports.skips = [];
-
-/**
- * Map of special "%n" handling functions, for the debug "format" argument.
- *
- * Valid key names are a single, lower or upper-case letter, i.e. "n" and "N".
- */
-
-exports.formatters = {};
-
-/**
- * Previous log timestamp.
- */
-
-var prevTime;
-
-/**
- * Select a color.
- * @param {String} namespace
- * @return {Number}
- * @api private
- */
-
-function selectColor(namespace) {
-  var hash = 0, i;
-
-  for (i in namespace) {
-    hash  = ((hash << 5) - hash) + namespace.charCodeAt(i);
-    hash |= 0; // Convert to 32bit integer
-  }
-
-  return exports.colors[Math.abs(hash) % exports.colors.length];
-}
-
-/**
- * Create a debugger with the given `namespace`.
- *
- * @param {String} namespace
- * @return {Function}
- * @api public
- */
-
-function createDebug(namespace) {
-
-  function debug() {
-    // disabled?
-    if (!debug.enabled) return;
-
-    var self = debug;
-
-    // set `diff` timestamp
-    var curr = +new Date();
-    var ms = curr - (prevTime || curr);
-    self.diff = ms;
-    self.prev = prevTime;
-    self.curr = curr;
-    prevTime = curr;
-
-    // turn the `arguments` into a proper Array
-    var args = new Array(arguments.length);
-    for (var i = 0; i < args.length; i++) {
-      args[i] = arguments[i];
-    }
-
-    args[0] = exports.coerce(args[0]);
-
-    if ('string' !== typeof args[0]) {
-      // anything else let's inspect with %O
-      args.unshift('%O');
-    }
-
-    // apply any `formatters` transformations
-    var index = 0;
-    args[0] = args[0].replace(/%([a-zA-Z%])/g, function(match, format) {
-      // if we encounter an escaped % then don't increase the array index
-      if (match === '%%') return match;
-      index++;
-      var formatter = exports.formatters[format];
-      if ('function' === typeof formatter) {
-        var val = args[index];
-        match = formatter.call(self, val);
-
-        // now we need to remove `args[index]` since it's inlined in the `format`
-        args.splice(index, 1);
-        index--;
-      }
-      return match;
-    });
-
-    // apply env-specific formatting (colors, etc.)
-    exports.formatArgs.call(self, args);
-
-    var logFn = debug.log || exports.log || console.log.bind(console);
-    logFn.apply(self, args);
-  }
-
-  debug.namespace = namespace;
-  debug.enabled = exports.enabled(namespace);
-  debug.useColors = exports.useColors();
-  debug.color = selectColor(namespace);
-
-  // env-specific initialization logic for debug instances
-  if ('function' === typeof exports.init) {
-    exports.init(debug);
-  }
-
-  return debug;
-}
-
-/**
- * Enables a debug mode by namespaces. This can include modes
- * separated by a colon and wildcards.
- *
- * @param {String} namespaces
- * @api public
- */
-
-function enable(namespaces) {
-  exports.save(namespaces);
-
-  exports.names = [];
-  exports.skips = [];
-
-  var split = (typeof namespaces === 'string' ? namespaces : '').split(/[\s,]+/);
-  var len = split.length;
-
-  for (var i = 0; i < len; i++) {
-    if (!split[i]) continue; // ignore empty strings
-    namespaces = split[i].replace(/\*/g, '.*?');
-    if (namespaces[0] === '-') {
-      exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
-    } else {
-      exports.names.push(new RegExp('^' + namespaces + '$'));
-    }
-  }
-}
-
-/**
- * Disable debug output.
- *
- * @api public
- */
-
-function disable() {
-  exports.enable('');
-}
-
-/**
- * Returns true if the given mode name is enabled, false otherwise.
- *
- * @param {String} name
- * @return {Boolean}
- * @api public
- */
-
-function enabled(name) {
-  var i, len;
-  for (i = 0, len = exports.skips.length; i < len; i++) {
-    if (exports.skips[i].test(name)) {
-      return false;
-    }
-  }
-  for (i = 0, len = exports.names.length; i < len; i++) {
-    if (exports.names[i].test(name)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Coerce `val`.
- *
- * @param {Mixed} val
- * @return {Mixed}
- * @api private
- */
-
-function coerce(val) {
-  if (val instanceof Error) return val.stack || val.message;
-  return val;
-}
-
-},{"ms":46}],24:[function(require,module,exports){
+},{"_process":143,"bencode":9,"block-stream2":18,"buffer":132,"filestream/read":27,"flatten":28,"fs":129,"is-file":34,"junk":37,"multistream":47,"once":49,"path":141,"piece-length":52,"readable-stream":66,"run-parallel":70,"simple-sha1":76,"xtend":105}],25:[function(require,module,exports){
 module.exports = function () {
     for (var i = 0; i < arguments.length; i++) {
         if (arguments[i] !== undefined) return arguments[i];
     }
 };
 
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 var once = require('once');
 
 var noop = function() {};
@@ -5448,7 +5631,7 @@ var eos = function(stream, opts, callback) {
 
 module.exports = eos;
 
-},{"once":49}],26:[function(require,module,exports){
+},{"once":49}],27:[function(require,module,exports){
 var Readable = require('readable-stream').Readable;
 var inherits = require('inherits');
 var reExtension = /^.*\.(\w+)$/;
@@ -5542,7 +5725,7 @@ FileReadStream.prototype.destroy = function() {
   this.reader = null;
 }
 
-},{"inherits":31,"readable-stream":66,"typedarray-to-buffer":88}],27:[function(require,module,exports){
+},{"inherits":32,"readable-stream":66,"typedarray-to-buffer":88}],28:[function(require,module,exports){
 module.exports = function flatten(list, depth) {
   depth = (typeof depth == 'number') ? depth : Infinity;
 
@@ -5567,7 +5750,7 @@ module.exports = function flatten(list, depth) {
   }
 };
 
-},{}],28:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 // originally pulled out of simple-peer
 
 module.exports = function getBrowserRTC () {
@@ -5584,7 +5767,7 @@ module.exports = function getBrowserRTC () {
   return wrtc
 }
 
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
   var eLen = nBytes * 8 - mLen - 1
@@ -5670,7 +5853,7 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128
 }
 
-},{}],30:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 (function (process){
 module.exports = ImmediateStore
 
@@ -5723,7 +5906,7 @@ function nextTick (cb, err, val) {
 }
 
 }).call(this,require('_process'))
-},{"_process":143}],31:[function(require,module,exports){
+},{"_process":143}],32:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -5748,7 +5931,7 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],32:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 /* (c) 2016 Ari Porad (@ariporad) <http://ariporad.com>. License: ariporad.mit-license.org */
 
 // Partially from http://stackoverflow.com/a/94049/1928484, and from another SO answer, which told me that the highest
@@ -5763,7 +5946,7 @@ module.exports = function isAscii(str) {
   return true;
 };
 
-},{}],33:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 'use strict';
 
 var fs = require('fs');
@@ -5783,7 +5966,7 @@ function isFileSync(path){
   return fs.existsSync(path) && fs.statSync(path).isFile();
 }
 
-},{"fs":129}],34:[function(require,module,exports){
+},{"fs":129}],35:[function(require,module,exports){
 module.exports      = isTypedArray
 isTypedArray.strict = isStrictTypedArray
 isTypedArray.loose  = isLooseTypedArray
@@ -5826,14 +6009,14 @@ function isLooseTypedArray(arr) {
   return names[toString.call(arr)]
 }
 
-},{}],35:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 var toString = {}.toString;
 
 module.exports = Array.isArray || function (arr) {
   return toString.call(arr) == '[object Array]';
 };
 
-},{}],36:[function(require,module,exports){
+},{}],37:[function(require,module,exports){
 'use strict';
 
 // # All
@@ -5865,7 +6048,7 @@ exports.is = filename => exports.re.test(filename);
 
 exports.not = filename => !exports.is(filename);
 
-},{}],37:[function(require,module,exports){
+},{}],38:[function(require,module,exports){
 module.exports = magnetURIDecode
 module.exports.decode = magnetURIDecode
 module.exports.encode = magnetURIEncode
@@ -6003,7 +6186,7 @@ function magnetURIEncode (obj) {
   return result
 }
 
-},{"safe-buffer":72,"thirty-two":83,"uniq":90,"xtend":105}],38:[function(require,module,exports){
+},{"safe-buffer":72,"thirty-two":83,"uniq":90,"xtend":105}],39:[function(require,module,exports){
 module.exports = MediaElementWrapper
 
 var inherits = require('inherits')
@@ -6250,7 +6433,7 @@ MediaSourceStream.prototype._getBufferDuration = function () {
   return bufferedTime
 }
 
-},{"inherits":31,"readable-stream":66,"to-arraybuffer":85}],39:[function(require,module,exports){
+},{"inherits":32,"readable-stream":66,"to-arraybuffer":85}],40:[function(require,module,exports){
 (function (process){
 module.exports = Storage
 
@@ -6310,7 +6493,7 @@ function nextTick (cb, err, val) {
 }
 
 }).call(this,require('_process'))
-},{"_process":143}],40:[function(require,module,exports){
+},{"_process":143}],41:[function(require,module,exports){
 (function (Buffer){
 // This is an intentionally recursive require. I don't like it either.
 var Box = require('./index')
@@ -7243,7 +7426,7 @@ function readString (buf, offset, length) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./descriptor":41,"./index":42,"buffer":132}],41:[function(require,module,exports){
+},{"./descriptor":42,"./index":43,"buffer":132}],42:[function(require,module,exports){
 (function (Buffer){
 var tagToName = {
   0x03: 'ESDescriptor',
@@ -7319,7 +7502,7 @@ exports.DecoderConfigDescriptor.decode = function (buf, start, end) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":132}],42:[function(require,module,exports){
+},{"buffer":132}],43:[function(require,module,exports){
 (function (Buffer){
 // var assert = require('assert')
 var uint64be = require('uint64be')
@@ -7548,7 +7731,7 @@ Box.encodingLength = function (obj) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./boxes":40,"buffer":132,"uint64be":89}],43:[function(require,module,exports){
+},{"./boxes":41,"buffer":132,"uint64be":89}],44:[function(require,module,exports){
 (function (Buffer){
 var stream = require('readable-stream')
 var inherits = require('inherits')
@@ -7737,7 +7920,7 @@ MediaData.prototype.destroy = function (err) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":132,"inherits":31,"mp4-box-encoding":42,"next-event":48,"readable-stream":66}],44:[function(require,module,exports){
+},{"buffer":132,"inherits":32,"mp4-box-encoding":43,"next-event":48,"readable-stream":66}],45:[function(require,module,exports){
 (function (process,Buffer){
 var stream = require('readable-stream')
 var inherits = require('inherits')
@@ -7871,165 +8054,11 @@ MediaData.prototype.destroy = function (err) {
 }
 
 }).call(this,require('_process'),require("buffer").Buffer)
-},{"_process":143,"buffer":132,"inherits":31,"mp4-box-encoding":42,"readable-stream":66}],45:[function(require,module,exports){
+},{"_process":143,"buffer":132,"inherits":32,"mp4-box-encoding":43,"readable-stream":66}],46:[function(require,module,exports){
 exports.decode = require('./decode')
 exports.encode = require('./encode')
 
-},{"./decode":43,"./encode":44}],46:[function(require,module,exports){
-/**
- * Helpers.
- */
-
-var s = 1000;
-var m = s * 60;
-var h = m * 60;
-var d = h * 24;
-var y = d * 365.25;
-
-/**
- * Parse or format the given `val`.
- *
- * Options:
- *
- *  - `long` verbose formatting [false]
- *
- * @param {String|Number} val
- * @param {Object} [options]
- * @throws {Error} throw an error if val is not a non-empty string or a number
- * @return {String|Number}
- * @api public
- */
-
-module.exports = function(val, options) {
-  options = options || {};
-  var type = typeof val;
-  if (type === 'string' && val.length > 0) {
-    return parse(val);
-  } else if (type === 'number' && isNaN(val) === false) {
-    return options.long ? fmtLong(val) : fmtShort(val);
-  }
-  throw new Error(
-    'val is not a non-empty string or a valid number. val=' +
-      JSON.stringify(val)
-  );
-};
-
-/**
- * Parse the given `str` and return milliseconds.
- *
- * @param {String} str
- * @return {Number}
- * @api private
- */
-
-function parse(str) {
-  str = String(str);
-  if (str.length > 100) {
-    return;
-  }
-  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(
-    str
-  );
-  if (!match) {
-    return;
-  }
-  var n = parseFloat(match[1]);
-  var type = (match[2] || 'ms').toLowerCase();
-  switch (type) {
-    case 'years':
-    case 'year':
-    case 'yrs':
-    case 'yr':
-    case 'y':
-      return n * y;
-    case 'days':
-    case 'day':
-    case 'd':
-      return n * d;
-    case 'hours':
-    case 'hour':
-    case 'hrs':
-    case 'hr':
-    case 'h':
-      return n * h;
-    case 'minutes':
-    case 'minute':
-    case 'mins':
-    case 'min':
-    case 'm':
-      return n * m;
-    case 'seconds':
-    case 'second':
-    case 'secs':
-    case 'sec':
-    case 's':
-      return n * s;
-    case 'milliseconds':
-    case 'millisecond':
-    case 'msecs':
-    case 'msec':
-    case 'ms':
-      return n;
-    default:
-      return undefined;
-  }
-}
-
-/**
- * Short format for `ms`.
- *
- * @param {Number} ms
- * @return {String}
- * @api private
- */
-
-function fmtShort(ms) {
-  if (ms >= d) {
-    return Math.round(ms / d) + 'd';
-  }
-  if (ms >= h) {
-    return Math.round(ms / h) + 'h';
-  }
-  if (ms >= m) {
-    return Math.round(ms / m) + 'm';
-  }
-  if (ms >= s) {
-    return Math.round(ms / s) + 's';
-  }
-  return ms + 'ms';
-}
-
-/**
- * Long format for `ms`.
- *
- * @param {Number} ms
- * @return {String}
- * @api private
- */
-
-function fmtLong(ms) {
-  return plural(ms, d, 'day') ||
-    plural(ms, h, 'hour') ||
-    plural(ms, m, 'minute') ||
-    plural(ms, s, 'second') ||
-    ms + ' ms';
-}
-
-/**
- * Pluralization helper.
- */
-
-function plural(ms, n, name) {
-  if (ms < n) {
-    return;
-  }
-  if (ms < n * 1.5) {
-    return Math.floor(ms / n) + ' ' + name;
-  }
-  return Math.ceil(ms / n) + ' ' + name + 's';
-}
-
-},{}],47:[function(require,module,exports){
+},{"./decode":44,"./encode":45}],47:[function(require,module,exports){
 module.exports = MultiStream
 
 var inherits = require('inherits')
@@ -8174,7 +8203,7 @@ function toStreams2 (s) {
   return wrap
 }
 
-},{"inherits":31,"readable-stream":66}],48:[function(require,module,exports){
+},{"inherits":32,"readable-stream":66}],48:[function(require,module,exports){
 module.exports = nextEvent
 
 function nextEvent (emitter, name) {
@@ -8386,7 +8415,7 @@ function ensure (bool, fieldName) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"bencode":6,"buffer":132,"path":141,"simple-sha1":76,"uniq":90}],51:[function(require,module,exports){
+},{"bencode":9,"buffer":132,"path":141,"simple-sha1":76,"uniq":90}],51:[function(require,module,exports){
 (function (process,Buffer){
 /* global Blob */
 
@@ -8500,7 +8529,7 @@ function isBlob (obj) {
 ;(function () { Buffer.alloc(0) })()
 
 }).call(this,require('_process'),require("buffer").Buffer)
-},{"_process":143,"blob-to-buffer":14,"buffer":132,"fs":129,"magnet-uri":37,"parse-torrent-file":50,"simple-get":74}],52:[function(require,module,exports){
+},{"_process":143,"blob-to-buffer":17,"buffer":132,"fs":129,"magnet-uri":38,"parse-torrent-file":50,"simple-get":74}],52:[function(require,module,exports){
 var closest = require('closest-to')
 var kB = Math.pow(2, 10)
 
@@ -8512,7 +8541,7 @@ module.exports = function (bytes) {
   return closest(bytes / kB, range)
 }
 
-},{"closest-to":19}],53:[function(require,module,exports){
+},{"closest-to":22}],53:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -8641,7 +8670,7 @@ var pump = function () {
 
 module.exports = pump
 
-},{"end-of-stream":25,"fs":131,"once":49}],55:[function(require,module,exports){
+},{"end-of-stream":26,"fs":131,"once":49}],55:[function(require,module,exports){
 var iterate = function (list) {
   var offset = 0
   return function () {
@@ -8831,7 +8860,7 @@ RangeSliceStream.prototype.destroy = function (err) {
 	if (err) self.emit('error', err)
 }
 
-},{"inherits":31,"readable-stream":66}],58:[function(require,module,exports){
+},{"inherits":32,"readable-stream":66}],58:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8956,7 +8985,7 @@ function forEach(xs, f) {
     f(xs[i], i);
   }
 }
-},{"./_stream_readable":60,"./_stream_writable":62,"core-util-is":20,"inherits":31,"process-nextick-args":53}],59:[function(require,module,exports){
+},{"./_stream_readable":60,"./_stream_writable":62,"core-util-is":23,"inherits":32,"process-nextick-args":53}],59:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9004,7 +9033,7 @@ function PassThrough(options) {
 PassThrough.prototype._transform = function (chunk, encoding, cb) {
   cb(null, chunk);
 };
-},{"./_stream_transform":61,"core-util-is":20,"inherits":31}],60:[function(require,module,exports){
+},{"./_stream_transform":61,"core-util-is":23,"inherits":32}],60:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -10014,7 +10043,7 @@ function indexOf(xs, x) {
   return -1;
 }
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./_stream_duplex":58,"./internal/streams/BufferList":63,"./internal/streams/destroy":64,"./internal/streams/stream":65,"_process":143,"core-util-is":20,"events":135,"inherits":31,"isarray":35,"process-nextick-args":53,"safe-buffer":72,"string_decoder/":82,"util":131}],61:[function(require,module,exports){
+},{"./_stream_duplex":58,"./internal/streams/BufferList":63,"./internal/streams/destroy":64,"./internal/streams/stream":65,"_process":143,"core-util-is":23,"events":135,"inherits":32,"isarray":36,"process-nextick-args":53,"safe-buffer":72,"string_decoder/":82,"util":131}],61:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -10229,7 +10258,7 @@ function done(stream, er, data) {
 
   return stream.push(null);
 }
-},{"./_stream_duplex":58,"core-util-is":20,"inherits":31}],62:[function(require,module,exports){
+},{"./_stream_duplex":58,"core-util-is":23,"inherits":32}],62:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -10896,7 +10925,7 @@ Writable.prototype._destroy = function (err, cb) {
   cb(err);
 };
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./_stream_duplex":58,"./internal/streams/destroy":64,"./internal/streams/stream":65,"_process":143,"core-util-is":20,"inherits":31,"process-nextick-args":53,"safe-buffer":72,"util-deprecate":93}],63:[function(require,module,exports){
+},{"./_stream_duplex":58,"./internal/streams/destroy":64,"./internal/streams/stream":65,"_process":143,"core-util-is":23,"inherits":32,"process-nextick-args":53,"safe-buffer":72,"util-deprecate":93}],63:[function(require,module,exports){
 'use strict';
 
 /*<replacement>*/
@@ -11408,7 +11437,7 @@ function parseOpts (opts) {
   if (opts.maxBlobLength == null) opts.maxBlobLength = MAX_BLOB_LENGTH
 }
 
-},{"./lib/mime.json":68,"debug":22,"is-ascii":32,"mediasource":38,"path":141,"stream-to-blob-url":79,"videostream":95}],68:[function(require,module,exports){
+},{"./lib/mime.json":68,"debug":2,"is-ascii":33,"mediasource":39,"path":141,"stream-to-blob-url":79,"videostream":95}],68:[function(require,module,exports){
 module.exports={
   ".3gp": "video/3gpp",
   ".aac": "audio/aac",
@@ -13140,7 +13169,7 @@ Peer.prototype._transformConstraints = function (constraints) {
 function noop () {}
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":132,"debug":22,"get-browser-rtc":28,"inherits":31,"randombytes":56,"readable-stream":66}],76:[function(require,module,exports){
+},{"buffer":132,"debug":2,"get-browser-rtc":29,"inherits":32,"randombytes":56,"readable-stream":66}],76:[function(require,module,exports){
 var Rusha = require('rusha')
 
 var rusha = new Rusha
@@ -13470,7 +13499,7 @@ Socket.prototype._debug = function () {
 }
 
 }).call(this,require('_process'))
-},{"_process":143,"debug":22,"inherits":31,"randombytes":56,"readable-stream":66,"safe-buffer":72,"ws":131}],78:[function(require,module,exports){
+},{"_process":143,"debug":2,"inherits":32,"randombytes":56,"readable-stream":66,"safe-buffer":72,"ws":131}],78:[function(require,module,exports){
 var tick = 1
 var maxTick = 65535
 var resolution = 4
@@ -14225,7 +14254,7 @@ Discovery.prototype._dhtAnnounce = function () {
 }
 
 }).call(this,require('_process'))
-},{"_process":143,"bittorrent-dht/client":131,"bittorrent-tracker/client":10,"debug":22,"events":135,"inherits":31,"run-parallel":70,"xtend":105}],87:[function(require,module,exports){
+},{"_process":143,"bittorrent-dht/client":131,"bittorrent-tracker/client":13,"debug":2,"events":135,"inherits":32,"run-parallel":70,"xtend":105}],87:[function(require,module,exports){
 (function (Buffer){
 module.exports = Piece
 
@@ -14361,7 +14390,7 @@ module.exports = function typedarrayToBuffer (arr) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":132,"is-typedarray":34}],89:[function(require,module,exports){
+},{"buffer":132,"is-typedarray":35}],89:[function(require,module,exports){
 (function (Buffer){
 var UINT_32_MAX = 0xffffffff
 
@@ -14713,7 +14742,7 @@ module.exports = function (metadata) {
   return utMetadata
 }
 
-},{"bencode":6,"bitfield":8,"debug":22,"events":135,"inherits":31,"safe-buffer":72,"simple-sha1":76}],93:[function(require,module,exports){
+},{"bencode":9,"bitfield":11,"debug":2,"events":135,"inherits":32,"safe-buffer":72,"simple-sha1":76}],93:[function(require,module,exports){
 (function (global){
 
 /**
@@ -15259,7 +15288,7 @@ MP4Remuxer.prototype._generateMoof = function (track, firstSample, lastSample) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"binary-search":7,"buffer":132,"events":135,"inherits":31,"mp4-box-encoding":42,"mp4-stream":45,"range-slice-stream":57}],95:[function(require,module,exports){
+},{"binary-search":10,"buffer":132,"events":135,"inherits":32,"mp4-box-encoding":43,"mp4-stream":46,"range-slice-stream":57}],95:[function(require,module,exports){
 var MediaElementWrapper = require('mediasource')
 var pump = require('pump')
 
@@ -15384,7 +15413,7 @@ VideoStream.prototype.destroy = function () {
 	self._elem.src = ''
 }
 
-},{"./mp4-remuxer":94,"mediasource":38,"pump":54}],96:[function(require,module,exports){
+},{"./mp4-remuxer":94,"mediasource":39,"pump":54}],96:[function(require,module,exports){
 (function (process,global){
 /* global FileList */
 
@@ -15866,7 +15895,7 @@ function isFileList (obj) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./lib/tcp-pool":131,"./lib/torrent":101,"./package.json":103,"_process":143,"bittorrent-dht/client":131,"create-torrent":21,"debug":22,"events":135,"inherits":31,"load-ip-set":131,"parse-torrent":51,"path":141,"randombytes":56,"run-parallel":70,"safe-buffer":72,"simple-concat":73,"simple-peer":75,"speedometer":78,"xtend":105,"zero-fill":107}],97:[function(require,module,exports){
+},{"./lib/tcp-pool":131,"./lib/torrent":101,"./package.json":103,"_process":143,"bittorrent-dht/client":131,"create-torrent":24,"debug":2,"events":135,"inherits":32,"load-ip-set":131,"parse-torrent":51,"path":141,"randombytes":56,"run-parallel":70,"safe-buffer":72,"simple-concat":73,"simple-peer":75,"speedometer":78,"xtend":105,"zero-fill":107}],97:[function(require,module,exports){
 module.exports = FileStream
 
 var debug = require('debug')('webtorrent:file-stream')
@@ -15968,7 +15997,7 @@ FileStream.prototype._destroy = function (err, onclose) {
   if (onclose) onclose()
 }
 
-},{"debug":22,"inherits":31,"readable-stream":66}],98:[function(require,module,exports){
+},{"debug":2,"inherits":32,"readable-stream":66}],98:[function(require,module,exports){
 (function (process){
 module.exports = File
 
@@ -16099,7 +16128,7 @@ File.prototype._destroy = function () {
 }
 
 }).call(this,require('_process'))
-},{"./file-stream":97,"_process":143,"end-of-stream":25,"events":135,"inherits":31,"path":141,"readable-stream":66,"render-media":67,"stream-to-blob":80,"stream-to-blob-url":79,"stream-with-known-length-to-buffer":81}],99:[function(require,module,exports){
+},{"./file-stream":97,"_process":143,"end-of-stream":26,"events":135,"inherits":32,"path":141,"readable-stream":66,"render-media":67,"stream-to-blob":80,"stream-to-blob-url":79,"stream-with-known-length-to-buffer":81}],99:[function(require,module,exports){
 var arrayRemove = require('unordered-array-remove')
 var debug = require('debug')('webtorrent:peer')
 var Wire = require('bittorrent-protocol')
@@ -16346,7 +16375,7 @@ Peer.prototype.destroy = function (err) {
 
 function noop () {}
 
-},{"./webconn":102,"bittorrent-protocol":9,"debug":22,"unordered-array-remove":91}],100:[function(require,module,exports){
+},{"./webconn":102,"bittorrent-protocol":12,"debug":2,"unordered-array-remove":91}],100:[function(require,module,exports){
 module.exports = RarityMap
 
 /**
@@ -18221,7 +18250,7 @@ function randomInt (high) {
 function noop () {}
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../package.json":103,"./file":98,"./peer":99,"./rarity-map":100,"./server":131,"_process":143,"addr-to-ip-port":2,"bitfield":8,"chunk-store-stream/write":18,"debug":22,"events":135,"fs":129,"fs-chunk-store":39,"immediate-chunk-store":30,"inherits":31,"multistream":47,"net":131,"os":131,"parse-torrent":51,"path":141,"pump":54,"random-iterate":55,"run-parallel":70,"run-parallel-limit":69,"simple-get":74,"simple-sha1":76,"speedometer":78,"torrent-discovery":86,"torrent-piece":87,"uniq":90,"ut_metadata":92,"ut_pex":131,"xtend":105,"xtend/mutable":106}],102:[function(require,module,exports){
+},{"../package.json":103,"./file":98,"./peer":99,"./rarity-map":100,"./server":131,"_process":143,"addr-to-ip-port":5,"bitfield":11,"chunk-store-stream/write":21,"debug":2,"events":135,"fs":129,"fs-chunk-store":40,"immediate-chunk-store":31,"inherits":32,"multistream":47,"net":131,"os":131,"parse-torrent":51,"path":141,"pump":54,"random-iterate":55,"run-parallel":70,"run-parallel-limit":69,"simple-get":74,"simple-sha1":76,"speedometer":78,"torrent-discovery":86,"torrent-piece":87,"uniq":90,"ut_metadata":92,"ut_pex":131,"xtend":105,"xtend/mutable":106}],102:[function(require,module,exports){
 module.exports = WebConn
 
 var BitField = require('bitfield')
@@ -18420,7 +18449,7 @@ WebConn.prototype.destroy = function () {
   this._torrent = null
 }
 
-},{"../package.json":103,"bitfield":8,"bittorrent-protocol":9,"debug":22,"inherits":31,"safe-buffer":72,"simple-get":74,"simple-sha1":76}],103:[function(require,module,exports){
+},{"../package.json":103,"bitfield":11,"bittorrent-protocol":12,"debug":2,"inherits":32,"safe-buffer":72,"simple-get":74,"simple-sha1":76}],103:[function(require,module,exports){
 module.exports={
   "version": "0.98.19"
 }
@@ -18522,7 +18551,7 @@ module.exports = function zeroFill (width, number, pad) {
 },{}],108:[function(require,module,exports){
 module.exports={
   "name": "pearplayer",
-  "version": "2.3.8",
+  "version": "2.3.10",
   "description": "",
   "main": "./dist/pear-player.js",
   "dependencies": {
@@ -18548,8 +18577,7 @@ module.exports={
     "uglify-player": "browserify -s PearPlayer -e  ./index.player.js | babili > ./dist/pear-player.min.js",
     "pull-from-github": "git pull",
     "push-to-github": "git add . && git commit -m 'update' && git push",
-    "npm-publish": "npm publish",
-    "copy-to-downloader-project": "cp -r ./src/* ../PearDownloader.js/src"
+    "npm-publish": "npm publish"
   },
   "author": "Xie Ting Pear Limited",
   "license": "MIT",
@@ -18589,6 +18617,7 @@ module.exports={
  */
 module.exports = Dispatcher;
 
+var debug = require('debug')('pear:dispatcher');
 var BitField = require('bitfield');
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
@@ -18644,9 +18673,6 @@ function Dispatcher(config) {
     //webtorrent
     self.torrent = null;
 
-    //webrtc
-    // self.usefulDCs = 0;                                         //可用的data channel节点数量
-
     //scheduler
     self.scheduler = config.scheduler;
 };
@@ -18666,7 +18692,7 @@ Dispatcher.prototype._init = function () {
             length: self.fileSize
         })
     );
-    console.log('self.path:'+self.path);
+    // debug('self.path:'+self.path);
     self.bitfield = new BitField(self.chunks);       //记录哪个块已经下好
 
     self.queue = [];                     //初始化下载队列
@@ -18707,7 +18733,7 @@ Dispatcher.prototype.select = function (start, end, priority, notify) {
     }
     priority = Number(priority) || 0;
 
-    console.log('select %s-%s (priority %s)', start, end, priority);
+    debug('select %s-%s (priority %s)', start, end, priority);
 
     self._selections.push({
         from: start,
@@ -18729,7 +18755,7 @@ Dispatcher.prototype.deselect = function (start, end, priority) {
     if (self.destroyed) throw new Error('dispatcher is destroyed');
 
     priority = Number(priority) || 0;
-    console.log('deselect %s-%s (priority %s)', start, end, priority);
+    debug('deselect %s-%s (priority %s)', start, end, priority);
     // self._clearAllQueues();
     for (var i = 0; i < self._selections.length; ++i) {
         var s = self._selections[i];
@@ -18746,7 +18772,7 @@ Dispatcher.prototype._slide = function () {
     var self = this;
 
     if (self.done) return;
-    console.log('[dispatcher] slide window downloader length:'+self.downloaders.length);
+    debug('[dispatcher] slide window downloader length:'+self.downloaders.length);
     self._fillWindow();
 };
 
@@ -18760,7 +18786,7 @@ Dispatcher.prototype._updateSelections = function () {
     process.nextTick(function () {
         self._gcSelections()
     });
-    console.log('Dispatcher _updateSelections');
+    // debug('Dispatcher _updateSelections');
     //此处开始下载
     self._update();
 };
@@ -18814,7 +18840,7 @@ Dispatcher.prototype._gcSelections = function () {
     // }
 
     // self._windowOffset = s.from + s.offset;
-    // console.log('current _windowOffset:' + self._windowOffset);
+    // debug('current _windowOffset:' + self._windowOffset);
 
     if (!self._selections.length) self.emit('idle')
 };
@@ -18822,18 +18848,18 @@ Dispatcher.prototype._gcSelections = function () {
 Dispatcher.prototype._update = function () {
     var self = this;
     if (self.destroyed) return;
-    console.log('Dispatcher _update');
+    // debug('Dispatcher _update');
     var length = self._selections.length;
-    console.log('_selections.length:'+self._selections.length);
-    if ( length > 0) {
+    // debug('_selections.length:'+self._selections.length);
+    if (length > 0) {
 
-        // console.log('_update self._selections:'+JSON.stringify(self._selections));
+        // debug('_update self._selections:'+JSON.stringify(self._selections));
         // var s = self._selections[length-1];
         var s = self._selections[0];
         var start = s.from + s.offset;
         var end = s.to;
         // self._windowOffset = start;
-        console.log('current _windowOffset:' + self._windowOffset);
+        debug('current _windowOffset:' + self._windowOffset);
         self._slide();
         // self.slide();
         // self._throttle(self.slide,self);
@@ -18847,7 +18873,7 @@ Dispatcher.prototype._checkDone = function () {
     // is the torrent done? (if all current selections are satisfied, or there are
     // no selections, then torrent is done)
     var done = true;
-    // console.log('_selections.length:'+self._selections.length);
+    // debug('_selections.length:'+self._selections.length);
     // for (var i = 0; i < self._selections.length; i++) {
     //     var selection = self._selections[i];
     //     for (var piece = selection.from; piece <= selection.to; piece++) {
@@ -18865,13 +18891,19 @@ Dispatcher.prototype._checkDone = function () {
             break
         }
     }
-    console.log('_checkDone self.done:'+self.done+' done:'+done);
+    // debug('_checkDone self.done:'+self.done+' done:'+done);
     if (!self.done && done) {
         self.done = true;
-        // console.log('dispatcher done');
+        // debug('dispatcher done');
         self.emit('done');
         if (self.useMonitor) {
             self.emit('downloaded', 1.0);
+        }
+        for (var k=0;k<self.downloaders.length;++k) {
+            if (self.downloaders[k].type === 2) {               //datachannel
+                self.downloaders[k].simpleRTC.dataChannel.close();                //关闭所有dataChannel
+            }
+
         }
     }
     self._gcSelections();
@@ -18916,17 +18948,14 @@ Dispatcher.prototype._fillWindow = function () {
     if (sortedNodes.length === 0) return;
 
     var count = 0;
-    console.log('_fillWindow _windowOffset:' + self._windowOffset + ' downloaders:'+self.downloaders.length);
     var index = self._windowOffset;                       //TODO:修复auto下为零
-    console.log('sortedNodes length:'+sortedNodes.length);
     self.emit('fillwindow', self._windowOffset, self._windowLength);
     while (count !== self._windowLength){
-        console.log('_fillWindow _windowLength:'+self._windowLength + ' downloadersLength:' + self.downloaders.length);
+        debug('_fillWindow _windowLength:'+self._windowLength + ' downloadersLength:' + self.downloaders.length);
         if (index >= self.chunks){
-            // console.warn('index >= self.chunks');
             break;
         }
-        console.log('index:'+index);
+        // debug('index:'+index);
         // if (count >= sortedNodes.length) break;
 
         if (!self.bitfield.get(index)) {
@@ -18936,7 +18965,6 @@ Dispatcher.prototype._fillWindow = function () {
             // node.select(pair[0],pair[1]);
             var node = sortedNodes[count % sortedNodes.length];
             // var node = sortedNodes[count];
-            console.log('_fillWindow node downloading:'+node.downloading+' type:'+node.type+' queue:'+node.queue.length);
             node.select(pair[0],pair[1]);
             count ++;
         } else {
@@ -18955,23 +18983,23 @@ Dispatcher.prototype._setupHttp = function (hd) {
     });
     hd.once('done',function () {
 
-        // console.log('httpDownloader ondone');
+        // debug('httpDownloader ondone');
 
     });
     hd.once('error', function (error) {
 
-        console.warn('hd error!');
+        console.warn('http' + hd.uri + 'error!');
 
         if (self.downloaders.length > self._windowLength) {
             self.downloaders.removeObj(hd);
-            if (self._windowLength > self._windowLength) self._windowLength --;
+            if (self._windowLength > 3) self._windowLength --;
         }
         self.checkoutDownloaders();
     });
     hd.on('data',function (buffer, start, end, speed) {
 
         var index = self._calIndex(start);
-        console.log('httpDownloader' + hd.uri +' ondata range:'+start+'-'+end+' at index:'+index+' speed:'+hd.meanSpeed);
+        debug('httpDownloader' + hd.uri +' ondata range:'+start+'-'+end+' at index:'+index+' speed:'+hd.meanSpeed);
         var size = end - start + 1;
         if (!self.bitfield.get(index)){
             self.bitfield.set(index,true);
@@ -18987,7 +19015,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
                 self.emit('downloaded', self.downloaded/self.fileSize);
                 // hd.downloaded += size;
                 self.emit('traffic', hd.mac, size, hd.type === 1 ? 'HTTP_Node' : 'HTTP_Server');
-                console.log('ondata hd.type:' + hd.type +' index:' + index);
+                debug('ondata hd.type:' + hd.type +' index:' + index);
                 if (hd.type === 1) {          //node
                     self.fogDownloaded += self.pieceLength;
                     self.emit('fograte', self.fogDownloaded/self.downloaded);
@@ -19000,9 +19028,9 @@ Dispatcher.prototype._setupHttp = function (hd) {
                 self.emit('buffersources', self.bufferSources);
                 self.emit('sourcemap', hd.type === 1 ? 'n' : 's', index);
             }
-            // console.log('bufferSources:'+self.bufferSources);
+            // debug('bufferSources:'+self.bufferSources);
         } else {
-            console.log('重复下载');
+            debug('重复下载');
 
         }
     });
@@ -19014,13 +19042,13 @@ Dispatcher.prototype._setupDC = function (jd) {
     var self = this;
 
     jd.once('start',function () {
-        // console.log('DC start downloading');
+        // debug('DC start downloading');
     });
 
     jd.on('data',function (buffer, start, end, speed) {
 
         var index = self._calIndex(start);
-        console.log('pear_webrtc '+jd.dc_id+' ondata range:'+start+'-'+end+' at index:'+index+' speed:'+jd.meanSpeed);
+        debug('pear_webrtc '+jd.dc_id+' ondata range:'+start+'-'+end+' at index:'+index+' speed:'+jd.meanSpeed);
         var size = end - start + 1;
         if (!self.bitfield.get(index)){
             self.bitfield.set(index,true);
@@ -19032,7 +19060,7 @@ Dispatcher.prototype._setupDC = function (jd) {
             if (self.useMonitor) {
                 self.downloaded += size;
                 self.fogDownloaded += size;
-                console.log('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
+                debug('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
                 self.emit('downloaded', self.downloaded/self.fileSize);
                 self.emit('fograte', self.fogDownloaded/self.downloaded);
                 self.emit('fogspeed', self.downloaders.getCurrentSpeed([1,2]));
@@ -19043,7 +19071,7 @@ Dispatcher.prototype._setupDC = function (jd) {
                 self.emit('traffic', jd.mac, size, 'WebRTC_Node');
             }
         } else {
-            console.log('重复下载');
+            debug('重复下载');
             for (var k=0;k<self.downloaders.length;++k) {
                 if (self.downloaders[k].type === 2) {               //datachannel
                     self.downloaders[k].clearQueue();                //如果dc下载跟不上http,则清空下载队列
@@ -19055,11 +19083,10 @@ Dispatcher.prototype._setupDC = function (jd) {
     });
 
     jd.once('error', function () {
-        console.warn('jd error '+ jd.mac);
+        console.warn('webrtc error mac:'+ jd.mac);
         jd.close();
         self.downloaders.removeObj(jd);
-        // self.usefulDCs --;
-        if (self._windowLength > 3) {
+        if (self.downloaders.length < self._windowLength) {
             self._windowLength --;
         }
         self.checkoutDownloaders();
@@ -19080,25 +19107,24 @@ Dispatcher.prototype.checkoutDownloaders = function () {            //TODO:防�
 
 Dispatcher.prototype.addTorrent = function (torrent) {
     var self = this;
-    // console.log('torrent.pieces.length:'+torrent.pieces.length+' chunks:'+this.chunks);
+    // debug('torrent.pieces.length:'+torrent.pieces.length+' chunks:'+this.chunks);
     if (torrent.pieces.length !== this.chunks) return;
     this.torrent = torrent;
     torrent.pear_downloaded = 0;
-    console.log('addTorrent _windowOffset:' + self._windowOffset);
+    debug('addTorrent _windowOffset:' + self._windowOffset);
     if (self._windowOffset + self._windowLength < torrent.pieces.length-1) {
         torrent.critical(self._windowOffset+self._windowLength, torrent.pieces.length-1);
     }
     torrent.on('piecefromtorrent', function (index) {
 
-        console.log('piecefromtorrent:'+index);
+        debug('piecefromtorrent:'+index);
         if (self.useMonitor) {
             self.downloaded += self.pieceLength;
             self.fogDownloaded += self.pieceLength;
             torrent.pear_downloaded += self.pieceLength;
-            // console.log('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
             self.emit('downloaded', self.downloaded/self.fileSize);
             self.emit('fograte', self.fogDownloaded/self.downloaded);
-            // console.log('torrent.downloadSpeed:'+torrent.downloadSpeed/1024);
+            // debug('torrent.downloadSpeed:'+torrent.downloadSpeed/1024);
             self.emit('fogspeed', self.downloaders.getCurrentSpeed([1, 2]) + torrent.downloadSpeed/1024);
             self.bufferSources[index] = 'b';
             self.emit('buffersources', self.bufferSources);
@@ -19108,7 +19134,7 @@ Dispatcher.prototype.addTorrent = function (torrent) {
     });
 
     torrent.on('done', function () {
-        console.log('torrent done');
+        debug('torrent done');
     });
 };
 
@@ -19116,23 +19142,17 @@ Dispatcher.prototype.addDataChannel = function (dc) {
 
     // this.downloaders.push(dc);
     this.downloaders.splice(this._windowLength-1,0,dc);
-    if (this._windowLength < 10 && this.downloaders.length > this._windowLength) {
+    if (this._windowLength < 8 && this.downloaders.length > this._windowLength) {
         this._windowLength ++;
     }
-    // console.log('addDataChannel _windowLength:' + this._windowLength);
     this._setupDC(dc);
-    // console.log('addDataChannel now:'+this.downloaders.length);
-    // for (var i=0;i<this.downloaders.length;++i) {
-    //     console.log('downloader type:'+this.downloaders[i].type);
-    // }
-    // this.usefulDCs ++;
 };
 
 Dispatcher.prototype.addNode = function (node) {     //node是httpdownloader对象
 
     this._setupHttp(node);
     this.downloaders.push(node);
-    console.log('dispatcher add node: '+node.uri);
+    debug('dispatcher add node: '+node.uri);
 
 };
 
@@ -19170,7 +19190,7 @@ Dispatcher.prototype.destroy = function () {
 
     self.store = null;
 
-    console.info('Dispatcher destroyed');
+    debug('Dispatcher destroyed');
 };
 
 Dispatcher.prototype._throttle = function (method, context) {
@@ -19190,7 +19210,6 @@ Dispatcher.prototype.autoSlide = function () {
     var self = this;
 
     setTimeout(function () {
-        // console.log('[dispatcher] auto slide');
         self._slide();
         self._checkDone();
         if (!self.done && !self.destroyed){
@@ -19201,7 +19220,7 @@ Dispatcher.prototype.autoSlide = function () {
 
 Dispatcher.prototype._clearAllQueues = function () {
 
-    console.log('clearAllQueues');
+    debug('clearAllQueues');
     for (var k=0;k<this.downloaders.length;++k) {
         this.downloaders[k].clearQueue();
     }
@@ -19266,9 +19285,10 @@ Array.prototype.getCurrentSpeed = function (typeArr) {              //根据传�
 
 
 }).call(this,require('_process'))
-},{"_process":143,"bitfield":8,"events":135,"fs-chunk-store":39,"immediate-chunk-store":30,"inherits":31}],110:[function(require,module,exports){
+},{"_process":143,"bitfield":11,"debug":2,"events":135,"fs-chunk-store":40,"immediate-chunk-store":31,"inherits":32}],110:[function(require,module,exports){
 module.exports = FileStream;
 
+var debug = require('debug')('pear:file-stream');
 var inherits = require('inherits');
 var stream = require('readable-stream');
 
@@ -19305,10 +19325,10 @@ function FileStream (file, opts) {
     this._notifying = false;
     this._criticalLength = Math.min((1024 * 1024 / pieceLength) | 0, 2);
 
-    // console.log('FileStream _startPiece:'+this._startPiece);
-    // console.log('FileStream _endPiece:'+this._endPiece);
-    // console.log('FileStream _offset:'+this._offset);
-    // console.log('FileStream _missing:'+this._missing);
+    // debug('FileStream _startPiece:'+this._startPiece);
+    // debug('FileStream _endPiece:'+this._endPiece);
+    // debug('FileStream _offset:'+this._offset);
+    // debug('FileStream _missing:'+this._missing);
 }
 
 FileStream.prototype._read = function () {
@@ -19333,13 +19353,13 @@ FileStream.prototype._notify = function () {
     self._notifying = true;
 
     var p = self._piece;
-    console.log('FileStream get piece:' + p);
+    debug('FileStream get piece:' + p);
     self._dispatcher.store.get(p, function (err, buffer) {
         self._notifying = false;
         if (self.destroyed) return;
         if (err) return self._destroy(err);
         // debug('read %s (length %s) (err %s)', p, buffer.length, err && err.message)
-        // console.log('read '+p+' length:'+buffer.length);
+        // debug('read '+p+' length:'+buffer.length);
         if (self._offset) {
             buffer = buffer.slice(self._offset);
             self._offset = 0;
@@ -19350,7 +19370,7 @@ FileStream.prototype._notify = function () {
         }
         self._missing -= buffer.length;
 
-        // console.log('pushing buffer of length:'+buffer.length);
+        // debug('pushing buffer of length:'+buffer.length);
         self._reading = false;
         self.push(buffer);
         // if (p === self._dispatcher._windowLength/2) {
@@ -19372,7 +19392,7 @@ FileStream.prototype._destroy = function (err, onclose) {
     if (!this._dispatcher.destroyed) {
         this._dispatcher.deselect(this._startPiece, this._endPiece, true);
     }
-    console.log('FileStream destroy');
+    debug('FileStream destroy');
     if (err) this.emit('error', err);
     this.emit('close');
     if (onclose) onclose();
@@ -19381,7 +19401,7 @@ FileStream.prototype._destroy = function (err, onclose) {
 // FileStream.prototype._ifCanPlay = function () {                   //缓存足够的buffer后才播放
 //     if (this._dispatcher.enoughInitBuffer) return;
 //     var bitfield = this._dispatcher.bitfield;
-//     console.log('this._dispatcher.normalWindowLength:'+this._dispatcher.normalWindowLength);
+//     debug('this._dispatcher.normalWindowLength:'+this._dispatcher.normalWindowLength);
 //     for (var i=this._startPiece;i<this._startPiece+this._dispatcher.normalWindowLength;i++) {
 //         if (!bitfield.get(i)) {
 //             return;
@@ -19394,11 +19414,12 @@ FileStream.prototype._destroy = function (err, onclose) {
 // };
 
 function noop () {}
-},{"inherits":31,"readable-stream":66}],111:[function(require,module,exports){
+},{"debug":2,"inherits":32,"readable-stream":66}],111:[function(require,module,exports){
 (function (process){
 
 module.exports = File;
 
+var debug = require('debug')('pear:file');
 var eos = require('end-of-stream');
 var EventEmitter = require('events').EventEmitter;
 var path = require('path');
@@ -19432,7 +19453,7 @@ function File (dispatcher, file){
 
     this._startPiece = start / this._dispatcher.pieceLength | 0;
     this._endPiece = end / this._dispatcher.pieceLength | 0;
-    // console.log('file _startPiece'+this._startPiece+' _endPiece:'+this._endPiece);
+    // debug('file _startPiece'+this._startPiece+' _endPiece:'+this._endPiece);
 
     if (this.length === 0) {
         this.done = true;
@@ -19448,8 +19469,8 @@ function File (dispatcher, file){
 File.prototype.createReadStream = function (opts) {
     var self = this;
     // opts = opts || {};
-    // console.log('createReadStream');
-    // console.log(opts.start?opts.start:0);
+    // debug('createReadStream');
+    // debug(opts.start?opts.start:0);
 
     // if (!opts) return;
 
@@ -19511,10 +19532,11 @@ File.prototype._destroy = function () {
 
 
 }).call(this,require('_process'))
-},{"./file-stream":110,"_process":143,"end-of-stream":25,"events":135,"inherits":31,"path":141,"readable-stream":66,"render-media/lib/mime.json":68,"stream-to-blob-url":79,"stream-with-known-length-to-buffer":81}],112:[function(require,module,exports){
+},{"./file-stream":110,"_process":143,"debug":2,"end-of-stream":26,"events":135,"inherits":32,"path":141,"readable-stream":66,"render-media/lib/mime.json":68,"stream-to-blob-url":79,"stream-with-known-length-to-buffer":81}],112:[function(require,module,exports){
 
 module.exports = HttpDownloader;
 
+var debug = require('debug')('pear:http-downloader');
 var Buffer = require('buffer/').Buffer;
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
@@ -19542,7 +19564,7 @@ function HttpDownloader(uri, type, opts) {
     //节点流量统计
     this.downloaded = 0;
     this.mac = this.uri.split('.')[0].split('//')[1];
-    console.log('HttpDownloader mac:'+this.mac);
+    debug('HttpDownloader mac:'+this.mac);
 };
 
 HttpDownloader.prototype.select = function (start, end) {
@@ -19550,7 +19572,7 @@ HttpDownloader.prototype.select = function (start, end) {
     // if (end < start) throw new Error('end must larger than start');
     // this.emit('start',start,end);
     var index = Math.floor(start/(1024*1024));
-    console.log('HttpDownloader ' + this.uri + ' select:' + start + '-' + end + ' at ' + index + ' weight:' + this.weight);
+    debug('HttpDownloader ' + this.uri + ' select:' + start + '-' + end + ' at ' + index + ' weight:' + this.weight);
     if (this.isAsync) {                               //并行
         this._getChunk(start, end);
     } else {　　　　　　　　　　　　　　　　　　　　　　　　  //串行
@@ -19571,10 +19593,10 @@ HttpDownloader.prototype.select = function (start, end) {
 
 HttpDownloader.prototype.abort = function () {
     var self = this;
-    // console.log('[HttpDownloader] readyState:'+self._xhr.readyState);
+    // debug('[HttpDownloader] readyState:'+self._xhr.readyState);
     if (self._xhr && (self._xhr.readyState == 2 || self._xhr.readyState == 3)) {  //如果正在下载,则停止
         self._xhr.abort();
-        console.log('HttpDownloader ' + self.uri +' aborted!');
+        debug('HttpDownloader ' + self.uri +' aborted!');
     }
     self.downloading = false;
 };
@@ -19583,14 +19605,14 @@ HttpDownloader.prototype.clearQueue = function () {              //清空下载�
 
     // this.downloading = false;
     if (this.queue.length > 0) {
-        // console.log('[HttpDownloader] clear queue!');
+        // debug('[HttpDownloader] clear queue!');
         this.queue = [];
     }
 };
 
 HttpDownloader.prototype._getChunk = function (begin,end) {
     var self = this;
-    console.log('HttpDownloader _getChunk');
+    debug('HttpDownloader _getChunk');
     self.downloading = true;
     var xhr = new XMLHttpRequest();
     self._xhr = xhr;
@@ -19598,9 +19620,9 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
     xhr.responseType = "arraybuffer";
     // xhr.timeout = 3000;
     self.startTime=(new Date()).getTime();
-    // console.log('get_file_index: start:'+begin+' end:'+end);
+    // debug('get_file_index: start:'+begin+' end:'+end);
     var range = "bytes="+begin+"-"+end;
-    // console.log('request range: ' + range);
+    // debug('request range: ' + range);
     xhr.setRequestHeader("Range", range);
     xhr.onload = function (event) {
         if (this.status >= 200 || this.status < 300) {
@@ -19609,9 +19631,9 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
             self.endTime = (new Date()).getTime();
             // self.speed = Math.floor((event.total * 1000) / ((self.endTime - self.startTime) * 1024));  //单位: KB/s
             self.speed = Math.floor(event.total / (self.endTime - self.startTime));  //单位: KB/s
-            console.info('http speed:' + self.speed + 'KB/s');
+            debug('http speed:' + self.speed + 'KB/s');
             self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
-            console.log('http '+self.uri+' meanSpeed:' + self.meanSpeed + 'KB/s');
+            debug('http '+self.uri+' meanSpeed:' + self.meanSpeed + 'KB/s');
             if (!self.isAsync) {
                 if (self.queue.length > 0){             //如果下载队列不为空
                     var pair = self.queue.shift();
@@ -19619,7 +19641,7 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
                 }
             }
             var range = this.getResponseHeader("Content-Range").split(" ",2)[1].split('/',1)[0];
-            // console.log('xhr.onload range:'+range);
+            // debug('xhr.onload range:'+range);
             // self.emit('done');
             self._handleChunk(range,this.response);
         } else {
@@ -19631,7 +19653,7 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
         self.emit('error');
     };
     // xhr.ontimeout = function (_) {
-    //     console.log('HttpDownloader ' + self.uri + ' timeout');
+    //     debug('HttpDownloader ' + self.uri + ' timeout');
     //     self.emit('error');
     //     // self.weight -= 0.2;
     //     // if (self.weight < 0.1) {
@@ -19654,15 +19676,17 @@ HttpDownloader.prototype._handleChunk = function (range,data) {
 
 
 
-},{"buffer/":17,"events":135,"inherits":31}],113:[function(require,module,exports){
+},{"buffer/":20,"debug":2,"events":135,"inherits":32}],113:[function(require,module,exports){
 /**
  * Created by XieTing on 17-6-6.
  */
 
 module.exports = PearDownloader;
 
+var debug = require('debug');
 var inherits = require('inherits');
 var Worker = require('./worker');
+var version = require('../package.json').version;
 
 inherits(PearDownloader, Worker);
 
@@ -19671,45 +19695,114 @@ function PearDownloader(urlStr, token, opts) {
     if (!(self instanceof PearDownloader)) return new PearDownloader(urlStr, token, opts);
     // if (!(self instanceof PearPlayer)) return new PearPlayer(selector, opts);
     if (typeof token === 'object') return PearDownloader(urlStr, '', token);
+
+    if (opts.debug) {
+        debug.enable('pear:*');
+    } else {
+        debug.disable();
+    }
+    self.version = version;
+    console.info('pear version:'+version);
+
     Worker.call(self, urlStr, token, opts);
-
-
 }
 
-var PRDownloaderProto = Object.create(HTMLElement.prototype);
-PRDownloaderProto.createdCallback = function() {
-    console.warn('PRDownloaderProto created');
+class  PearDownloaderTag extends HTMLElement {
+    constructor() {
+        super();
+        this.progress = 0;
+        this.status = 'ready';
+        this.speed = 0;
+        this.fileName = 'unknown';
+        this.p2pRatio = 0;
+        this.autoDownload = false;
 
-    var downloader = new PearDownloader(this.dataset.src, {
-        scheduler: this.dataset.scheduler,
-        auto: this.dataset.auto,
-        interval: this.dataset.interval,
-        useDataChannel: this.dataset.useDataChannel,
-        dataChannels: this.dataset.dataChannels,
-        useTorrent: this.dataset.useTorrent,
-        magnetURI: this.dataset.magnetURI,
-        // trackers:["wss://tracker.openwebtorrent.com"],
-        // sources: [],
-        useMonitor: this.dataset.useMonitor,
+        this.addEventListener('click', e => {
+            if (this.disabled) {
+            return;
+        }
+        this.downloader = this.createDownloader();
+        this.downloaderLifeCycle();
     });
-    PRDownloaderProto.downloader = downloader;
+    }
 
-}
-// PRDownloaderProto.attachedCallback = function() {
-//     console.warn('XTreehouseProto attached:'+this.dataset.useMonitor);
-//     console.log(this.dataset.src)
-//
-//     // downloader.call(this);
-// }
-PRDownloaderProto.detachedCallback = function() {
+    connectedCallback() {
+        // this.textContent = "卧槽！！！ - ";
+    }
 
+    createDownloader() {
+
+        if (!this.dataset.src) {
+            console.error('Must set data-src attribuite!');
+            return false;
+        }
+        let token = '';
+        if (this.dataset.token) {
+            token = this.dataset.token;
+        }
+
+        let downloader = new PearDownloader(this.dataset.src, token, {
+            useMonitor: true,             //是否开启monitor,会稍微影响性能,默认false
+        });
+
+
+        if (this.dataset.autoDownload == 'true') {
+            this.autoDownload = true;
+        }
+
+        return downloader;
+    }
+
+    downloaderLifeCycle() {
+        this.downloader.on('begin', () => {
+            this.status = 'ready';
+            this.fileName = this.downloader.fileName;
+
+            let ev = new CustomEvent("progress");
+            this.dispatchEvent(ev);
+        });
+
+        this.downloader.on("progress", (prog) => {
+
+            this.progress = prog;
+            this.status = prog < 1.0 ? 'downloading' : 'done';
+
+            let ev = new CustomEvent("progress");
+            this.dispatchEvent(ev);
+        });
+
+        this.downloader.on('meanspeed', (speed) => {
+            this.speed = speed;
+        });
+
+        this.downloader.on('done', () => {
+            if (this.autoDownload) {
+                let aTag = document.createElement('a');
+                aTag.download = this.fileName;
+                this.downloader.file.getBlobURL(function (error, url) {
+                    aTag.href = url;
+                    aTag.click();
+                })
+            }
+
+
+        });
+        this.downloader.on('fograte', (p2pRatio) => {
+
+            this.p2pRatio = p2pRatio;
+        });
+
+    }
 }
-PRDownloaderProto.attributeChangedCallback = function(attrName, oldValue, newValue) {}
-var PRDownloader = document.registerElement('pr-downloader', { prototype: PRDownloaderProto });
-// PRDownloader.call(PearDownloader);
-},{"./worker":128,"inherits":31}],114:[function(require,module,exports){
+
+if (!window.customElements.get('pear-downloader')) {
+    window.customElements.define('pear-downloader', PearDownloaderTag);
+}
+
+
+},{"../package.json":108,"./worker":128,"debug":2,"inherits":32}],114:[function(require,module,exports){
 arguments[4][97][0].apply(exports,arguments)
-},{"debug":22,"dup":97,"inherits":31,"readable-stream":66}],115:[function(require,module,exports){
+},{"debug":2,"dup":97,"inherits":32,"readable-stream":66}],115:[function(require,module,exports){
 (function (process){
 module.exports = File
 
@@ -19840,9 +19933,9 @@ File.prototype._destroy = function () {
 }
 
 }).call(this,require('_process'))
-},{"./file-stream":114,"_process":143,"end-of-stream":25,"events":135,"inherits":31,"path":141,"readable-stream":66,"stream-with-known-length-to-buffer":81}],116:[function(require,module,exports){
+},{"./file-stream":114,"_process":143,"end-of-stream":26,"events":135,"inherits":32,"path":141,"readable-stream":66,"stream-with-known-length-to-buffer":81}],116:[function(require,module,exports){
 arguments[4][99][0].apply(exports,arguments)
-},{"./webconn":119,"bittorrent-protocol":9,"debug":22,"dup":99,"unordered-array-remove":91}],117:[function(require,module,exports){
+},{"./webconn":119,"bittorrent-protocol":12,"debug":2,"dup":99,"unordered-array-remove":91}],117:[function(require,module,exports){
 arguments[4][100][0].apply(exports,arguments)
 },{"dup":100}],118:[function(require,module,exports){
 (function (process,global){
@@ -21605,9 +21698,9 @@ function randomInt (high) {
 function noop () {}
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../package.json":122,"./file":115,"./peer":116,"./rarity-map":117,"./server":131,"_process":143,"addr-to-ip-port":2,"bitfield":8,"chunk-store-stream/write":18,"debug":22,"events":135,"fs":129,"fs-chunk-store":39,"immediate-chunk-store":30,"inherits":31,"multistream":47,"net":131,"os":131,"parse-torrent":51,"path":141,"pump":54,"random-iterate":55,"run-parallel":70,"run-parallel-limit":69,"simple-get":74,"simple-sha1":76,"speedometer":78,"torrent-discovery":86,"torrent-piece":87,"uniq":90,"ut_metadata":92,"ut_pex":131,"xtend":105,"xtend/mutable":106}],119:[function(require,module,exports){
+},{"../package.json":122,"./file":115,"./peer":116,"./rarity-map":117,"./server":131,"_process":143,"addr-to-ip-port":5,"bitfield":11,"chunk-store-stream/write":21,"debug":2,"events":135,"fs":129,"fs-chunk-store":40,"immediate-chunk-store":31,"inherits":32,"multistream":47,"net":131,"os":131,"parse-torrent":51,"path":141,"pump":54,"random-iterate":55,"run-parallel":70,"run-parallel-limit":69,"simple-get":74,"simple-sha1":76,"speedometer":78,"torrent-discovery":86,"torrent-piece":87,"uniq":90,"ut_metadata":92,"ut_pex":131,"xtend":105,"xtend/mutable":106}],119:[function(require,module,exports){
 arguments[4][102][0].apply(exports,arguments)
-},{"../package.json":122,"bitfield":8,"bittorrent-protocol":9,"debug":22,"dup":102,"inherits":31,"safe-buffer":72,"simple-get":74,"simple-sha1":76}],120:[function(require,module,exports){
+},{"../package.json":122,"bitfield":11,"bittorrent-protocol":12,"debug":2,"dup":102,"inherits":32,"safe-buffer":72,"simple-get":74,"simple-sha1":76}],120:[function(require,module,exports){
 /**
  * 过滤掉不能下载的节点
  */
@@ -21619,6 +21712,8 @@ module.exports = NodeFilter;
     cb: function
     range: {start: number end: number}
  */
+
+var debug = require('debug')('pear:node-filter');
 
 function NodeFilter(nodesArray, cb, range) {
 
@@ -21640,7 +21735,7 @@ function NodeFilter(nodesArray, cb, range) {
         try {
             connectTest(nodesArray[i]);
         } catch (e) {
-            console.log(nodesArray[i].uri + ':' + JSON.stringify(e))
+            // debug(nodesArray[i].uri + ':' + JSON.stringify(e))
         }
     }
 
@@ -21659,7 +21754,7 @@ function NodeFilter(nodesArray, cb, range) {
         };
         xhr.ontimeout = function() {
             doneCount ++;
-            console.log(node.uri + ' timeout');
+            debug(node.uri + ' timeout');
             chenkDone();
         };
         xhr.onerror = function() {
@@ -21693,7 +21788,7 @@ function NodeFilter(nodesArray, cb, range) {
 //     }
 //     return n;
 // };
-},{}],121:[function(require,module,exports){
+},{"debug":2}],121:[function(require,module,exports){
 /**
  * 节点调度算法的默认实现
  */
@@ -21707,6 +21802,7 @@ function NodeFilter(nodesArray, cb, range) {
     slideInterval: number                                //当前播放点距离缓冲前沿多少秒时滑动窗口
  }
  */
+var debug = require('debug')('pear:node-scheduler');
 
 module.exports = {
 
@@ -21767,7 +21863,7 @@ module.exports = {
 
         var ret = idles.concat(busys);
         // for (var i=0;i<ret.length;++i) {
-        //     console.log('index:'+i+' type:'+ret[i].type+' queue:'+ret[i].queue.length);
+        //     debug('index:'+i+' type:'+ret[i].type+' queue:'+ret[i].queue.length);
         // }
         if (ret.length > info.windowLength) {
             ret = ret.filter(function (item) {
@@ -21794,7 +21890,7 @@ module.exports = {
 
         var ret = idles.concat(busys);
         // for (var i=0;i<ret.length;++i) {
-        //     console.log('index:'+i+' type:'+ret[i].type+' queue:'+ret[i].queue.length);
+        //     debug('index:'+i+' type:'+ret[i].type+' queue:'+ret[i].queue.length);
         // }
         if (ret.length > info.windowLength) {
             ret = ret.filter(function (item) {
@@ -21807,7 +21903,7 @@ module.exports = {
 
 };
 
-},{}],122:[function(require,module,exports){
+},{"debug":2}],122:[function(require,module,exports){
 module.exports={
   "name": "webtorrent",
   "description": "Streaming torrent client",
@@ -22419,7 +22515,7 @@ function isFileList (obj) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./lib/tcp-pool":131,"./lib/torrent":118,"./package.json":122,"_process":143,"bittorrent-dht/client":131,"create-torrent":21,"debug":22,"events":135,"inherits":31,"load-ip-set":131,"parse-torrent":51,"path":141,"randombytes":56,"run-parallel":70,"safe-buffer":72,"simple-concat":73,"simple-peer":75,"speedometer":78,"xtend":105,"zero-fill":107}],124:[function(require,module,exports){
+},{"./lib/tcp-pool":131,"./lib/torrent":118,"./package.json":122,"_process":143,"bittorrent-dht/client":131,"create-torrent":24,"debug":2,"events":135,"inherits":32,"load-ip-set":131,"parse-torrent":51,"path":141,"randombytes":56,"run-parallel":70,"safe-buffer":72,"simple-concat":73,"simple-peer":75,"speedometer":78,"xtend":105,"zero-fill":107}],124:[function(require,module,exports){
 module.exports = peerId;
 
 function peerId() {
@@ -22547,6 +22643,8 @@ Set.prototype = {
  */
 
 module.exports = SimpleRTC;
+
+var debug = require('debug')('pear:simple-RTC');
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
 
@@ -22555,7 +22653,7 @@ inherits(SimpleRTC, EventEmitter);
 function SimpleRTC(config) {
     EventEmitter.call(this);
 
-    console.log('start simpleRTC');
+    debug('start simpleRTC');
     var self = this;
     self.config = config || {};
 
@@ -22580,8 +22678,8 @@ function SimpleRTC(config) {
 
 SimpleRTC.prototype.signal = function (event) {
 
-    console.log('[pear_webrtc] event.type' + event.type);
-    console.log('event JSON: ' + JSON.stringify(event));
+    debug('[pear_webrtc] event.type' + event.type);
+    debug('event JSON: ' + JSON.stringify(event));
     if (event.type === 'offer') {
         this.receiveOffer(event);
     } else if (event.type === 'answer') {
@@ -22592,7 +22690,7 @@ SimpleRTC.prototype.signal = function (event) {
     // }
     else {
         this.receiveIceCandidate(event);
-        // console.log('err event.type: ' + JSON.stringify(event));
+        // debug('err event.type: ' + JSON.stringify(event));
     }
 };
 
@@ -22601,9 +22699,9 @@ SimpleRTC.prototype.createPeerConnect = function () {
 
     try {
         this.peerConnection = new RTCPeerConnection(this.pc_config);
-        // console.log('[simpleRTC] PeerConnection created!');
+        // debug('[simpleRTC] PeerConnection created!');
         if (this.config.initiator && this.config.initiator == true){
-            console.log('[pear_webrtc]  sendOffer');
+            debug('[pear_webrtc]  sendOffer');
             this.sendOffer();
 
         }else {
@@ -22611,42 +22709,42 @@ SimpleRTC.prototype.createPeerConnect = function () {
         }
     }
     catch (e) {
-        console.log("pc established error："+e.message);
+        debug("pc established error："+e.message);
         this.emit('error', e.message);
     }
 
     this.peerConnection.onopen = function() {
-        console.log("PeerConnection established");
+        debug("PeerConnection established");
 
     };
 
     this.peerConnection.onicecandidate = function (event) {
-        // console.log('[pear_webrtc] onicecandidate: ' + JSON.stringify(event));
+        // debug('[pear_webrtc] onicecandidate: ' + JSON.stringify(event));
         if (event.candidate == null) {
             if (self.sdp == "") {
-                console.log("sdp error");
+                debug("sdp error");
                 self.emit('error', "sdp error");
                 return;
             }
             return;
         } else {
             // socketSend(event.candidate);
-            // console.log('[pear_webrtc] sendCandidate');
+            // debug('[pear_webrtc] sendCandidate');
             self.emit('signal',event.candidate);
             if (!self.config.initiator || self.config.initiator == false){
                 // createDatachannel();
             }
         }
-        // console.log("iceGatheringState: "+ self.peerConnection.iceGatheringState);
+        // debug("iceGatheringState: "+ self.peerConnection.iceGatheringState);
     };
 
     this.peerConnection.oniceconnectionstatechange = function (evt) {
 
-        console.log("connectionState: "+ self.peerConnection.connectionState);
-        console.log("signalingstate:"+ self.peerConnection.signalingState);
+        debug("connectionState: "+ self.peerConnection.connectionState);
+        debug("signalingstate:"+ self.peerConnection.signalingState);
         if (self.peerConnection.signalingState=="stable" && !self.isDataChannelCreating)
         {
-            console.log('[pear_webrtc] oniceconnectionstatechange stable');
+            debug('[pear_webrtc] oniceconnectionstatechange stable');
             self.createDatachannel();
             self.isDataChannelCreating = true;
         }
@@ -22656,7 +22754,7 @@ SimpleRTC.prototype.createPeerConnect = function () {
 
     this.peerConnection.ondatachannel = function (evt) {
         self.dataChannel = evt.channel;
-        console.log(this.dataChannel.label+"dc state: "+ self.dataChannel.readyState);
+        debug(this.dataChannel.label+"dc state: "+ self.dataChannel.readyState);
         self.dataChannelEvents(this.dataChannel);
     };
 
@@ -22673,11 +22771,11 @@ SimpleRTC.prototype.createDatachannel = function () {
 
     try {
         this.dataChannel = this.peerConnection.createDataChannel('dataChannel', {reliable: true});
-        console.log("Channel [ " + this.dataChannel.label + " ] creating!");
-        console.log(this.dataChannel.label+" Datachannel state: "+ this.dataChannel.readyState);
+        debug("Channel [ " + this.dataChannel.label + " ] creating!");
+        debug(this.dataChannel.label+" Datachannel state: "+ this.dataChannel.readyState);
     }
     catch (dce) {
-        console.log("dc established error: "+dce.message);
+        debug("dc established error: "+dce.message);
         this.emit('error', dce.message);
     }
 
@@ -22688,8 +22786,8 @@ SimpleRTC.prototype.dataChannelEvents = function (channel) {
     var self = this;
 
     channel.onopen = function () {
-        console.log("Datachannel opened, current stateis :\n" + self.dataChannel.readyState);
-        console.log(channel);
+        debug("Datachannel opened, current stateis :\n" + self.dataChannel.readyState);
+        debug(channel);
         self.emit('connect', self.dataChannel.readyState);
     };
 
@@ -22713,7 +22811,9 @@ SimpleRTC.prototype.dataChannelEvents = function (channel) {
     };
 
     channel.onclose = function () {
-        console.log("DataChannel is closed");
+        debug("DataChannel is closed");
+        clearInterval(self.timer);
+        self.timer = null;
     }
 };
 
@@ -22721,16 +22821,16 @@ SimpleRTC.prototype.receiveOffer = function (evt) {
     var self = this;
 
     this.peerConnection.setRemoteDescription(new RTCSessionDescription(evt));
-    console.log("Received Offer, and set as Remote Desc:\n"+ evt.sdp);
+    // debug("Received Offer, and set as Remote Desc:\n"+ evt.sdp);
     this.peerConnection.createAnswer(function(desc) {
         self.peerConnection.setLocalDescription(desc);
         self.currentoffer = desc;
         self.sdp = desc.sdp;
-        console.log("Create Answer, and set as Local Desc:\n"+JSON.stringify(desc));
+        // debug("Create Answer, and set as Local Desc:\n"+JSON.stringify(desc));
         // socketSend(desc);
         self.emit('signal',desc);
     },function (err) {
-        console.log(err);
+        debug(err);
     });
 };
 
@@ -22738,29 +22838,29 @@ SimpleRTC.prototype.sendOffer = function () {
 
     this.peerConnection.createOffer(function (desc) {
         this.currentoffer = desc;
-        console.log("Create an offer : \n"+JSON.stringify(desc));
+        debug("Create an offer : \n"+JSON.stringify(desc));
         this.peerConnection.setLocalDescription(desc);
-        console.log("Offer Set as Local Desc");
+        debug("Offer Set as Local Desc");
         // socketSend(desc);
         this.emit('signal', desc);
         this.sdp = desc.sdp;
-        console.log("Send offer:\n"+JSON.stringify(this.sdp));
+        debug("Send offer:\n"+JSON.stringify(this.sdp));
     },function(error) {
-        console.log(error);
+        debug(error);
     });
 };
 
 SimpleRTC.prototype.receiveAnswer = function (answer) {
 
-    console.log("Received remote Answer: \n"+JSON.stringify(answer));
+    debug("Received remote Answer: \n"+JSON.stringify(answer));
     this.peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-    console.log("already set remote desc, current ice gather state: "+ this.peerConnection.iceGatheringState);
+    debug("already set remote desc, current ice gather state: "+ this.peerConnection.iceGatheringState);
 };
 
 SimpleRTC.prototype.receiveIceCandidate = function (evt) {
 
     if (evt) {
-        console.log("Received and add candidate:\n"+JSON.stringify(evt));
+        debug("Received and add candidate:\n"+JSON.stringify(evt));
         this.peerConnection.addIceCandidate(new RTCIceCandidate(evt));
     } else{
         return;
@@ -22776,9 +22876,9 @@ SimpleRTC.prototype.send = function (data) {
 
     try {
         this.dataChannel.send(data);
-        console.log("[pear_webrtc] send data：" + data);
+        debug("[pear_webrtc] send data：" + data);
     } catch (e){
-        console.log("dataChannel send error："+e.message);
+        debug("dataChannel send error："+e.message);
     }
 };
 
@@ -22797,7 +22897,7 @@ SimpleRTC.prototype.startHeartbeat = function () {
     };
 
     this.timer = setInterval(function () {
-        console.log(JSON.stringify(heartbeat));
+        debug(JSON.stringify(heartbeat));
         self.send(JSON.stringify(heartbeat));
 
     }, 90*1000);
@@ -22820,7 +22920,7 @@ function getBrowserRTC () {
 
 
 
-},{"events":135,"inherits":31}],127:[function(require,module,exports){
+},{"debug":2,"events":135,"inherits":32}],127:[function(require,module,exports){
 
 /*
  config:{
@@ -22835,6 +22935,7 @@ function getBrowserRTC () {
 
 module.exports = RTCDownloader;
 
+var debug = require('debug')('pear:webrtc-downloader-bin');
 var Buffer = require('buffer/').Buffer;
 var SimpleRTC = require('./simple-RTC');
 var EventEmitter = require('events').EventEmitter;
@@ -22879,7 +22980,7 @@ RTCDownloader.prototype.offerFromWS = function (offer) {          //由服务器
     var self = this;
 
     self.message = offer;
-    console.log('[webrtc] messageFromDC:' + JSON.stringify(offer));
+    debug('[webrtc] messageFromDC:' + JSON.stringify(offer));
     self.dc_id = offer.peer_id;
     self.simpleRTC.signal(offer.sdp);
 };
@@ -22887,19 +22988,18 @@ RTCDownloader.prototype.offerFromWS = function (offer) {          //由服务器
 RTCDownloader.prototype.candidatesFromWS = function (candidates) {
 
     for (var i=0; i<candidates.length; ++i) {
-        console.log('receiveIceCandidate:'+candidates[i]);
         this.simpleRTC.receiveIceCandidate(candidates[i]);
     }
 };
 
 RTCDownloader.prototype.select = function (start, end) {
     var self = this;
-    console.log('pear_webrtc'+self.dc_id+'select:'+start+'-'+end);
+    debug('pear_webrtc'+self.dc_id+'select:'+start+'-'+end);
     if (self.downloading){
-        // console.log('pear_webrtc queue.push:'+start+'-'+end);
+        // debug('pear_webrtc queue.push:'+start+'-'+end);
         self.queue.push([start,end]);
     } else {
-        // console.log('pear_webrtc startDownloading:'+start+'-'+end);
+        // debug('pear_webrtc startDownloading:'+start+'-'+end);
         self.startDownloading(start,end);
     }
     // if (self.queue.length >= 3) {
@@ -22924,7 +23024,7 @@ RTCDownloader.prototype.startDownloading = function (start, end) {
         "end":end
         // "end":10*1024*1024
     };
-    console.log("pear_send_file : " + JSON.stringify(str));
+    debug("pear_send_file : " + JSON.stringify(str));
     self.startTime=(new Date()).getTime();
     self.expectedLength = end - start + 1;
     self.simpleRTC.send(JSON.stringify(str));
@@ -22932,23 +23032,23 @@ RTCDownloader.prototype.startDownloading = function (start, end) {
 
 RTCDownloader.prototype._receive = function (chunk) {
     var self = this;
-    // console.log('[simpleRTC] chunk type:'+typeof chunk);
+    // debug('[simpleRTC] chunk type:'+typeof chunk);
 
     var uint8 = new Uint8Array(chunk);
-    // console.log('uint8.length:'+uint8.length);
+    // debug('uint8.length:'+uint8.length);
     // if (!uint8) {
     //     self.emit('error');
     //     return;
     // }
 
     var headerInfo = self._getHeaderInfo(uint8);
-    // console.log('headerInfo:'+JSON.stringify(headerInfo));
+    // debug('headerInfo:'+JSON.stringify(headerInfo));
 
     if (headerInfo) {
 
         if (headerInfo.value){
 
-            // console.log(self.mac+' headerInfo.start:'+headerInfo.start);
+            // debug(self.mac+' headerInfo.start:'+headerInfo.start);
             // if (headerInfo.start === self.lastChunkEnd + 1){
             //
             //     // self.chunkStore.push(uint8);
@@ -22960,12 +23060,12 @@ RTCDownloader.prototype._receive = function (chunk) {
 
             self.chunkStore.push(uint8);
         } else if (headerInfo.begin) {
-            // console.log(self.mac+' headerInfo.begin:'+self.downloading);
+            // debug(self.mac+' headerInfo.begin:'+self.downloading);
             self.emit('start');
             self.chunkStore = [];
         } else if (headerInfo.done) {
-            // console.log(self.mac+' headerInfo.done:'+self.downloading);
-            // console.log('self.chunkStore done');
+            // debug(self.mac+' headerInfo.done:'+self.downloading);
+            // debug('self.chunkStore done');
             var finalArray = [], length = self.chunkStore.length;
             // self.downloading = false;
             self.end = headerInfo.end;
@@ -22978,18 +23078,18 @@ RTCDownloader.prototype._receive = function (chunk) {
             self.endTime = (new Date()).getTime();
             // self.speed = Math.floor(((self.end - self.start) * 1000) / ((self.endTime - self.startTime) * 1024));  //单位: KB/s
             self.speed = Math.floor((self.end - self.start + 1) / (self.endTime - self.startTime));  //单位: KB/s
-            console.info('pear_webrtc speed:' + self.speed + 'KB/s');
+            debug('pear_webrtc speed:' + self.speed + 'KB/s');
             self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
-            console.log('datachannel '+self.dc_id+' meanSpeed:' + self.meanSpeed + 'KB/s');
+            debug('datachannel '+self.dc_id+' meanSpeed:' + self.meanSpeed + 'KB/s');
 
             for (var i = 0; i < length; i++) {
                 if (!!self.chunkStore[i]) {
                     var value = self.chunkStore[i].subarray(256);
-                    // console.log('value.length:'+value.length);
+                    // debug('value.length:'+value.length);
                     finalArray.push(Buffer.from(value));
                 }
             }
-            // console.log('RTCDownloader' +self.mac+ ' emit data start:' + self.start + ' end:' + self.end);
+            // debug('RTCDownloader' +self.mac+ ' emit data start:' + self.start + ' end:' + self.end);
             var retBuf = Buffer.concat(finalArray);
             if (retBuf.length === self.expectedLength) self.emit('data', retBuf, self.start, self.end, self.speed);
             self.downloading = false;
@@ -23000,7 +23100,7 @@ RTCDownloader.prototype._receive = function (chunk) {
         } else if (headerInfo.action) {
             //心跳信息
         } else {
-            console.log('RTC error msg:'+JSON.stringify(headerInfo));
+            debug('RTC error msg:'+JSON.stringify(headerInfo));
             self.emit('error');
         }
     } else {
@@ -23031,10 +23131,10 @@ RTCDownloader.prototype.clearQueue = function () {              //清空下载�
 };
 
 RTCDownloader.prototype._getHeaderInfo = function (uint8arr) {
-    // console.log('_getHeaderInfo mac:'+this.mac);
+    // debug('_getHeaderInfo mac:'+this.mac);
     var sub = uint8arr.subarray(0, 256);
     var headerString =  String.fromCharCode.apply(String, sub);
-    // console.log('headerString:'+headerString)
+    // debug('headerString:'+headerString)
     return JSON.parse(headerString.split('}')[0]+'}');
 };
 
@@ -23047,11 +23147,11 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
     });
     simpleRTC.on('error', function (err)
     {
-        console.log('[simpleRTC] error', err);
+        debug('[simpleRTC] error', err);
         self.emit('error');
     });
     simpleRTC.on('signal', function (data) {
-        // console.log('[simpleRTC] SIGNAL', JSON.stringify(data));
+        // debug('[simpleRTC] SIGNAL', JSON.stringify(data));
 
         var message = {
             "peer_id":self.peer_id,
@@ -23059,13 +23159,13 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
             "offer_id":self.message.offer_id
         };
         self.mac = self.message.peer_id.replace(/:/g, '');
-        // console.log('webrtc mac:'+self.mac);
+        // debug('webrtc mac:'+self.mac);
         if (data.type == 'answer'){
             message.action = 'answer';
             message.sdps = data;
         } else if(data.candidate){
             message.action = 'candidate';
-            console.log('signal candidate:'+JSON.stringify(data));
+            debug('signal candidate:'+JSON.stringify(data));
             message.candidates = data;
         }
 
@@ -23073,7 +23173,7 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
         self.emit('signal',message);
     });
     simpleRTC.on('connect', function (state) {
-        console.info('[datachannel] '+self.dc_id+' CONNECT');
+        debug('[datachannel] '+self.dc_id+' CONNECT');
         // simpleRTC.send('[simpleRTC] PEER CONNECTED!');
         simpleRTC.startHeartbeat();                          //开始周期性发送心跳信息
         if (!self.connectFlag){
@@ -23084,13 +23184,14 @@ RTCDownloader.prototype._setupSimpleRTC = function (simpleRTC) {
     });
 };
 
-},{"./simple-RTC":126,"buffer/":17,"events":135,"inherits":31}],128:[function(require,module,exports){
+},{"./simple-RTC":126,"buffer/":20,"debug":2,"events":135,"inherits":32}],128:[function(require,module,exports){
 /**
  * Created by xieting on 2017/11/9.
  */
 
 module.exports = Worker;
 
+var debug = require('debug')('pear:worker');
 var md5 = require('blueimp-md5');
 var Dispatcher = require('./dispatcher');
 var HttpDownloader = require('./http-downloader');
@@ -23212,11 +23313,11 @@ Worker.prototype._start = function () {
         nodeFilter(self.sources, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
 
             var length = nodes.length;
-            console.log('nodes:'+JSON.stringify(nodes));
+            debug('nodes:'+JSON.stringify(nodes));
 
             if (length) {
                 // self.fileLength = fileLength;
-                console.log('nodeFilter fileLength:'+fileLength);
+                debug('nodeFilter fileLength:'+fileLength);
 
                 self._startPlaying(nodes);
             } else {
@@ -23227,7 +23328,7 @@ Worker.prototype._start = function () {
     } else {
 
         self._getNodes(self.token, function (nodes) {
-            console.log('_getNodes:'+JSON.stringify(nodes));
+            debug('debug _getNodes: %j', nodes);
             if (nodes) {
                 self._startPlaying(nodes);
                 // if (self.useDataChannel) {
@@ -23242,7 +23343,7 @@ Worker.prototype._start = function () {
 
 Worker.prototype._fallBack = function () {
 
-    console.log('PearDownloader _fallBack');
+    debug('PearDownloader _fallBack');
 }
 
 Worker.prototype._getNodes = function (token, cb) {
@@ -23276,10 +23377,10 @@ Worker.prototype._getNodes = function (token, cb) {
     xhr.onload = function () {
         if (this.status >= 200 && this.status < 300 || this.status == 304) {
 
-            console.log(this.response);
+            debug(this.response);
 
             var res = JSON.parse(this.response);
-            // console.log(res.nodes);
+            // debug(res.nodes);
             if (res.size) {                         //如果filesize大于0
                 // self.fileLength = res.size;           //test
 
@@ -23302,7 +23403,7 @@ Worker.prototype._getNodes = function (token, cb) {
                         if (protocol === 'webtorrent') {
                             if (!self.magnetURI) {                     //如果用户没有指定magnetURI
                                 self.magnetURI = nodes[i].magnet_uri;
-                                console.log('_getNodes magnetURI:'+nodes[i].magnet_uri);
+                                debug('_getNodes magnetURI:'+nodes[i].magnet_uri);
                             }
                         } else {
                             protocol === 'https' ? httpsCount++ : httpCount++;
@@ -23322,19 +23423,19 @@ Worker.prototype._getNodes = function (token, cb) {
                     self._debugInfo.totalHTTPS = httpsCount;
                     self._debugInfo.totalHTTP = httpCount;
 
-                    console.log('allNodes:'+JSON.stringify(allNodes));
+                    debug('allNodes:'+JSON.stringify(allNodes));
                     self.nodes = allNodes;
                     if (allNodes.length === 0) cb([{uri: self.src, type: 'server'}]);
                     nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
                         // nodes = [];                                            //test
                         var length = nodes.length;
-                        console.log('nodes:'+JSON.stringify(nodes));
+                        debug('nodes:'+JSON.stringify(nodes));
 
                         self._debugInfo.usefulHTTPAndHTTPS = length;
 
                         if (length) {
                             self.fileLength = fileLength;
-                            // console.log('nodeFilter fileLength:'+fileLength);
+                            // debug('nodeFilter fileLength:'+fileLength);
                             // self.nodes = nodes;
                             if (length <= 2) {
                                 // fallBack(nodes[0]);
@@ -23367,11 +23468,11 @@ Worker.prototype._getNodes = function (token, cb) {
 Worker.prototype._pearSignalHandshake = function () {
     var self = this;
     var dcCount = 0;                            //目前建立的data channel数量
-    console.log('_pearSignalHandshake');
+    debug('_pearSignalHandshake');
     var websocket = new WebSocket(WEBSOCKET_ADDR);
     self.websocket = websocket;
     websocket.onopen = function() {
-        // console.log('websocket connection opened!');
+        // debug('websocket connection opened!');
         self._debugInfo.signalServerConnected = true;
         var hash = md5(self.urlObj.host + self.urlObj.path);
         websocket.push(JSON.stringify({
@@ -23381,7 +23482,7 @@ Worker.prototype._pearSignalHandshake = function () {
             "uri": self.urlObj.path,
             "md5": hash
         }));
-        // console.log('peer_id:'+self.peerId);
+        // debug('peer_id:'+self.peerId);
     };
     websocket.push = websocket.send;
     websocket.send = function(data) {
@@ -23391,18 +23492,18 @@ Worker.prototype._pearSignalHandshake = function () {
                 websocket.send(data);
             }, 1000);
         }
-        // console.log("send to signal is " + data);
+        // debug("send to signal is " + data);
         websocket.push(data);
     };
     websocket.onmessage = function(e) {
         var message = JSON.parse(e.data);
-        console.log("[simpleRTC] websocket message is: " + JSON.stringify(message));
+        // debug("[simpleRTC] websocket message is: " + JSON.stringify(message));
         // message = message.nodes[1];
         if (message.action === 'candidate' && message.type === 'end') {
 
             for (var peerId in self.candidateMap) {
                 if (message.peer_id === peerId) {
-                    // console.log('self.candidateMap[peerId]:'+self.candidateMap[peerId]);
+                    // debug('self.candidateMap[peerId]:'+self.candidateMap[peerId]);
                     self.JDMap[peerId].candidatesFromWS(self.candidateMap[peerId]);
                 }
             }
@@ -23415,24 +23516,24 @@ Worker.prototype._pearSignalHandshake = function () {
                 var offer = nodes[i];
                 if (!offer.errorcode) {
                     if (dcCount === self.dataChannels) break;
-                    console.log('dc message:'+JSON.stringify(offer))
+                    // debug('dc message:'+JSON.stringify(offer));
                     if (!self.JDMap[offer.peer_id]) {
                         self.candidateMap[offer.peer_id] = makeCandidateArr(offer.sdp.sdp);
 
                         offer.sdp.sdp = offer.sdp.sdp.split('a=candidate')[0];
-                        console.log('initDC:'+JSON.stringify(offer));
+                        // debug('initDC:'+JSON.stringify(offer));
                         self.JDMap[offer.peer_id] = self.initDC(offer);
 
                         //test
-                        // console.log('self.candidateMap[node.peer_id]:'+JSON.stringify(self.candidateMap[node.peer_id]));
+                        // debug('self.candidateMap[node.peer_id]:'+JSON.stringify(self.candidateMap[node.peer_id]));
                         // self.JDMap[node.peer_id].candidatesFromWS(self.candidateMap[node.peer_id]);
 
                         dcCount ++;
                     } else {
-                        console.log('datachannel 重复');
+                        debug('datachannel 重复');
                     }
                 } else {
-                    console.log('dc error message:'+JSON.stringify(message))
+                    debug('dc error message:'+JSON.stringify(message))
                 }
             }
         }
@@ -23456,7 +23557,7 @@ Worker.prototype.initDC = function (offer) {
     var jd = new RTCDownloader(dc_config);
     jd.offerFromWS(offer)
     jd.on('signal',function (message) {
-        console.log('[jd] signal:' + JSON.stringify(message));
+        // debug('[jd] signal:' + JSON.stringify(message));
         self.websocket.send(JSON.stringify(message));
     });
     jd.once('connect',function () {
@@ -23476,7 +23577,7 @@ Worker.prototype.initDC = function (offer) {
 
 Worker.prototype._startPlaying = function (nodes) {
     var self = this;
-    console.log('start playing');
+    debug('start playing');
     self.dispatcherConfig.initialDownloaders = [];
     for (var i=0;i<nodes.length;++i) {
         var node = nodes[i];
@@ -23503,9 +23604,6 @@ Worker.prototype._startPlaying = function (nodes) {
     //{errCode: 1, errMsg: 'This browser do not support WebRTC communication'}
     d.once('ready', function (chunks) {
 
-
-        console.log('---666666666666666666666---');
-
         self.emit('begin', self.fileLength, chunks);
 
         // if (self.useDataChannel) {
@@ -23531,7 +23629,7 @@ Worker.prototype._startPlaying = function (nodes) {
 
     file._dispatcher._init();
 
-    console.log('self.autoPlay:'+self.autoplay);
+    // debug('self.autoPlay:'+self.autoplay);
 
     if (self.render) {
         self.render.render(file, self.selector, {autoplay: self.autoplay});
@@ -23540,7 +23638,7 @@ Worker.prototype._startPlaying = function (nodes) {
     self.isPlaying = true;
 
     d.on('error', function () {
-        console.log('dispatcher error!');
+        debug('dispatcher error!');
         // d.destroy();
         // self._fallBack();
         // var hd = new HttpDownloader(self.src, 'server');
@@ -23549,9 +23647,9 @@ Worker.prototype._startPlaying = function (nodes) {
     });
 
     d.on('needmorenodes', function () {
-        console.log('request more nodes');
+        debug('request more nodes');
         self._getNodes(self.token, function (nodes) {
-            console.log('needmorenodes _getNodes:'+JSON.stringify(nodes));
+            debug('needmorenodes _getNodes:'+JSON.stringify(nodes));
             if (nodes) {
                 // d.addNodes(nodes);
                 for (var i=0;i<nodes.length;++i) {
@@ -23560,7 +23658,7 @@ Worker.prototype._startPlaying = function (nodes) {
                     d.addNode(hd);
                 }
             } else {
-                console.log('noMoreNodes');
+                debug('noMoreNodes');
                 d.noMoreNodes = true;
             }
         });
@@ -23571,7 +23669,7 @@ Worker.prototype._startPlaying = function (nodes) {
         if (!self.nodeSet.has(self.src)) {
             var hd = new HttpDownloader(self.src, 'server');
             d.addNode(hd);
-            console.log('dispatcher add source:'+self.src);
+            debug('dispatcher add source:'+self.src);
             self.nodeSet.add(self.src);
         }
 
@@ -23579,7 +23677,7 @@ Worker.prototype._startPlaying = function (nodes) {
     });
 
     d.on('needmoredatachannels', function () {
-        console.log('request more datachannels');
+        debug('request more datachannels');
         if (self.websocket && self.websocket.readyState === WebSocket.OPEN) {
 
             var hash = md5(self.urlObj.host + self.urlObj.path);
@@ -23682,21 +23780,21 @@ function makeCandidateArr(sdp) {
         }
     }
 
-    console.log('candidateArr:'+JSON.stringify(candidateArr));
+    // debug('candidateArr:'+JSON.stringify(candidateArr));
 
     return candidateArr;
 }
 
 
-},{"./dispatcher":109,"./file":111,"./http-downloader":112,"./node-filter":120,"./node-scheduler":121,"./pear-torrent":123,"./peerid-generator":124,"./set":125,"./webrtc-downloader-bin":127,"blueimp-md5":16,"events":135,"inherits":31,"url":164}],129:[function(require,module,exports){
+},{"./dispatcher":109,"./file":111,"./http-downloader":112,"./node-filter":120,"./node-scheduler":121,"./pear-torrent":123,"./peerid-generator":124,"./set":125,"./webrtc-downloader-bin":127,"blueimp-md5":19,"debug":2,"events":135,"inherits":32,"url":164}],129:[function(require,module,exports){
 
 },{}],130:[function(require,module,exports){
-arguments[4][3][0].apply(exports,arguments)
-},{"dup":3}],131:[function(require,module,exports){
+arguments[4][6][0].apply(exports,arguments)
+},{"dup":6}],131:[function(require,module,exports){
 arguments[4][129][0].apply(exports,arguments)
 },{"dup":129}],132:[function(require,module,exports){
-arguments[4][17][0].apply(exports,arguments)
-},{"base64-js":130,"dup":17,"ieee754":137}],133:[function(require,module,exports){
+arguments[4][20][0].apply(exports,arguments)
+},{"base64-js":130,"dup":20,"ieee754":137}],133:[function(require,module,exports){
 module.exports = {
   "100": "Continue",
   "101": "Switching Protocols",
@@ -24211,10 +24309,10 @@ function validateParams (params) {
 }
 
 },{"http":158,"url":164}],137:[function(require,module,exports){
-arguments[4][29][0].apply(exports,arguments)
-},{"dup":29}],138:[function(require,module,exports){
-arguments[4][31][0].apply(exports,arguments)
-},{"dup":31}],139:[function(require,module,exports){
+arguments[4][30][0].apply(exports,arguments)
+},{"dup":30}],138:[function(require,module,exports){
+arguments[4][32][0].apply(exports,arguments)
+},{"dup":32}],139:[function(require,module,exports){
 /*!
  * Determine if an object is a Buffer
  *
@@ -24238,8 +24336,8 @@ function isSlowBuffer (obj) {
 }
 
 },{}],140:[function(require,module,exports){
-arguments[4][35][0].apply(exports,arguments)
-},{"dup":35}],141:[function(require,module,exports){
+arguments[4][36][0].apply(exports,arguments)
+},{"dup":36}],141:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //

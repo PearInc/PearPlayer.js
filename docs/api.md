@@ -50,6 +50,7 @@ var PearPlayer = require('PearPlayer');
   magnetURI: 'magnet:example...',       //可手动传入magnetURI，需先将useTorrent设为true
   trackers:["wss://tracker.openwebtorrent.com"],    //可手动传入tracker服务器，需先将useTorrent设为true
   useMonitor: true            //是否开启monitor,会稍微影响性能,默认false，只有开启useMonitor才能监听事件
+  debug: false                   //是否开启debug模式，开启后可以在console中查看log，默认false
 }
 ```
 
@@ -105,6 +106,12 @@ function onException(exception) {
         }
     }
 ```
+
+## `player.on('metadata', function(metadata) {})`
+通过该事件监听视频元信息，回调的metadata是一个对象，包含视频平均码率和播放时长两个字段。
+
+## `player.on('canplay', function(delay) {})`
+该事件类似video的“canplay”事件，但回调出来的参数是从PearPLayer实例化到开始播放的延迟时间。
 
 - 请参考[`/examples/test.html`](/examples/test.html)来了解API使用方法。
 - CP接入方法：[Pear FogVDN](https://github.com/PearInc/FogVDN/blob/master/For_CPs.md)

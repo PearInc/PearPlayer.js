@@ -10,6 +10,8 @@ module.exports = NodeFilter;
     range: {start: number end: number}
  */
 
+var debug = require('debug')('pear:node-filter');
+
 function NodeFilter(nodesArray, cb, range) {
 
     // var ipArray = array.unique();
@@ -30,7 +32,7 @@ function NodeFilter(nodesArray, cb, range) {
         try {
             connectTest(nodesArray[i]);
         } catch (e) {
-            console.log(nodesArray[i].uri + ':' + JSON.stringify(e))
+            // debug(nodesArray[i].uri + ':' + JSON.stringify(e))
         }
     }
 
@@ -49,7 +51,7 @@ function NodeFilter(nodesArray, cb, range) {
         };
         xhr.ontimeout = function() {
             doneCount ++;
-            console.log(node.uri + ' timeout');
+            debug(node.uri + ' timeout');
             chenkDone();
         };
         xhr.onerror = function() {

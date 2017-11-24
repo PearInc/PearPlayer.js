@@ -1,6 +1,7 @@
 
 module.exports = File;
 
+var debug = require('debug')('pear:file');
 var eos = require('end-of-stream');
 var EventEmitter = require('events').EventEmitter;
 var path = require('path');
@@ -34,7 +35,7 @@ function File (dispatcher, file){
 
     this._startPiece = start / this._dispatcher.pieceLength | 0;
     this._endPiece = end / this._dispatcher.pieceLength | 0;
-    // console.log('file _startPiece'+this._startPiece+' _endPiece:'+this._endPiece);
+    // debug('file _startPiece'+this._startPiece+' _endPiece:'+this._endPiece);
 
     if (this.length === 0) {
         this.done = true;
@@ -50,8 +51,8 @@ function File (dispatcher, file){
 File.prototype.createReadStream = function (opts) {
     var self = this;
     // opts = opts || {};
-    // console.log('createReadStream');
-    // console.log(opts.start?opts.start:0);
+    // debug('createReadStream');
+    // debug(opts.start?opts.start:0);
 
     // if (!opts) return;
 

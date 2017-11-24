@@ -1,5 +1,6 @@
 module.exports = FileStream;
 
+var debug = require('debug')('pear:file-stream');
 var inherits = require('inherits');
 var stream = require('readable-stream');
 
@@ -36,10 +37,10 @@ function FileStream (file, opts) {
     this._notifying = false;
     this._criticalLength = Math.min((1024 * 1024 / pieceLength) | 0, 2);
 
-    // console.log('FileStream _startPiece:'+this._startPiece);
-    // console.log('FileStream _endPiece:'+this._endPiece);
-    // console.log('FileStream _offset:'+this._offset);
-    // console.log('FileStream _missing:'+this._missing);
+    // debug('FileStream _startPiece:'+this._startPiece);
+    // debug('FileStream _endPiece:'+this._endPiece);
+    // debug('FileStream _offset:'+this._offset);
+    // debug('FileStream _missing:'+this._missing);
 }
 
 FileStream.prototype._read = function () {
@@ -64,13 +65,13 @@ FileStream.prototype._notify = function () {
     self._notifying = true;
 
     var p = self._piece;
-    console.log('FileStream get piece:' + p);
+    debug('FileStream get piece:' + p);
     self._dispatcher.store.get(p, function (err, buffer) {
         self._notifying = false;
         if (self.destroyed) return;
         if (err) return self._destroy(err);
         // debug('read %s (length %s) (err %s)', p, buffer.length, err && err.message)
-        // console.log('read '+p+' length:'+buffer.length);
+        // debug('read '+p+' length:'+buffer.length);
         if (self._offset) {
             buffer = buffer.slice(self._offset);
             self._offset = 0;
@@ -81,7 +82,7 @@ FileStream.prototype._notify = function () {
         }
         self._missing -= buffer.length;
 
-        // console.log('pushing buffer of length:'+buffer.length);
+        // debug('pushing buffer of length:'+buffer.length);
         self._reading = false;
         self.push(buffer);
         // if (p === self._dispatcher._windowLength/2) {
@@ -103,7 +104,7 @@ FileStream.prototype._destroy = function (err, onclose) {
     if (!this._dispatcher.destroyed) {
         this._dispatcher.deselect(this._startPiece, this._endPiece, true);
     }
-    console.log('FileStream destroy');
+    debug('FileStream destroy');
     if (err) this.emit('error', err);
     this.emit('close');
     if (onclose) onclose();
@@ -112,7 +113,7 @@ FileStream.prototype._destroy = function (err, onclose) {
 // FileStream.prototype._ifCanPlay = function () {                   //缓存足够的buffer后才播放
 //     if (this._dispatcher.enoughInitBuffer) return;
 //     var bitfield = this._dispatcher.bitfield;
-//     console.log('this._dispatcher.normalWindowLength:'+this._dispatcher.normalWindowLength);
+//     debug('this._dispatcher.normalWindowLength:'+this._dispatcher.normalWindowLength);
 //     for (var i=this._startPiece;i<this._startPiece+this._dispatcher.normalWindowLength;i++) {
 //         if (!bitfield.get(i)) {
 //             return;

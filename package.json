@@ -1,6 +1,6 @@
 {
   "name": "pearplayer",
-  "version": "2.3.8",
+  "version": "2.3.10",
   "description": "",
   "main": "./dist/pear-player.js",
   "dependencies": {
@@ -26,8 +26,7 @@
     "uglify-player": "browserify -s PearPlayer -e  ./index.player.js | babili > ./dist/pear-player.min.js",
     "pull-from-github": "git pull",
     "push-to-github": "git add . && git commit -m 'update' && git push",
-    "npm-publish": "npm publish",
-    "copy-to-downloader-project": "cp -r ./src/* ../PearDownloader.js/src"
+    "npm-publish": "npm publish"
   },
   "author": "Xie Ting Pear Limited",
   "license": "MIT",

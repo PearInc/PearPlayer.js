@@ -10,6 +10,8 @@
  */
 
 module.exports = SimpleRTC;
+
+var debug = require('debug')('pear:simple-RTC');
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
 
@@ -18,7 +20,7 @@ inherits(SimpleRTC, EventEmitter);
 function SimpleRTC(config) {
     EventEmitter.call(this);
 
-    console.log('start simpleRTC');
+    debug('start simpleRTC');
     var self = this;
     self.config = config || {};
 
@@ -43,8 +45,8 @@ function SimpleRTC(config) {
 
 SimpleRTC.prototype.signal = function (event) {
 
-    console.log('[pear_webrtc] event.type' + event.type);
-    console.log('event JSON: ' + JSON.stringify(event));
+    debug('[pear_webrtc] event.type' + event.type);
+    debug('event JSON: ' + JSON.stringify(event));
     if (event.type === 'offer') {
         this.receiveOffer(event);
     } else if (event.type === 'answer') {
@@ -55,7 +57,7 @@ SimpleRTC.prototype.signal = function (event) {
     // }
     else {
         this.receiveIceCandidate(event);
-        // console.log('err event.type: ' + JSON.stringify(event));
+        // debug('err event.type: ' + JSON.stringify(event));
     }
 };
 
@@ -64,9 +66,9 @@ SimpleRTC.prototype.createPeerConnect = function () {
 
     try {
         this.peerConnection = new RTCPeerConnection(this.pc_config);
-        // console.log('[simpleRTC] PeerConnection created!');
+        // debug('[simpleRTC] PeerConnection created!');
         if (this.config.initiator && this.config.initiator == true){
-            console.log('[pear_webrtc]  sendOffer');
+            debug('[pear_webrtc]  sendOffer');
             this.sendOffer();
 
         }else {
@@ -74,42 +76,42 @@ SimpleRTC.prototype.createPeerConnect = function () {
         }
     }
     catch (e) {
-        console.log("pc established error："+e.message);
+        debug("pc established error："+e.message);
         this.emit('error', e.message);
     }
 
     this.peerConnection.onopen = function() {
-        console.log("PeerConnection established");
+        debug("PeerConnection established");
 
     };
 
     this.peerConnection.onicecandidate = function (event) {
-        // console.log('[pear_webrtc] onicecandidate: ' + JSON.stringify(event));
+        // debug('[pear_webrtc] onicecandidate: ' + JSON.stringify(event));
         if (event.candidate == null) {
             if (self.sdp == "") {
-                console.log("sdp error");
+                debug("sdp error");
                 self.emit('error', "sdp error");
                 return;
             }
             return;
         } else {
             // socketSend(event.candidate);
-            // console.log('[pear_webrtc] sendCandidate');
+            // debug('[pear_webrtc] sendCandidate');
             self.emit('signal',event.candidate);
             if (!self.config.initiator || self.config.initiator == false){
                 // createDatachannel();
             }
         }
-        // console.log("iceGatheringState: "+ self.peerConnection.iceGatheringState);
+        // debug("iceGatheringState: "+ self.peerConnection.iceGatheringState);
     };
 
     this.peerConnection.oniceconnectionstatechange = function (evt) {
 
-        console.log("connectionState: "+ self.peerConnection.connectionState);
-        console.log("signalingstate:"+ self.peerConnection.signalingState);
+        debug("connectionState: "+ self.peerConnection.connectionState);
+        debug("signalingstate:"+ self.peerConnection.signalingState);
         if (self.peerConnection.signalingState=="stable" && !self.isDataChannelCreating)
         {
-            console.log('[pear_webrtc] oniceconnectionstatechange stable');
+            debug('[pear_webrtc] oniceconnectionstatechange stable');
             self.createDatachannel();
             self.isDataChannelCreating = true;
         }
@@ -119,7 +121,7 @@ SimpleRTC.prototype.createPeerConnect = function () {
 
     this.peerConnection.ondatachannel = function (evt) {
         self.dataChannel = evt.channel;
-        console.log(this.dataChannel.label+"dc state: "+ self.dataChannel.readyState);
+        debug(this.dataChannel.label+"dc state: "+ self.dataChannel.readyState);
         self.dataChannelEvents(this.dataChannel);
     };
 
@@ -136,11 +138,11 @@ SimpleRTC.prototype.createDatachannel = function () {
 
     try {
         this.dataChannel = this.peerConnection.createDataChannel('dataChannel', {reliable: true});
-        console.log("Channel [ " + this.dataChannel.label + " ] creating!");
-        console.log(this.dataChannel.label+" Datachannel state: "+ this.dataChannel.readyState);
+        debug("Channel [ " + this.dataChannel.label + " ] creating!");
+        debug(this.dataChannel.label+" Datachannel state: "+ this.dataChannel.readyState);
     }
     catch (dce) {
-        console.log("dc established error: "+dce.message);
+        debug("dc established error: "+dce.message);
         this.emit('error', dce.message);
     }
 
@@ -151,8 +153,8 @@ SimpleRTC.prototype.dataChannelEvents = function (channel) {
     var self = this;
 
     channel.onopen = function () {
-        console.log("Datachannel opened, current stateis :\n" + self.dataChannel.readyState);
-        console.log(channel);
+        debug("Datachannel opened, current stateis :\n" + self.dataChannel.readyState);
+        debug(channel);
         self.emit('connect', self.dataChannel.readyState);
     };
 
@@ -176,7 +178,9 @@ SimpleRTC.prototype.dataChannelEvents = function (channel) {
     };
 
     channel.onclose = function () {
-        console.log("DataChannel is closed");
+        debug("DataChannel is closed");
+        clearInterval(self.timer);
+        self.timer = null;
     }
 };
 
@@ -184,16 +188,16 @@ SimpleRTC.prototype.receiveOffer = function (evt) {
     var self = this;
 
     this.peerConnection.setRemoteDescription(new RTCSessionDescription(evt));
-    console.log("Received Offer, and set as Remote Desc:\n"+ evt.sdp);
+    // debug("Received Offer, and set as Remote Desc:\n"+ evt.sdp);
     this.peerConnection.createAnswer(function(desc) {
         self.peerConnection.setLocalDescription(desc);
         self.currentoffer = desc;
         self.sdp = desc.sdp;
-        console.log("Create Answer, and set as Local Desc:\n"+JSON.stringify(desc));
+        // debug("Create Answer, and set as Local Desc:\n"+JSON.stringify(desc));
         // socketSend(desc);
         self.emit('signal',desc);
     },function (err) {
-        console.log(err);
+        debug(err);
     });
 };
 
@@ -201,29 +205,29 @@ SimpleRTC.prototype.sendOffer = function () {
 
     this.peerConnection.createOffer(function (desc) {
         this.currentoffer = desc;
-        console.log("Create an offer : \n"+JSON.stringify(desc));
+        debug("Create an offer : \n"+JSON.stringify(desc));
         this.peerConnection.setLocalDescription(desc);
-        console.log("Offer Set as Local Desc");
+        debug("Offer Set as Local Desc");
         // socketSend(desc);
         this.emit('signal', desc);
         this.sdp = desc.sdp;
-        console.log("Send offer:\n"+JSON.stringify(this.sdp));
+        debug("Send offer:\n"+JSON.stringify(this.sdp));
     },function(error) {
-        console.log(error);
+        debug(error);
     });
 };
 
 SimpleRTC.prototype.receiveAnswer = function (answer) {
 
-    console.log("Received remote Answer: \n"+JSON.stringify(answer));
+    debug("Received remote Answer: \n"+JSON.stringify(answer));
     this.peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-    console.log("already set remote desc, current ice gather state: "+ this.peerConnection.iceGatheringState);
+    debug("already set remote desc, current ice gather state: "+ this.peerConnection.iceGatheringState);
 };
 
 SimpleRTC.prototype.receiveIceCandidate = function (evt) {
 
     if (evt) {
-        console.log("Received and add candidate:\n"+JSON.stringify(evt));
+        debug("Received and add candidate:\n"+JSON.stringify(evt));
         this.peerConnection.addIceCandidate(new RTCIceCandidate(evt));
     } else{
         return;
@@ -239,9 +243,9 @@ SimpleRTC.prototype.send = function (data) {
 
     try {
         this.dataChannel.send(data);
-        console.log("[pear_webrtc] send data：" + data);
+        debug("[pear_webrtc] send data：" + data);
     } catch (e){
-        console.log("dataChannel send error："+e.message);
+        debug("dataChannel send error："+e.message);
     }
 };
 
@@ -260,7 +264,7 @@ SimpleRTC.prototype.startHeartbeat = function () {
     };
 
     this.timer = setInterval(function () {
-        console.log(JSON.stringify(heartbeat));
+        debug(JSON.stringify(heartbeat));
         self.send(JSON.stringify(heartbeat));
 
     }, 90*1000);
