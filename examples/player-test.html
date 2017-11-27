@@ -94,7 +94,7 @@
         console.log('Received source type:' + sourceType + ' index:' + index);
     }
     function onMetaData(metadata) {
-        console.log('metadata bitrate:'+metadata.bitrate/1024+' KB/s');
+        console.log('metadata bitrate:'+Math.round(metadata.bitrate/1024)+' KB/s');
     }
     function onCanPlay(delay) {
         console.log('canplay delay:' + delay);

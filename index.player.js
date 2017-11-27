@@ -77,7 +77,7 @@ PearPlayer.prototype.setupListeners = function () {
         // self._colddown = 5/self._slideInterval*self._interval2BufPos + 5;                        //窗口滑动的冷却时间
         // self._colddown = self._windowLength*2;
         // self._colddown = 5;
-        self.emit('metadata', {'bitrate': self.bitrate, 'duration': self.video.duration});
+        self.emit('metadata', {'bitrate': bitrate, 'duration': self.video.duration});
 
         // if (self.useTorrent && self.magnetURI) {
         //     var client = new WebTorrent();

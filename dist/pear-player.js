@@ -78,7 +78,7 @@ PearPlayer.prototype.setupListeners = function () {
         // self._colddown = 5/self._slideInterval*self._interval2BufPos + 5;                        //窗口滑动的冷却时间
         // self._colddown = self._windowLength*2;
         // self._colddown = 5;
-        self.emit('metadata', {'bitrate': self.bitrate, 'duration': self.video.duration});
+        self.emit('metadata', {'bitrate': bitrate, 'duration': self.video.duration});
 
         // if (self.useTorrent && self.magnetURI) {
         //     var client = new WebTorrent();
@@ -23426,6 +23426,7 @@ Worker.prototype._getNodes = function (token, cb) {
                     debug('allNodes:'+JSON.stringify(allNodes));
                     self.nodes = allNodes;
                     if (allNodes.length === 0) cb([{uri: self.src, type: 'server'}]);
+                    console.warn(JSON.stringify(allNodes));
                     nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
                         // nodes = [];                                            //test
                         var length = nodes.length;
