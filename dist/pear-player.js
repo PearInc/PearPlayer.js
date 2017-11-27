@@ -18661,7 +18661,9 @@ function Dispatcher(config) {
     self.slide = null;
     self.noMoreNodes = false;                   //是否已没有新的节点可获取
 
+    //monitor
     self.startTime = (new Date()).getTime();      //用于计算平均速度
+    self.fogRatio = 0.0;
 
     //firstaid参数自适应
     self._windowLength = self.initialDownloaders.length <= 5 ? self.initialDownloaders.length : 5;
@@ -19003,7 +19005,6 @@ Dispatcher.prototype._setupHttp = function (hd) {
         var size = end - start + 1;
         if (!self.bitfield.get(index)){
             self.bitfield.set(index,true);
-            // self.emit('bitfieldchange', self.bitfield);
 
             self.store.put(index, buffer);
 
@@ -19017,8 +19018,11 @@ Dispatcher.prototype._setupHttp = function (hd) {
                 self.emit('traffic', hd.mac, size, hd.type === 1 ? 'HTTP_Node' : 'HTTP_Server');
                 debug('ondata hd.type:' + hd.type +' index:' + index);
                 if (hd.type === 1) {          //node
-                    self.fogDownloaded += self.pieceLength;
-                    self.emit('fograte', self.fogDownloaded/self.downloaded);
+                    self.fogDownloaded += size;
+                    var fogRatio = self.fogDownloaded/self.downloaded;
+                    if (fogRatio >= self.fogRatio) {
+                        self.emit('fograte', fogRatio);
+                    }
                     self.emit('fogspeed', self.downloaders.getCurrentSpeed([1, 2]));
                     hd.type === 1 ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
                 } else {
@@ -19052,7 +19056,6 @@ Dispatcher.prototype._setupDC = function (jd) {
         var size = end - start + 1;
         if (!self.bitfield.get(index)){
             self.bitfield.set(index,true);
-            // self.emit('bitfieldchange', self.bitfield);
 
             self.store.put(index, buffer);
 
@@ -19062,7 +19065,10 @@ Dispatcher.prototype._setupDC = function (jd) {
                 self.fogDownloaded += size;
                 debug('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
                 self.emit('downloaded', self.downloaded/self.fileSize);
-                self.emit('fograte', self.fogDownloaded/self.downloaded);
+                var fogRatio = self.fogDownloaded/self.downloaded;
+                if (fogRatio >= self.fogRatio) {
+                    self.emit('fograte', fogRatio);
+                }
                 self.emit('fogspeed', self.downloaders.getCurrentSpeed([1,2]));
                 self.bufferSources[index] = 'd';
                 self.emit('buffersources', self.bufferSources);
@@ -19123,7 +19129,10 @@ Dispatcher.prototype.addTorrent = function (torrent) {
             self.fogDownloaded += self.pieceLength;
             torrent.pear_downloaded += self.pieceLength;
             self.emit('downloaded', self.downloaded/self.fileSize);
-            self.emit('fograte', self.fogDownloaded/self.downloaded);
+            var fogRatio = self.fogDownloaded/self.downloaded;
+            if (fogRatio >= self.fogRatio) {
+                self.emit('fograte', fogRatio);
+            }
             // debug('torrent.downloadSpeed:'+torrent.downloadSpeed/1024);
             self.emit('fogspeed', self.downloaders.getCurrentSpeed([1, 2]) + torrent.downloadSpeed/1024);
             self.bufferSources[index] = 'b';
@@ -23426,14 +23435,12 @@ Worker.prototype._getNodes = function (token, cb) {
                     debug('allNodes:'+JSON.stringify(allNodes));
                     self.nodes = allNodes;
                     if (allNodes.length === 0) cb([{uri: self.src, type: 'server'}]);
-                    console.warn(JSON.stringify(allNodes));
                     nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
                         // nodes = [];                                            //test
                         var length = nodes.length;
                         debug('nodes:'+JSON.stringify(nodes));
 
                         self._debugInfo.usefulHTTPAndHTTPS = length;
-
                         if (length) {
                             self.fileLength = fileLength;
                             // debug('nodeFilter fileLength:'+fileLength);
@@ -23615,6 +23622,7 @@ Worker.prototype._startPlaying = function (nodes) {
 
             if (nodes.length) {
 
+                self._debugInfo.usefulHTTPAndHTTPS += nodes.length;
                 nodes.map(function (item) {
 
                     var hd = new HttpDownloader(item.uri, item.type);
@@ -23706,12 +23714,7 @@ Worker.prototype._startPlaying = function (nodes) {
     });
     d.on('fograte', function (fogRate) {
 
-        self.emit('fograte', fogRate);
-    });
-
-    d.on('bitfieldchange', function (bitfield) {
-
-        self.emit('bitfieldchange', bitfield, d.chunks);
+        self.emit('fogratio', fogRate);
     });
     d.on('fogspeed', function (speed) {
 

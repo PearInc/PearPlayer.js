@@ -37,7 +37,7 @@
     player.on('progress', onProgress);                 //回调目前的下载进度
     player.on('cloudspeed', onCloudSpeed);             //来自server的HTTP的平均下载速度
     player.on('fogspeed', onFogSpeed);                 //来自fog的节点（包括HTTP和WebRTC）的平均下载速度
-    player.on('fograte', onWebRTCRate);　　　　　　　　　 //fog节点的下载比率（下载的字节数除以总的字节数）
+    player.on('fogratio', onFogRatio);　　　　　　　　　 //fog节点的下载比率（下载的字节数除以总的字节数）
     player.on('buffersources', onBufferSources);       //buffer map，记录每个buffer的下载源类型，其中s: server   n: node  d: data channel  b: browser
     player.on('done', onDone);　　　　　　　　           //结束下载时触发
     player.on('traffic', onTraffic);                  //节点流量统计,每次下载buffer都会触发该事件
@@ -61,8 +61,8 @@
         console.log('Fog download speed: ' + speed + 'KBps');
     }
 
-    function onWebRTCRate(p2pRate) {
-        console.log('Fog Ratio: ' + (p2pRate * 100).toFixed(1) + '%');
+    function onFogRatio(p2pRatio) {
+        console.log('Fog Ratio: ' + (p2pRatio * 100).toFixed(1) + '%');
     }
 
     function onDone() {
