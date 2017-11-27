@@ -19,8 +19,7 @@
 ![multisources](fig/fogvdn_multisources.png)
 
 只需将`pear-player.min.js`通过`<script>`标签导入到HTML就可以使用。 参考以下[代码示例](#快速开始)，也可以查看[`/examples/player-test.html`](/examples/player-test.html)来了解使用方法。
-
-信令部分以及WebRTC部分使用了精心设计的协议，实现此部分可以参考[API文档](docs/get-started.md)。<br/>
+参考[get-started](docs/get-started.md)来了解基本使用方法。<br/>
 
 ### 特性
 
@@ -78,6 +77,10 @@ var player = new PearPlayer('#pearvideo', opts);
 </script>
 ```
 恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！
+
+## 如何为自己的视频加速？
+很简单，我们拥有海量的边缘节点（共享CDN），只需在我们的[视频分发系统](https://oss.webrtc.win/)中添加您的视频url，即可利用我们海量的节点为您的视频加速！<br>
+具体教程请点击[这里](https://manual.webrtc.win/oss/)(PS:目前仅支持mp4格式，视频的名字需要加上“pear-demo-”前缀，如：pear-demo-mymovie.mp4)
 
 ### 谁在用我们的产品？
 
