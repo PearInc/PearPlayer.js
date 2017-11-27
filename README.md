@@ -79,7 +79,7 @@ var player = new PearPlayer('#pearvideo', opts);
 恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！
 
 ## 如何为自己的视频加速？
-很简单，我们拥有海量的边缘节点（共享CDN），只需在我们的[视频分发系统](https://oss.webrtc.win/)中添加您的视频url，即可利用我们海量的节点为您的视频加速！<br>
+示例中的视频是已经分发过的，那么如何为任意视频加速呢？很简单，我们拥有海量的边缘节点（共享CDN），只需在我们的[视频分发系统](https://oss.webrtc.win/)中添加您的视频url，即可利用我们海量的节点为您的视频加速！<br>
 具体教程请点击[这里](https://manual.webrtc.win/oss/)(PS:目前仅支持mp4格式，视频的名字需要加上“pear-demo-”前缀，如：pear-demo-mymovie.mp4)
 
 ### 谁在用我们的产品？
@@ -91,6 +91,7 @@ var player = new PearPlayer('#pearvideo', opts);
 + [UCloud](https://www.ucloud.cn)
 + [Tencent Cloud](https://qcloud.com)
 + [Tencent X5/TBS](https://x5.tencent.com/tbs/)
++ [Tencent APD](http://www.chinaz.com/news/2016/0707/548873.shtml)
 
 ### Pear Player 文档
 - **[阅读get-started文档](docs/get-started.md)**
