@@ -1,7 +1,7 @@
 <h1 align="center">
   <img src="fig/pear.png" height="220"></img>
   <br>
-  PearPlayer.js
+  <a href="https://demo.webrtc.win/pearplayer">PearPlayer.js</a>
   <br>
   <br>
 </h1>
@@ -11,7 +11,7 @@
 
 **[English](https://github.com/PearInc/PearPlayer.js/blob/master/README_EN.md)**
 
-**[PearPlayer（梨享播放器）](https://github.com/PearInc/PearPlayer.js)** 是完全用JavaScript写的开源HTML5流媒体播放框架，实现了融合HTTP（包含HTTPS、HTTP2）、WebRTC的多协议、多源、低延迟、高带宽利用率的无插件Web端流媒体加速能力。基于H5的MSE技术(Media Source Extension)将来自多个源节点的Buffer分块喂给播放器，再加上精心设计的算法来达到最优的调度策略及对各种异常情况的处理，Pear Player能在保证用户流畅视频体验的前提下最大化P2P率。
+[PearPlayer（梨享播放器）]**[Demo](https://demo.webrtc.win/pearplayer)** 是完全用JavaScript写的开源HTML5流媒体播放框架，实现了融合HTTP（包含HTTPS、HTTP2）、WebRTC的多协议、多源、低延迟、高带宽利用率的无插件Web端流媒体加速能力。基于H5的MSE技术(Media Source Extension)将来自多个源节点的Buffer分块喂给播放器，再加上精心设计的算法来达到最优的调度策略及对各种异常情况的处理，Pear Player能在保证用户流畅视频体验的前提下最大化P2P率。
 
 ![PearPlayer](fig/PearPlayer.png)
 <br>
@@ -33,8 +33,6 @@
 - 协议默认通过TLS/DTLS全加密，无DPI特征；并可通过Pear Fog组件的动态端口映射进一步消除统计学特征
 - 像使用HTML5 `<video>`标签一样简单，并容易与[video.js](https://github.com/videojs/video.js)等流行播放框架集成
 - 目前已实现Browser P2P能力（基于WebTorrent）
-<br>
-Demo演示地址：https://demo.webrtc.win/pearplayer
 
 ![bitmap](fig/bitmap_cn.png)
 
