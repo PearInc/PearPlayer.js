@@ -32,12 +32,12 @@ PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/pearplayer)]** 
 - 可选接入低成本、高可用性的Pear [Fog CDN](https://github.com/PearInc/FogVDN)
 - 协议默认通过TLS/DTLS全加密，无DPI特征；并可通过Pear Fog组件的动态端口映射进一步消除统计学特征
 - 像使用HTML5 `<video>`标签一样简单，并容易与[video.js](https://github.com/videojs/video.js)等流行播放框架集成
-- 目前已实现Browser P2P能力（基于WebTorrent）
+- 具备Browser P2P能力（基于WebTorrent）
 
 ![bitmap](fig/bitmap_cn.png)
 
 ## 快速开始
-将以下代码拷贝到html中，打开网页，见证奇迹的时刻到了~
+将以下代码拷贝到HTML5中，打开网页，见证奇迹的时刻到了~
 ```html
 <script src="https://cdn.jsdelivr.net/npm/pearplayer@2.4.0"></script>
 <video id="video" controls></video>
