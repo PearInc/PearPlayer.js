@@ -13,7 +13,7 @@
 
 **[PearPlayer（梨享播放器）](https://github.com/PearInc/PearPlayer.js)** 是完全用JavaScript写的开源HTML5流媒体播放框架，实现了融合HTTP（包含HTTPS、HTTP2）、WebRTC的多协议、多源、低延迟、高带宽利用率的无插件Web端流媒体加速能力。基于H5的MSE技术(Media Source Extension)将来自多个源节点的Buffer分块喂给播放器，再加上精心设计的算法来达到最优的调度策略及对各种异常情况的处理，Pear Player能在保证用户流畅视频体验的前提下最大化P2P率。
 
-![multisources](fig/PearPlayer.png)
+![PearPlayer](fig/PearPlayer.png)
 <br>
 <br>
 ![multisources](fig/fogvdn_multisources.png)
@@ -24,7 +24,6 @@
 ### 特性
 
 - P2P能力基于**WebRTC**，无须安装任何插件
-- **播放流畅，加载快速**，严格测试，稳定可靠
 - 多协议(HTTP、HTTPS、WebRTC)、多源
 - 自研的调度算法，在保证用户流畅视频体验的前提下最大化P2P率
 - 默认无需填参数（内部根据视频码率等作自适应），高级使用模式可自行调整算法和参数
@@ -37,7 +36,7 @@
 <br>
 Demo演示地址：https://demo.webrtc.win/pearplayer
 
-![multisources](fig/bitmap_cn.png)
+![bitmap](fig/bitmap_cn.png)
 
 ## 快速开始
 将以下代码拷贝到html中，打开网页，见证奇迹的时刻到了~
@@ -111,6 +110,7 @@ if (PearPlayer.isSupported()) {
 
 ### 演讲与媒体报道
 
+- 2017.11.24 （金色财经） -[谛听科技正式进军区块链领域，战略投资梨享计算](http://www.jinse.com/blockchain/99767.html)
 - 2017.09.01 （未来网络开放社区联盟） - [继云计算之后，雾计算再起 —— 谈谈 P2P CDN](https://mp.weixin.qq.com/s/39dfSA6cTj2eoo-KqsC3AQ)  
 - 2017.08.18 （IT大咖说） - [WebRTC会成主流吗？众包CDN时代到了！](http://mp.weixin.qq.com/s/cx_ljl2sexE0XkgliZfnmQ)
 - 2017.07.11 （OSChina开源中国） - [PearPlayer.js —— 混合P2P-CDN的流媒体播放器](https://www.oschina.net/p/PearPlayerjs)
