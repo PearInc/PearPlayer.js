@@ -80,7 +80,7 @@ var player = new PearPlayer('#pearvideo', opts);
 
 ## 如何为自己的视频加速？
 示例中的视频是已经分发过的，那么如何为任意视频加速呢？很简单，我们拥有海量的边缘节点（共享CDN），只需在我们的[视频分发系统](https://oss.webrtc.win/)中添加您的视频url，即可利用我们海量的节点为您的视频加速！<br>
-具体教程请点击[这里](https://manual.webrtc.win/oss/)(PS:目前仅支持mp4格式，视频的名字需要加上“pear-demo-”前缀，如：pear-demo-mymovie.mp4)
+具体教程请点击[这里](https://manual.webrtc.win/oss/)(PS:目前仅支持mp4格式，视频的名字需要加上“Pear-Demo”前缀，如：Pear-Demo-movie.mp4)
 
 ### 谁在用我们的产品？
 

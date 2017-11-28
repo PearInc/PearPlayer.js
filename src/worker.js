@@ -102,17 +102,19 @@ function Worker(urlStr, token, opts) {
 
 }
 
+Worker.isRTCSupported = function () {
+
+    return !!getBrowserRTC();
+}
+
 Object.defineProperty(Worker.prototype, 'debugInfo', {
     get: function () { return this._debugInfo }
 });
 
+
+
 Worker.prototype._start = function () {
     var self = this;
-    if (!getBrowserRTC()) {
-        self.emit('exception', {errCode: 1, errMsg: 'This browser do not support WebRTC communication'});
-        alert('This browser do not support WebRTC communication');
-        self.useDataChannel = false;
-    }
     if (!window.WebSocket) {
         self.useDataChannel = false;
     }

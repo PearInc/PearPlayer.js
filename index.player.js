@@ -104,3 +104,13 @@ PearPlayer.prototype.setupListeners = function () {
     });
 
 }
+
+PearPlayer.isSupported = function () {
+    return PearDownloader.isSupported() && isMSESupported();
+}
+
+function isMSESupported() {
+
+    return !!(window['MediaSource'] || window['WebKitMediaSource']);
+
+}

@@ -105,6 +105,16 @@ PearPlayer.prototype.setupListeners = function () {
     });
 
 }
+
+PearPlayer.isSupported = function () {
+    return PearDownloader.isSupported() && isMSESupported();
+}
+
+function isMSESupported() {
+
+    return !!(window['MediaSource'] || window['WebKitMediaSource']);
+
+}
 },{"./src/index.downloader":113,"debug":2,"inherits":32,"render-media":67,"webtorrent":96}],2:[function(require,module,exports){
 (function (process){
 /**
@@ -19716,6 +19726,11 @@ function PearDownloader(urlStr, token, opts) {
     Worker.call(self, urlStr, token, opts);
 }
 
+PearDownloader.isSupported = function () {
+
+    return Worker.isRTCSupported();
+}
+
 class  PearDownloaderTag extends HTMLElement {
     constructor() {
         super();
@@ -23298,17 +23313,19 @@ function Worker(urlStr, token, opts) {
 
 }
 
+Worker.isRTCSupported = function () {
+
+    return !!getBrowserRTC();
+}
+
 Object.defineProperty(Worker.prototype, 'debugInfo', {
     get: function () { return this._debugInfo }
 });
 
+
+
 Worker.prototype._start = function () {
     var self = this;
-    if (!getBrowserRTC()) {
-        self.emit('exception', {errCode: 1, errMsg: 'This browser do not support WebRTC communication'});
-        alert('This browser do not support WebRTC communication');
-        self.useDataChannel = false;
-    }
     if (!window.WebSocket) {
         self.useDataChannel = false;
     }

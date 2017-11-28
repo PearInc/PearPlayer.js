@@ -31,6 +31,17 @@ var PearPlayer = require('PearPlayer');
 
 # PearPlayer API
 
+## PearPlayer.isSupported()
+
+静态方法，检测当前浏览器环境是否支持MSE和WebRTC。
+```js
+if (PearPlayer.isSupported()) {
+  // MSE and WebRTC is supported
+} else {
+  // Use a fallback
+}
+```
+
 ## `var player = new PearPlayer('#pearvideo', opts)`
 
 创建一个新的PearPlayer实例，`#pearvideo`是video标签的id。

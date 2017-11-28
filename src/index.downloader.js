@@ -28,6 +28,11 @@ function PearDownloader(urlStr, token, opts) {
     Worker.call(self, urlStr, token, opts);
 }
 
+PearDownloader.isSupported = function () {
+
+    return Worker.isRTCSupported();
+}
+
 class  PearDownloaderTag extends HTMLElement {
     constructor() {
         super();
