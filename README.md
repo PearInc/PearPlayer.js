@@ -37,7 +37,7 @@ PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/pearplayer)]** 
 ![bitmap](fig/bitmap_cn.png)
 
 ## 快速开始
-将以下代码拷贝到HTML5中，打开网页，见证奇迹的时刻到了~
+将以下代码拷贝到HTML5代码中，打开网页，见证奇迹的时刻到了！
 ```html
 <script src="https://cdn.jsdelivr.net/npm/pearplayer@2.4.0"></script>
 <video id="video" controls></video>
@@ -82,7 +82,7 @@ if (PearPlayer.isSupported()) {
 恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！
 
 ## 如何为自己的视频加速？
-示例中的视频是已经分发过的，那么如何为任意视频加速呢？很简单，只需在[视频分发系统](https://oss.webrtc.win/)中添加您的视频url，即可利用Pear的海量节点为您的视频加速！具体教程请点击[这里](https://manual.webrtc.win/oss/)（目前仅支持分发`MP4`格式，视频的名字需要加上`Pear-Demo`前缀，如`Pear-Demo-movie.mp4`）
+示例中的视频是已经分发过的，那么如何为任意视频加速呢？很简单，只需在[视频分发系统](https://oss.webrtc.win/)中添加您的视频URL，即可利用Pear的海量节点为您的视频加速！具体教程请点击[这里](https://manual.webrtc.win/oss/)（目前仅支持分发`MP4`格式，视频的名字需要加上`Pear-Demo`前缀，如`Pear-Demo-movie.mp4`）
 
 ### 谁在用我们的产品？
 
@@ -107,7 +107,7 @@ if (PearPlayer.isSupported()) {
 
 ### 演讲与媒体报道
 
-- 2017.11.24 （金色财经） -[谛听科技正式进军区块链领域，战略投资梨享计算](http://www.jinse.com/blockchain/99767.html)
+- 2017.11.24 （金色财经） - [谛听科技正式进军区块链领域，战略投资梨享计算](http://www.jinse.com/blockchain/99767.html)
 - 2017.09.01 （未来网络开放社区联盟） - [继云计算之后，雾计算再起 —— 谈谈 P2P CDN](https://mp.weixin.qq.com/s/39dfSA6cTj2eoo-KqsC3AQ)  
 - 2017.08.18 （IT大咖说） - [WebRTC会成主流吗？众包CDN时代到了！](http://mp.weixin.qq.com/s/cx_ljl2sexE0XkgliZfnmQ)
 - 2017.07.11 （OSChina开源中国） - [PearPlayer.js —— 混合P2P-CDN的流媒体播放器](https://www.oschina.net/p/PearPlayerjs)
