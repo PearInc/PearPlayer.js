@@ -50,18 +50,19 @@ if (PearPlayer.isSupported()) {
 
 ```js
 {
-  type: 'mp4',                //视频类型,暂时只支持MP4
-  algorithm: 'firstaid',      //核心算法,默认firstaid
-  autoplay: true,             //是否自动播放视频,默认true
-  interval: 5000,             //滑动窗口的时间间隔,单位毫秒,默认10s
-  slideInterval: 15,          //当前播放时间与已缓冲时间小于这个数值时触发窗口滑动,单位秒,默认20s
-  useDataChannel: true,       //是否开启data channel,默认true
-  dataChannels: 4,            //创建data channel的最大数量,默认10
-  useTorrent: true,           //是否开启Browser P2P(基于Webtorrent)，默认true
-  magnetURI: 'magnet:example...',       //可手动传入magnetURI，需先将useTorrent设为true
+  src: 'https://example.mp4',  //视频的url，目前仅支持MP4格式
+  scheduler: 'IdleFirst',      //节点调度算法，默认IdleFirst，其它内置调度算法有“WebRTCFirst“和”CloudFirst”
+  autoplay: true,              //是否自动播发视频,默认true
+  interval: 5000,              //滑动窗口的时间间隔,单位毫秒,默认10s
+  useDataChannel: true,        //是否开启data channel,默认true
+  dataChannels: 20,            //创建data channel的最大数量,默认20
+  useTorrent: true,            //是否开启Browser P2P(基于Webtorrent)，默认true
+  magnetURI: 'magnet:?xt=...', //可手动传入magnetURI，需先将useTorrent设为true
   trackers:["wss://tracker.openwebtorrent.com"],    //可手动传入tracker服务器，需先将useTorrent设为true
-  useMonitor: true            //是否开启monitor,会稍微影响性能,默认false，只有开启useMonitor才能监听事件
-  debug: false                   //是否开启debug模式，开启后可以在console中查看log，默认false
+  sources: [],                 //指定下载源，增加这个字段后pearplayer不会再向后台请求节点，建议下载源多于5个以保证流畅播放
+  useMonitor: true,            //是否开启monitor,会稍微影响性能,默认false
+  BTMode: false,               //是否开启纯BT下载模式（基于webtorrent），默认false，如果设为true，需要手动传入magnetURI（参考https://github.com/webtorrent/webtorrent）
+  debug: true                  //是否开启debug模式，开启后可以在console中查看log，默认false
 }
 ```
 
@@ -81,7 +82,7 @@ if (PearPlayer.isSupported()) {
 
 通过该事件可以监听cloud（即server节点）的平均下载速度（单位KB/s）。(useMonitor需设为true)
 
-## `player.on('fogspeed', function (speed) {})`
+## `player.on('fogspeed', fuction (speed) {})`
 
 通过该事件可以监听fog节点（包括WebRTC和HTTP）的平均下载速度（单位KB/s）。(useMonitor需设为true)
 
