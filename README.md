@@ -42,12 +42,16 @@ Demo演示地址：https://demo.webrtc.win/pearplayer
 ## 快速开始
 将以下代码拷贝到html中，打开网页，见证奇迹的时刻到了~
 ```html
-<script src="https://cdn.jsdelivr.net/npm/pearplayer@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/pearplayer@2.4.0"></script>
 <video id="video" controls></video>
 <script>
-    var player = new PearPlayer('#video', {
-        src: 'https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4'
-    });
+    if (PearPlayer.isSupported()) {
+        var player = new PearPlayer('#video', {
+            src: 'https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4'
+        });
+    } else {
+        alert('PearPlayer is not supported');
+    }
 </script>
 ```
 

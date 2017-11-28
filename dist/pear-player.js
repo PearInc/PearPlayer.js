@@ -18561,7 +18561,7 @@ module.exports = function zeroFill (width, number, pad) {
 },{}],108:[function(require,module,exports){
 module.exports={
   "name": "pearplayer",
-  "version": "2.3.10",
+  "version": "2.4.0",
   "description": "",
   "main": "./dist/pear-player.js",
   "dependencies": {
