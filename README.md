@@ -73,7 +73,9 @@ Demo演示地址：https://demo.webrtc.win/pearplayer
  * 第一个参数为video标签的id或class
  * opts是可选的参数配置
  */
-var player = new PearPlayer('#pearvideo', opts);
+if (PearPlayer.isSupported()) {        
+    var player = new PearPlayer('#pearvideo', opts);
+}
 </script>
 ```
 恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！
