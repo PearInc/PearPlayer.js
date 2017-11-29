@@ -20,18 +20,17 @@
 
  `pear-player.min.js` can be imported by the html label `<script>`, refer to [code example](#使用方法)，also [`/examples/test.html`](/examples/test.html)can help you.
 
-To know more information [API document ](docs/get-started.md).<br/>
+To know more information [API document](docs/get-started.md).<br/>
 
 ### Feature
 
-- P2P based on **WebRTC**,no plug in
-- **Speed up**,reliable
-- Multi-protocol(HTTP,HTTPS,WebRTC), multi-source
+- P2P ability based on **WebRTC**, no plug-in
+- Multi-protocol(HTTP, HTTPS, WebRTC), multi-source
 - No parameter
-- Save the data usage
-- Run well in Chrome,Firefox,Opera,Safari11
-- Support  [Pear FogVDN](https://github.com/PearInc/FogVDN)
-- Encode by TLS/DTLS, no DPI feature,Pear Fog dynamic port mapping
+- Save CP's data usage
+- Run well in Chrome,Firefox, Opera, Safari11
+- Support [Pear FogVDN](https://github.com/PearInc/FogVDN)
+- Encode by TLS/DTLS, no DPI feature; Pear Fog dynamic port mapping ensures no statistical feature
 - Use easily like `<video>` label, can integrate [video.js](https://github.com/videojs/video.js)
 - Realize browser P2P ability（base on webtorrent）
 
