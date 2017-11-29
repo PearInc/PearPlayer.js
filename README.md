@@ -42,15 +42,9 @@ PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/pearplayer)]** 
 <script src="https://cdn.jsdelivr.net/npm/pearplayer@2.4.0"></script>
 <video id="video" controls></video>
 <script>
-    if (PearPlayer.isMSESupported()) {
-        var player = new PearPlayer('#video', {
-            src: 'https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4'
-        });
-    } else {
-        alert('PearPlayer is not supported');
-        var video = document.getElementById('video');
-        video.play()
-    }
+    var player = new PearPlayer('#video', {
+                src: 'https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4'
+            });
 </script>
 ```
 
