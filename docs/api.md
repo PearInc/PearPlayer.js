@@ -77,6 +77,10 @@ if (PearPlayer.isWebRTCSupported()) {
 }
 ```
 
+## `player.on('fallback', function () {})`
+
+播放器出现异常时的回调函数，建议在此处作降级处理，如直接调用video.play()。
+
 ## `player.on('begin', function (fileLength, chunks) {})`
 
 当PearPlayer完成初始化后会触发该事件，通过回调函数中的fileLength获取文件总大小，chunks获取文件被分成的块数（每块1M）。
@@ -116,19 +120,6 @@ index是对应的索引。
 通过该事件可以监听每个节点的实时流量，其中mac是节点的mac地址，size是对应节点的瞬时下载流量（字节），type是
 节点的类型（http、datachannel等）。(useMonitor需设为true)
 
-## `player.on('exception', onException)`
-
-当PearPlayer内部发生异常时会触发该事件，通过回调函数中的exception可以获取errCode和对应的errMsg：
-```js
-function onException(exception) {
-        var errCode = exception.errCode;
-        switch (errCode) {
-            case 1:                              //当前浏览器不支持WebRTC
-                console.log(exception.errMsg);
-                break
-        }
-    }
-```
 
 ## `player.on('metadata', function(metadata) {})`
 通过该事件监听视频元信息，回调的metadata是一个对象，包含视频平均码率和播放时长两个字段。
