@@ -42,13 +42,19 @@ PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/pearplayer)]** 
 <script src="https://cdn.jsdelivr.net/npm/pearplayer@2.4.0"></script>
 <video id="video" controls></video>
 <script>
-    if (PearPlayer.isSupported()) {
-        var player = new PearPlayer('#video', {
-            src: 'https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4'
-        });
-    } else {
-        alert('PearPlayer is not supported');
-    }
+    <script src="https://cdn.jsdelivr.net/npm/pearplayer@2.4.0"></script>
+    <video id="video" controls></video>
+    <script>
+        if (PearPlayer.isMSESupported()) {
+            var player = new PearPlayer('#video', {
+                src: 'https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4'
+            });
+        } else {
+            alert('PearPlayer is not supported');
+            var video = document.getElementById('video');
+            video.play()
+        }
+    </script>
 </script>
 ```
 
@@ -70,13 +76,13 @@ PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/pearplayer)]** 
 只需要如下几行代码，即可将PearPlayer绑定到video标签：
 ```html
 <script>
-/**
- * 第一个参数为video标签的id或class
- * opts是可选的参数配置
- */
-if (PearPlayer.isSupported()) {        
-    var player = new PearPlayer('#pearvideo', opts);
-}
+    /**
+    * 第一个参数为video标签的id或class
+    * opts是可选的参数配置
+    */
+    if (PearPlayer.isSupported()) {        
+        var player = new PearPlayer('#pearvideo', opts);
+    }
 </script>
 ```
 恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！

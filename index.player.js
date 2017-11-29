@@ -107,7 +107,11 @@ PearPlayer.prototype.setupListeners = function () {
 
 PearPlayer.isSupported = function () {
     return PearDownloader.isSupported() && isMSESupported();
-}
+};
+
+PearPlayer.isMSESupported = function () {
+    return isMSESupported();
+};
 
 function isMSESupported() {
 

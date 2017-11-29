@@ -7,7 +7,7 @@
 </head>
 <body>
 <div id="main">
-    <video id="pearvideo" controls>
+    <!--<video id="pearvideo" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Corporate-Video-V5.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-demo-your-name.mp4" controls>-->
@@ -20,9 +20,9 @@
 <script>
 
     //第一个参数为video标签的id或class
-    if (PearPlayer.isSupported()) {
+    if (!PearPlayer.isMSESupported()) {
         var player = new PearPlayer('#pearvideo', {
-            src: 'https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4',
+//            src: 'https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4',
             scheduler: 'IdleFirst',      //节点调度算法，默认IdleFirst，其它内置调度算法有“WebRTCFirst“和”CloudFirst”
             autoplay: true,             //是否自动播发视频,默认true
             interval: 5000,             //滑动窗口的时间间隔,单位毫秒,默认10s
@@ -37,7 +37,7 @@
             debug: true                  //是否开启debug模式，开启后可以在console中查看log，默认false
         });
 
-        player.on('exception', onException);               //播放器出现异常时的回调函数
+        player.on('fallback', onFallback);               //播放器出现异常时的回调函数
         player.on('begin', onBegin);　　　　　　　　　　　　　 //开始下载时触发
         player.on('progress', onProgress);                 //回调目前的下载进度
         player.on('cloudspeed', onCloudSpeed);             //来自cloud节点的HTTP的瞬时下载速度
@@ -49,6 +49,8 @@
         player.on('sourcemap', onSourceMap);          //记录每个buffer的下载源类型，其中s: server   n: node  d: data channel  b: browser
         player.on('metadata', onMetaData);
         player.on('canplay', onCanPlay);
+    } else {
+        fallback()
     }
 
     function onBegin(fileLength, chunks) {
@@ -76,13 +78,9 @@
 
     }
 
-    function onException(exception) {
-        var errCode = exception.errCode;
-        switch (errCode) {
-            case 1:
-                console.log(exception.errMsg);
-                break
-        }
+    function onFallback(exception) {
+
+        fallback();
     }
     function onBufferSources(bufferSources) {            //s: server   n: node  d: data channel  b: browser
         console.log('Current Buffer Sources:' + bufferSources);
@@ -100,6 +98,11 @@
     }
     function onCanPlay(delay) {
         console.log('canplay delay:' + delay);
+    }
+
+    function fallback() {
+        var video = document.getElementById('pearvideo');
+        video.play()
     }
 </script>
 </body>

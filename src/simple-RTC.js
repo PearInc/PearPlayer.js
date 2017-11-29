@@ -65,7 +65,7 @@ SimpleRTC.prototype.createPeerConnect = function () {
     var self = this;
 
     try {
-        this.peerConnection = new RTCPeerConnection(this.pc_config);
+        this.peerConnection = new self.RTCPeerConnection(this.pc_config);
         // debug('[simpleRTC] PeerConnection created!');
         if (this.config.initiator && this.config.initiator == true){
             debug('[pear_webrtc]  sendOffer');
