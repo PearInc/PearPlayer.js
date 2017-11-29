@@ -36,40 +36,43 @@ There is a complete example in [examples/test.html](examples/test.html)。
 ### Listen to PearPlayer events
 
 ```js
-var player = new PearPlayer('#pearvideo', {      //第一个参数为video标签的id或class
-                    type: 'mp4',                 //播放视频的类型,目前只能是mp4
-                    src: 'https://qq.webrtc.win/tv/pear001.mp4',  //视频播放的src
-                    useMonitor: true             //是否开启monitor,会稍微影响性能,默认false
-                });
+var player = new PearPlayer('#pearvideo', {
+  //第一个参数为video标签的id或class
+  type: 'mp4', //播放视频的类型,目前只能是mp4
+  src: 'https://qq.webrtc.win/tv/pear001.mp4', //视频播放的src
+  useMonitor: true //是否开启monitor,会稍微影响性能,默认false
+});
 
 player.on('exception', onException);
 player.on('begin', onBegin);
 player.on('progress', onProgress);
-player.on('buffersources', onBufferSources);               //s: server   n: node  d: data channel  b: browser
+player.on('buffersources', onBufferSources); //s: server   n: node  d: data channel  b: browser
 player.on('done', onDone);
-                
+
 function onBegin(fileLength, chunks) {
-    console.log('start downloading buffer by first aid, file length is:' + fileLength + ' total chunks:' + chunks);
+  console.log('start downloading buffer by first aid, file length is:' + fileLength + ' total chunks:' + chunks);
 }
 
 function onProgress(downloaded) {
-    console.log('Progress: ' + (downloaded * 100).toFixed(1) + '%');
+  console.log('Progress: ' + (downloaded * 100).toFixed(1) + '%');
 }
 
 function onDone() {
-    console.log('finished downloading buffer by first aid');
+  console.log('finished downloading buffer by first aid');
 }
 
 function onException(exception) {
-    var errCode = exception.errCode;
-    switch (errCode) {
-        case 1:                   //当前浏览器不支持WebRTC
-        console.log(exception.errMsg);
-            break
-    }
+  var errCode = exception.errCode;
+  switch (errCode) {
+    case 1:
+      //当前浏览器不支持WebRTC
+      console.log(exception.errMsg);
+      break;
+  }
 }
-function onBufferSources(bufferSources) {    //s: server   n: node  d: data channel  b: browser
-    console.log('Current Buffer Sources:' + bufferSources);
+function onBufferSources(bufferSources) {
+  //s: server   n: node  d: data channel  b: browser
+  console.log('Current Buffer Sources:' + bufferSources);
 }
 ```
 
