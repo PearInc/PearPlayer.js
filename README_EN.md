@@ -34,10 +34,9 @@ To know more information [API document ](docs/get-started.md).<br/>
 - Encode by TLS/DTLS, no DPI feature,Pear Fog dynamic port mapping
 - Use easily like `<video>` label, can integrate [video.js](https://github.com/videojs/video.js)
 - Realize browser P2P ability（base on webtorrent）
-<br>
 
 ###### Demo：https://demo.webrtc.win/pearplayer/
-<br>
+
 ![multisources](fig/bitmap_en.png)
 
 ## Quick Start
