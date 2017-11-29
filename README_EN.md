@@ -1,13 +1,15 @@
 <h1 align="center">
-  <img src="fig/pear.png" height="220"></img>
+  <img src="fig/pear.png" height="110"></img>
   <br>
-  PearPlayer.js
+  <a href="https://demo.webrtc.win/pearplayer">PearPlayer.js</a>
   <br>
   <br>
 </h1>
 
 <h4 align="center">A multi-protocol, multi-source and P2P-CDN supporting streaming media player</h4>
 <br>
+
+###### Online **[Demo](https://demo.webrtc.win/pearplayer)**
 
 **[PearPlayer](https://github.com/PearInc/PearPlayer.js)** is an open source HTML5 streaming media framework written by JavaScript, combine HTTP (including HTTPS, HTTP2) and WebRTC. It would be  multi-protocol, multi-source, low latency, high bandwidth utilization, used to end streaming media acceleration. MSE (Media Source Extension) based on H5 technology collects the Buffer block from multiple source nodes to the player. With a well  designed algorithm, PearPlayer can guarantee the maximum rate of P2P as well as great watching experience.
 
@@ -33,8 +35,9 @@ To know more information [API document ](docs/get-started.md).<br/>
 - Use easily like `<video>` label, can integrate [video.js](https://github.com/videojs/video.js)
 - Realize browser P2P ability（base on webtorrent）
 <br>
-Demo：https://demo.webrtc.win/pearplayer/
 
+###### Demo：https://demo.webrtc.win/pearplayer/
+<br>
 ![multisources](fig/bitmap_en.png)
 
 ## Quick Start
@@ -88,7 +91,7 @@ Congratulations! You can use the PearPlayer now!
 
 ### Talks
 
-- 2017.09.01  (未来网络开放社区联盟) - [继云计算之后，雾计算再起 - 谈谈 P2P CDN](https://mp.weixin.qq.com/s/39dfSA6cTj2eoo-KqsC3AQ)  
+- 2017.09.01  (未来网络开放社区联盟) - [继云计算之后，雾计算再起 - 谈谈 P2P CDN](https://mp.weixin.qq.com/s/39dfSA6cTj2eoo-KqsC3AQ)
 - 2017.08.18 （IT大咖说） - [WebRTC会成主流吗？众包CDN时代到了！](http://mp.weixin.qq.com/s/cx_ljl2sexE0XkgliZfnmQ)
 - 2017.07.11 （OSChina开源中国） - [PearPlayer.js —— 混合P2P-CDN的流媒体播放器](https://www.oschina.net/p/PearPlayerjs)
 - 2017.06.24 （腾讯Web前端大会） - [基于WebRTC的P2P-CDN流媒体加速](http://www.itdks.com/dakalive/detail/2577)
