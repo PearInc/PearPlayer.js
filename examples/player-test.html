@@ -8,7 +8,7 @@
 <body>
 <div id="main">
     <!--<video id="pearvideo" controls>-->
-    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>-->
+    <video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>
     <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Corporate-Video-V5.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-demo-your-name.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-planet.earth.ii.s01e04.mp4" controls>-->
@@ -20,7 +20,7 @@
 <script>
 
     //第一个参数为video标签的id或class
-    if (!PearPlayer.isMSESupported()) {
+    if (PearPlayer.isMSESupported()) {
         var player = new PearPlayer('#pearvideo', {
 //            src: 'https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4',
             scheduler: 'IdleFirst',      //节点调度算法，默认IdleFirst，其它内置调度算法有“WebRTCFirst“和”CloudFirst”
@@ -78,7 +78,7 @@
 
     }
 
-    function onFallback(exception) {
+    function onFallback() {
 
         fallback();
     }

@@ -28,7 +28,7 @@ function PearDownloader(urlStr, token, opts) {
     Worker.call(self, urlStr, token, opts);
 }
 
-PearDownloader.isSupported = function () {
+PearDownloader.isWebRTCSupported = function () {
 
     return Worker.isRTCSupported();
 }

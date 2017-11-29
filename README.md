@@ -70,7 +70,7 @@ PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/pearplayer)]** 
     * 第一个参数为video标签的id或class
     * opts是可选的参数配置
     */
-    if (PearPlayer.isSupported()) {        
+    if (PearPlayer.isMSESupported()) {        
         var player = new PearPlayer('#pearvideo', opts);
     }
 </script>

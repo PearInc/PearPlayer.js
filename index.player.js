@@ -105,8 +105,8 @@ PearPlayer.prototype.setupListeners = function () {
 
 }
 
-PearPlayer.isSupported = function () {
-    return PearDownloader.isSupported() && isMSESupported();
+PearPlayer.isWebRTCSupported = function () {
+    return PearDownloader.isWebRTCSupported();
 };
 
 PearPlayer.isMSESupported = function () {

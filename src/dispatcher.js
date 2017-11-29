@@ -101,7 +101,7 @@ Dispatcher.prototype._init = function () {
         // self.startFrom(0, false);
         self.select(0, self.chunks-1, true);
         self.autoSlide();
-        self.slide = noop;
+        self.slide = noop;Pear-Demo-Yosemite_National_Park.mp4
     } else {
         // self.slide = this._throttle(this._slide, this);
     }

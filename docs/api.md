@@ -31,12 +31,23 @@ var PearPlayer = require('PearPlayer');
 
 # PearPlayer API
 
-## PearPlayer.isSupported()
+## PearPlayer.isMSESupported()
 
-静态方法，检测当前浏览器环境是否支持MSE和WebRTC。
+静态方法，检测当前浏览器环境是否支持MSE。
 ```js
-if (PearPlayer.isSupported()) {
-  // MSE and WebRTC is supported
+if (PearPlayer.isMSESupported()) {
+  // MSE is supported
+} else {
+  // Use a fallback
+}
+```
+
+## PearPlayer.isWebRTCSupported()
+
+静态方法，检测当前浏览器环境是否支持WebRTC。
+```js
+if (PearPlayer.isWebRTCSupported()) {
+  // WebRTC is supported
 } else {
   // Use a fallback
 }

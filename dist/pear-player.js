@@ -106,8 +106,8 @@ PearPlayer.prototype.setupListeners = function () {
 
 }
 
-PearPlayer.isSupported = function () {
-    return PearDownloader.isSupported() && isMSESupported();
+PearPlayer.isWebRTCSupported = function () {
+    return PearDownloader.isWebRTCSupported();
 };
 
 PearPlayer.isMSESupported = function () {
@@ -18717,7 +18717,7 @@ Dispatcher.prototype._init = function () {
         // self.startFrom(0, false);
         self.select(0, self.chunks-1, true);
         self.autoSlide();
-        self.slide = noop;
+        self.slide = noop;Pear-Demo-Yosemite_National_Park.mp4
     } else {
         // self.slide = this._throttle(this._slide, this);
     }
@@ -19730,7 +19730,7 @@ function PearDownloader(urlStr, token, opts) {
     Worker.call(self, urlStr, token, opts);
 }
 
-PearDownloader.isSupported = function () {
+PearDownloader.isWebRTCSupported = function () {
 
     return Worker.isRTCSupported();
 }
@@ -23374,7 +23374,6 @@ Worker.prototype._start = function () {
 Worker.prototype._fallBack = function () {
 
     debug('PearDownloader _fallBack');
-    this.emit('fallback');
 }
 
 Worker.prototype._getNodes = function (token, cb) {

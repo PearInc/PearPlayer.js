@@ -159,7 +159,6 @@ Worker.prototype._start = function () {
 Worker.prototype._fallBack = function () {
 
     debug('PearDownloader _fallBack');
-    this.emit('fallback');
 }
 
 Worker.prototype._getNodes = function (token, cb) {
