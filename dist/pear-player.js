@@ -18651,7 +18651,7 @@ function Dispatcher(config) {
     if (!(config.initialDownloaders && config.fileSize && config.scheduler)) throw new Error('config is not completed');
     self.fileSize = config.fileSize;
     self.initialDownloaders = config.initialDownloaders;
-    self.pieceLength = config.chunkSize || 1*1024*1024;
+    self.pieceLength = config.chunkSize || 1*1024*512;
     self.interval = config.interval || 5000;
     self.auto = config.auto || false;
     // self.auto = true;
@@ -19818,7 +19818,7 @@ class  PearDownloaderTag extends HTMLElement {
 
 
         });
-        this.downloader.on('fograte', (p2pRatio) => {
+        this.downloader.on('fogratio', (p2pRatio) => {
 
             this.p2pRatio = p2pRatio;
         });

@@ -1,3 +1,7 @@
+### 2.4.2
+- 修复2.4.1运行错误的bug
+- 将默认分片大小由1M改成512K
+
 ### 2.4.1
 - 新增isMSESupported和isWebRTCSupported两个API，去掉isSupported
 - 新增“fallback”回调函数

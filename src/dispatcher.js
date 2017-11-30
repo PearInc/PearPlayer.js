@@ -32,7 +32,7 @@ function Dispatcher(config) {
     if (!(config.initialDownloaders && config.fileSize && config.scheduler)) throw new Error('config is not completed');
     self.fileSize = config.fileSize;
     self.initialDownloaders = config.initialDownloaders;
-    self.pieceLength = config.chunkSize || 1*1024*1024;
+    self.pieceLength = config.chunkSize || 1*1024*512;
     self.interval = config.interval || 5000;
     self.auto = config.auto || false;
     // self.auto = true;

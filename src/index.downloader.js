@@ -113,7 +113,7 @@ class  PearDownloaderTag extends HTMLElement {
 
 
         });
-        this.downloader.on('fograte', (p2pRatio) => {
+        this.downloader.on('fogratio', (p2pRatio) => {
 
             this.p2pRatio = p2pRatio;
         });
