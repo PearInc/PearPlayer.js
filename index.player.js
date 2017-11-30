@@ -71,7 +71,8 @@ PearPlayer.prototype.setupListeners = function () {
                         "wss://tracker.btorrent.xyz"
                     ],
                     store: dispatcher.store,
-                    bitfield: dispatcher.bitfield
+                    bitfield: dispatcher.bitfield,
+                    strategy: 'rarest'
                 },
                 function (torrent) {
                     debug('Torrent:', torrent);

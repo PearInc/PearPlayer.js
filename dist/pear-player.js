@@ -72,7 +72,8 @@ PearPlayer.prototype.setupListeners = function () {
                         "wss://tracker.btorrent.xyz"
                     ],
                     store: dispatcher.store,
-                    bitfield: dispatcher.bitfield
+                    bitfield: dispatcher.bitfield,
+                    strategy: 'rarest'
                 },
                 function (torrent) {
                     debug('Torrent:', torrent);
@@ -18570,7 +18571,7 @@ module.exports = function zeroFill (width, number, pad) {
 },{}],108:[function(require,module,exports){
 module.exports={
   "name": "pearplayer",
-  "version": "2.4.3",
+  "version": "2.4.4",
   "description": "",
   "main": "./dist/pear-player.js",
   "dependencies": {
