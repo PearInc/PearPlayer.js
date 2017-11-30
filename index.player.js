@@ -59,7 +59,7 @@ PearPlayer.prototype.setupListeners = function () {
         self.emit('canplay', canPlayDelay);
 
         var dispatcher = self.dispatcher;
-        if (self.useTorrent && self.magnetURI) {
+        if (dispatcher && self.useTorrent && self.magnetURI) {
             var client = new PearTorrent();
             // client.on('error', function () {
             //
@@ -86,22 +86,24 @@ PearPlayer.prototype.setupListeners = function () {
 
         var dispatcher = self.dispatcher;
 
-        var bitrate = Math.ceil(dispatcher.fileSize/self.video.duration);
-        var windowLength = Math.ceil(bitrate * 15 / dispatcher.pieceLength);       //根据码率和时间间隔来计算窗口长度
-        // console.warn('dispatcher._windowLength:'+dispatcher._windowLength);
-        // self.normalWindowLength = self._windowLength;
-        if (windowLength < 3) {
-            windowLength = 3;
-        } else if (self._windowLength > 15) {
-            windowLength = 15;
+        if (dispatcher) {
+            var bitrate = Math.ceil(dispatcher.fileSize/self.video.duration);
+            var windowLength = Math.ceil(bitrate * 15 / dispatcher.pieceLength);       //根据码率和时间间隔来计算窗口长度
+            // console.warn('dispatcher._windowLength:'+dispatcher._windowLength);
+            // self.normalWindowLength = self._windowLength;
+            if (windowLength < 3) {
+                windowLength = 3;
+            } else if (self._windowLength > 15) {
+                windowLength = 15;
+            }
+            dispatcher._windowLength = windowLength;
+            dispatcher.interval = 5000;
+            // console.warn('dispatcher._windowLength:'+dispatcher._windowLength);
+            // self._colddown = 5/self._slideInterval*self._interval2BufPos + 5;                        //窗口滑动的冷却时间
+            // self._colddown = self._windowLength*2;
+            // self._colddown = 5;
+            self.emit('metadata', {'bitrate': bitrate, 'duration': self.video.duration});
         }
-        dispatcher._windowLength = windowLength;
-        dispatcher.interval = 5000;
-        // console.warn('dispatcher._windowLength:'+dispatcher._windowLength);
-        // self._colddown = 5/self._slideInterval*self._interval2BufPos + 5;                        //窗口滑动的冷却时间
-        // self._colddown = self._windowLength*2;
-        // self._colddown = 5;
-        self.emit('metadata', {'bitrate': bitrate, 'duration': self.video.duration});
 
 
     });

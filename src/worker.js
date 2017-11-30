@@ -16,7 +16,7 @@ var nodeFilter = require('./node-filter');
 var inherits = require('inherits');
 var EventEmitter = require('events').EventEmitter;
 var Set = require('./set');
-// var WebTorrent = require('./pear-torrent');
+var WebTorrent = require('./pear-torrent');
 var Scheduler = require('./node-scheduler');
 
 // var WEBSOCKET_ADDR = 'ws://signal.webrtc.win:9600/ws';             //test

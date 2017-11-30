@@ -35,7 +35,7 @@ function SimpleRTC(config) {
     self.sdp = "";
 
     self.isDataChannelCreating = false;
-    self.iceServers = [ {url:'stun:stun.miwifi.com'},{url:'stun:stun.ekiga.net'},{url:'stun:stun.ideasip.com'}];
+    self.iceServers = [ {urls:'stun:stun.miwifi.com'},{urls:'stun:stun.ekiga.net'},{urls:'stun:stun.ideasip.com'}];
     self.pc_config = {
         iceServers: self.iceServers
     };
