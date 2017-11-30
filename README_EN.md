@@ -28,7 +28,7 @@ To know more information [API document](docs/get-started.md).<br/>
 - Multi-protocol(HTTP, HTTPS, WebRTC), multi-source
 - No parameter
 - Save CP's data usage
-- Run well in Chrome,Firefox, Opera, Safari11
+- Run well in Chrome,Firefox, Opera
 - Support [Pear FogVDN](https://github.com/PearInc/FogVDN)
 - Encode by TLS/DTLS, no DPI feature; Pear Fog dynamic port mapping ensures no statistical feature
 - Use easily like `<video>` label, can integrate [video.js](https://github.com/videojs/video.js)

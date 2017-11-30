@@ -9,6 +9,7 @@ var inherits = require('inherits');
 var render = require('render-media');
 var PearDownloader = require('./src/index.downloader');
 var WebTorrent = require('webtorrent');
+var PearTorrent = require('./src/pear-torrent');
 
 inherits(PearPlayer, PearDownloader);
 
@@ -56,6 +57,29 @@ PearPlayer.prototype.setupListeners = function () {
         self.canPlayDelayEnd = (new Date()).getTime();
         var canPlayDelay = (self.canPlayDelayEnd - self.canPlayDelayStart);
         self.emit('canplay', canPlayDelay);
+
+        var dispatcher = self.dispatcher;
+        if (self.useTorrent && self.magnetURI) {
+            var client = new PearTorrent();
+            // client.on('error', function () {
+            //
+            // });
+            debug('magnetURI:'+self.magnetURI);
+            client.add(self.magnetURI, {
+                    announce: self.trackers || [
+                        "wss://tracker.openwebtorrent.com",
+                        "wss://tracker.btorrent.xyz"
+                    ],
+                    store: dispatcher.store,
+                    bitfield: dispatcher.bitfield
+                },
+                function (torrent) {
+                    debug('Torrent:', torrent);
+
+                    dispatcher.addTorrent(torrent);
+                }
+            );
+        }
     });
 
     self.video.addEventListener('loadedmetadata', function () {
@@ -79,27 +103,6 @@ PearPlayer.prototype.setupListeners = function () {
         // self._colddown = 5;
         self.emit('metadata', {'bitrate': bitrate, 'duration': self.video.duration});
 
-        // if (self.useTorrent && self.magnetURI) {
-        //     var client = new WebTorrent();
-        //     // client.on('error', function () {
-        //     //
-        //     // });
-        //     debug('magnetURI:'+self.magnetURI);
-        //     client.add(self.magnetURI, {
-        //             announce: self.trackers || [
-        //                 "wss://tracker.openwebtorrent.com",
-        //                 "wss://tracker.btorrent.xyz"
-        //             ],
-        //             store: d.store,
-        //             bitfield: d.bitfield
-        //         },
-        //         function (torrent) {
-        //             debug('Torrent:', torrent);
-        //
-        //             d.addTorrent(torrent);
-        //         }
-        //     );
-        // }
 
     });
 

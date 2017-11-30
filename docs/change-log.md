@@ -1,3 +1,8 @@
+### 2.4.1
+- 新增isMSESupported和isWebRTCSupported两个API，去掉isSupported
+- 新增“fallback”回调函数
+
+
 ### 2.4.0
 - 增加新的API：PearPlayer.isSupported()
 

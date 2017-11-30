@@ -10,6 +10,7 @@ var inherits = require('inherits');
 var render = require('render-media');
 var PearDownloader = require('./src/index.downloader');
 var WebTorrent = require('webtorrent');
+var PearTorrent = require('./src/pear-torrent');
 
 inherits(PearPlayer, PearDownloader);
 
@@ -57,6 +58,29 @@ PearPlayer.prototype.setupListeners = function () {
         self.canPlayDelayEnd = (new Date()).getTime();
         var canPlayDelay = (self.canPlayDelayEnd - self.canPlayDelayStart);
         self.emit('canplay', canPlayDelay);
+
+        var dispatcher = self.dispatcher;
+        if (self.useTorrent && self.magnetURI) {
+            var client = new PearTorrent();
+            // client.on('error', function () {
+            //
+            // });
+            debug('magnetURI:'+self.magnetURI);
+            client.add(self.magnetURI, {
+                    announce: self.trackers || [
+                        "wss://tracker.openwebtorrent.com",
+                        "wss://tracker.btorrent.xyz"
+                    ],
+                    store: dispatcher.store,
+                    bitfield: dispatcher.bitfield
+                },
+                function (torrent) {
+                    debug('Torrent:', torrent);
+
+                    dispatcher.addTorrent(torrent);
+                }
+            );
+        }
     });
 
     self.video.addEventListener('loadedmetadata', function () {
@@ -80,27 +104,6 @@ PearPlayer.prototype.setupListeners = function () {
         // self._colddown = 5;
         self.emit('metadata', {'bitrate': bitrate, 'duration': self.video.duration});
 
-        // if (self.useTorrent && self.magnetURI) {
-        //     var client = new WebTorrent();
-        //     // client.on('error', function () {
-        //     //
-        //     // });
-        //     debug('magnetURI:'+self.magnetURI);
-        //     client.add(self.magnetURI, {
-        //             announce: self.trackers || [
-        //                 "wss://tracker.openwebtorrent.com",
-        //                 "wss://tracker.btorrent.xyz"
-        //             ],
-        //             store: d.store,
-        //             bitfield: d.bitfield
-        //         },
-        //         function (torrent) {
-        //             debug('Torrent:', torrent);
-        //
-        //             d.addTorrent(torrent);
-        //         }
-        //     );
-        // }
 
     });
 
@@ -119,7 +122,7 @@ function isMSESupported() {
     return !!(window['MediaSource'] || window['WebKitMediaSource']);
 
 }
-},{"./src/index.downloader":113,"debug":2,"inherits":32,"render-media":67,"webtorrent":96}],2:[function(require,module,exports){
+},{"./src/index.downloader":113,"./src/pear-torrent":123,"debug":2,"inherits":32,"render-media":67,"webtorrent":96}],2:[function(require,module,exports){
 (function (process){
 /**
  * This is the web browser implementation of `debug()`.
@@ -18565,7 +18568,7 @@ module.exports = function zeroFill (width, number, pad) {
 },{}],108:[function(require,module,exports){
 module.exports={
   "name": "pearplayer",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "",
   "main": "./dist/pear-player.js",
   "dependencies": {
@@ -18717,7 +18720,7 @@ Dispatcher.prototype._init = function () {
         // self.startFrom(0, false);
         self.select(0, self.chunks-1, true);
         self.autoSlide();
-        self.slide = noop;Pear-Demo-Yosemite_National_Park.mp4
+        self.slide = noop;
     } else {
         // self.slide = this._throttle(this._slide, this);
     }
@@ -23231,7 +23234,7 @@ var nodeFilter = require('./node-filter');
 var inherits = require('inherits');
 var EventEmitter = require('events').EventEmitter;
 var Set = require('./set');
-var WebTorrent = require('./pear-torrent');
+// var WebTorrent = require('./pear-torrent');
 var Scheduler = require('./node-scheduler');
 
 // var WEBSOCKET_ADDR = 'ws://signal.webrtc.win:9600/ws';             //test
@@ -23374,6 +23377,8 @@ Worker.prototype._start = function () {
 Worker.prototype._fallBack = function () {
 
     debug('PearDownloader _fallBack');
+
+    this.emit('fallback');
 }
 
 Worker.prototype._getNodes = function (token, cb) {
@@ -23811,7 +23816,7 @@ function makeCandidateArr(sdp) {
 }
 
 
-},{"./dispatcher":109,"./file":111,"./http-downloader":112,"./node-filter":120,"./node-scheduler":121,"./pear-torrent":123,"./peerid-generator":124,"./set":125,"./webrtc-downloader-bin":127,"blueimp-md5":19,"debug":2,"events":135,"inherits":32,"url":164}],129:[function(require,module,exports){
+},{"./dispatcher":109,"./file":111,"./http-downloader":112,"./node-filter":120,"./node-scheduler":121,"./peerid-generator":124,"./set":125,"./webrtc-downloader-bin":127,"blueimp-md5":19,"debug":2,"events":135,"inherits":32,"url":164}],129:[function(require,module,exports){
 
 },{}],130:[function(require,module,exports){
 arguments[4][6][0].apply(exports,arguments)
