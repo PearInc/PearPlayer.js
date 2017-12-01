@@ -517,6 +517,7 @@ Dispatcher.prototype.addTorrent = function (torrent) {
     torrent.pear_downloaded = 0;
     debug('addTorrent _windowOffset:' + self._windowOffset);
     if (self._windowOffset + self._windowLength < torrent.pieces.length-1) {
+        debug('torrent.select:%d to %d', self._windowOffset+self._windowLength, torrent.pieces.length-1);
         torrent.select(self._windowOffset+self._windowLength, torrent.pieces.length-1, 1000);
     }
     torrent.on('piecefromtorrent', function (index) {

@@ -10,7 +10,6 @@ var inherits = require('inherits');
 var render = require('render-media');
 var PearDownloader = require('./src/index.downloader');
 var WebTorrent = require('webtorrent');
-var PearTorrent = require('./src/pear-torrent');
 
 inherits(PearPlayer, PearDownloader);
 
@@ -59,29 +58,7 @@ PearPlayer.prototype.setupListeners = function () {
         var canPlayDelay = (self.canPlayDelayEnd - self.canPlayDelayStart);
         self.emit('canplay', canPlayDelay);
 
-        var dispatcher = self.dispatcher;
-        if (dispatcher && self.useTorrent && self.magnetURI) {
-            var client = new PearTorrent();
-            // client.on('error', function () {
-            //
-            // });
-            debug('magnetURI:'+self.magnetURI);
-            client.add(self.magnetURI, {
-                    announce: self.trackers || [
-                        "wss://tracker.openwebtorrent.com",
-                        "wss://tracker.btorrent.xyz"
-                    ],
-                    store: dispatcher.store,
-                    bitfield: dispatcher.bitfield,
-                    strategy: 'rarest'
-                },
-                function (torrent) {
-                    debug('Torrent:', torrent);
 
-                    dispatcher.addTorrent(torrent);
-                }
-            );
-        }
     });
 
     self.video.addEventListener('loadedmetadata', function () {
@@ -125,7 +102,7 @@ function isMSESupported() {
     return !!(window['MediaSource'] || window['WebKitMediaSource']);
 
 }
-},{"./src/index.downloader":113,"./src/pear-torrent":123,"debug":2,"inherits":32,"render-media":67,"webtorrent":96}],2:[function(require,module,exports){
+},{"./src/index.downloader":113,"debug":2,"inherits":32,"render-media":67,"webtorrent":96}],2:[function(require,module,exports){
 (function (process){
 /**
  * This is the web browser implementation of `debug()`.
@@ -19139,6 +19116,7 @@ Dispatcher.prototype.addTorrent = function (torrent) {
     torrent.pear_downloaded = 0;
     debug('addTorrent _windowOffset:' + self._windowOffset);
     if (self._windowOffset + self._windowLength < torrent.pieces.length-1) {
+        debug('torrent.select:%d to %d', self._windowOffset+self._windowLength, torrent.pieces.length-1);
         torrent.select(self._windowOffset+self._windowLength, torrent.pieces.length-1, 1000);
     }
     torrent.on('piecefromtorrent', function (index) {
@@ -20031,99 +20009,99 @@ var USER_AGENT = 'WebTorrent/' + VERSION + ' (https://webtorrent.io)'
 
 var TMP
 try {
-    TMP = path.join(fs.statSync('/tmp') && '/tmp', 'webtorrent')
+  TMP = path.join(fs.statSync('/tmp') && '/tmp', 'webtorrent')
 } catch (err) {
-    TMP = path.join(typeof os.tmpdir === 'function' ? os.tmpdir() : '/', 'webtorrent')
+  TMP = path.join(typeof os.tmpdir === 'function' ? os.tmpdir() : '/', 'webtorrent')
 }
 
 inherits(Torrent, EventEmitter)
 
 function Torrent (torrentId, client, opts) {
-    EventEmitter.call(this)
+  EventEmitter.call(this)
 
-    this._debugId = 'unknown infohash'
-    this.client = client
+  this._debugId = 'unknown infohash'
+  this.client = client
 
-    this.announce = opts.announce
-    this.urlList = opts.urlList
+  this.announce = opts.announce
+  this.urlList = opts.urlList
 
-    this.path = opts.path
-    this._store = FSChunkStore                           //pear modified
-    this._getAnnounceOpts = opts.getAnnounceOpts
+  this.path = opts.path
+  this._store = FSChunkStore                           //pear modified
+  this._getAnnounceOpts = opts.getAnnounceOpts
 
-    this.strategy = opts.strategy || 'sequential'
+  this.strategy = opts.strategy || 'sequential'
 
-    this.maxWebConns = opts.maxWebConns || 4
+  this.maxWebConns = opts.maxWebConns || 4
 
-    this._rechokeNumSlots = (opts.uploads === false || opts.uploads === 0)
-        ? 0
-        : (+opts.uploads || 10)
-    this._rechokeOptimisticWire = null
-    this._rechokeOptimisticTime = 0
-    this._rechokeIntervalId = null
+  this._rechokeNumSlots = (opts.uploads === false || opts.uploads === 0)
+    ? 0
+    : (+opts.uploads || 10)
+  this._rechokeOptimisticWire = null
+  this._rechokeOptimisticTime = 0
+  this._rechokeIntervalId = null
 
-    this.ready = false
-    this.destroyed = false
-    this.paused = false
-    this.done = false
+  this.ready = false
+  this.destroyed = false
+  this.paused = false
+  this.done = false
 
-    this.metadata = null
-    this.store = opts.store                                               //pear modified
-    this.bitfield = opts.bitfield                                      //pear modified
-    this.files = []
-    this.pieces = []
+  this.metadata = null
+  this.store = opts.store                                               //pear modified
+  this.bitfield = opts.bitfield                                      //pear modified
+  this.files = []
+  this.pieces = []
 
-    this._amInterested = false
-    this._selections = []
-    this._critical = []
+  this._amInterested = false
+  this._selections = []
+  this._critical = []
 
-    this.wires = [] // open wires (added *after* handshake)
+  this.wires = [] // open wires (added *after* handshake)
 
-    this._queue = [] // queue of outgoing tcp peers to connect to
-    this._peers = {} // connected peers (addr/peerId -> Peer)
-    this._peersLength = 0 // number of elements in `this._peers` (cache, for perf)
+  this._queue = [] // queue of outgoing tcp peers to connect to
+  this._peers = {} // connected peers (addr/peerId -> Peer)
+  this._peersLength = 0 // number of elements in `this._peers` (cache, for perf)
 
-    // stats
-    this.received = 0
-    this.uploaded = 0
-    this._downloadSpeed = speedometer()
-    this._uploadSpeed = speedometer()
+  // stats
+  this.received = 0
+  this.uploaded = 0
+  this._downloadSpeed = speedometer()
+  this._uploadSpeed = speedometer()
 
-    // for cleanup
-    this._servers = []
-    this._xsRequests = []
+  // for cleanup
+  this._servers = []
+  this._xsRequests = []
 
-    // TODO: remove this and expose a hook instead
-    // optimization: don't recheck every file if it hasn't changed
-    this._fileModtimes = opts.fileModtimes
+  // TODO: remove this and expose a hook instead
+  // optimization: don't recheck every file if it hasn't changed
+  this._fileModtimes = opts.fileModtimes
 
-    if (torrentId !== null) this._onTorrentId(torrentId)
+  if (torrentId !== null) this._onTorrentId(torrentId)
 
-    this._debug('new torrent')
+  this._debug('new torrent')
 }
 
 Object.defineProperty(Torrent.prototype, 'timeRemaining', {
-    get: function () {
-        if (this.done) return 0
-        if (this.downloadSpeed === 0) return Infinity
-        return ((this.length - this.downloaded) / this.downloadSpeed) * 1000
-    }
+  get: function () {
+    if (this.done) return 0
+    if (this.downloadSpeed === 0) return Infinity
+    return ((this.length - this.downloaded) / this.downloadSpeed) * 1000
+  }
 })
 
 Object.defineProperty(Torrent.prototype, 'downloaded', {
-    get: function () {
-        if (!this.bitfield) return 0
-        var downloaded = 0
-        for (var index = 0, len = this.pieces.length; index < len; ++index) {
-            if (this.bitfield.get(index)) { // verified data
-                downloaded += (index === len - 1) ? this.lastPieceLength : this.pieceLength
-            } else { // "in progress" data
-                var piece = this.pieces[index]
-                downloaded += (piece.length - piece.missing)
-            }
-        }
-        return downloaded
+  get: function () {
+    if (!this.bitfield) return 0
+    var downloaded = 0
+    for (var index = 0, len = this.pieces.length; index < len; ++index) {
+      if (this.bitfield.get(index)) { // verified data
+        downloaded += (index === len - 1) ? this.lastPieceLength : this.pieceLength
+      } else { // "in progress" data
+        var piece = this.pieces[index]
+        downloaded += (piece.length - piece.missing)
+      }
     }
+    return downloaded
+  }
 })
 
 // TODO: re-enable this. The number of missing pieces. Used to implement 'end game' mode.
@@ -20139,401 +20117,401 @@ Object.defineProperty(Torrent.prototype, 'downloaded', {
 // })
 
 Object.defineProperty(Torrent.prototype, 'downloadSpeed', {
-    get: function () { return this._downloadSpeed() }
+  get: function () { return this._downloadSpeed() }
 })
 
 Object.defineProperty(Torrent.prototype, 'uploadSpeed', {
-    get: function () { return this._uploadSpeed() }
+  get: function () { return this._uploadSpeed() }
 })
 
 Object.defineProperty(Torrent.prototype, 'progress', {
-    get: function () { return this.length ? this.downloaded / this.length : 0 }
+  get: function () { return this.length ? this.downloaded / this.length : 0 }
 })
 
 Object.defineProperty(Torrent.prototype, 'ratio', {
-    get: function () { return this.uploaded / (this.received || 1) }
+  get: function () { return this.uploaded / (this.received || 1) }
 })
 
 Object.defineProperty(Torrent.prototype, 'numPeers', {
-    get: function () { return this.wires.length }
+  get: function () { return this.wires.length }
 })
 
 Object.defineProperty(Torrent.prototype, 'torrentFileBlobURL', {
-    get: function () {
-        if (typeof window === 'undefined') throw new Error('browser-only property')
-        if (!this.torrentFile) return null
-        return URL.createObjectURL(
-            new Blob([ this.torrentFile ], { type: 'application/x-bittorrent' })
-        )
-    }
+  get: function () {
+    if (typeof window === 'undefined') throw new Error('browser-only property')
+    if (!this.torrentFile) return null
+    return URL.createObjectURL(
+      new Blob([ this.torrentFile ], { type: 'application/x-bittorrent' })
+    )
+  }
 })
 
 Object.defineProperty(Torrent.prototype, '_numQueued', {
-    get: function () {
-        return this._queue.length + (this._peersLength - this._numConns)
-    }
+  get: function () {
+    return this._queue.length + (this._peersLength - this._numConns)
+  }
 })
 
 Object.defineProperty(Torrent.prototype, '_numConns', {
-    get: function () {
-        var self = this
-        var numConns = 0
-        for (var id in self._peers) {
-            if (self._peers[id].connected) numConns += 1
-        }
-        return numConns
+  get: function () {
+    var self = this
+    var numConns = 0
+    for (var id in self._peers) {
+      if (self._peers[id].connected) numConns += 1
     }
+    return numConns
+  }
 })
 
 // TODO: remove in v1
 Object.defineProperty(Torrent.prototype, 'swarm', {
-    get: function () {
-        console.warn('WebTorrent: `torrent.swarm` is deprecated. Use `torrent` directly instead.')
-        return this
-    }
+  get: function () {
+    console.warn('WebTorrent: `torrent.swarm` is deprecated. Use `torrent` directly instead.')
+    return this
+  }
 })
 
 Torrent.prototype._onTorrentId = function (torrentId) {
-    var self = this
-    if (self.destroyed) return
+  var self = this
+  if (self.destroyed) return
 
-    var parsedTorrent
-    try { parsedTorrent = parseTorrent(torrentId) } catch (err) {}
-    if (parsedTorrent) {
-        // Attempt to set infoHash property synchronously
-        self.infoHash = parsedTorrent.infoHash
-        self._debugId = parsedTorrent.infoHash.toString('hex').substring(0, 7)
-        process.nextTick(function () {
-            if (self.destroyed) return
-            self._onParsedTorrent(parsedTorrent)
-        })
-    } else {
-        // If torrentId failed to parse, it could be in a form that requires an async
-        // operation, i.e. http/https link, filesystem path, or Blob.
-        parseTorrent.remote(torrentId, function (err, parsedTorrent) {
-            if (self.destroyed) return
-            if (err) return self._destroy(err)
-            self._onParsedTorrent(parsedTorrent)
-        })
-    }
+  var parsedTorrent
+  try { parsedTorrent = parseTorrent(torrentId) } catch (err) {}
+  if (parsedTorrent) {
+    // Attempt to set infoHash property synchronously
+    self.infoHash = parsedTorrent.infoHash
+    self._debugId = parsedTorrent.infoHash.toString('hex').substring(0, 7)
+    process.nextTick(function () {
+      if (self.destroyed) return
+      self._onParsedTorrent(parsedTorrent)
+    })
+  } else {
+    // If torrentId failed to parse, it could be in a form that requires an async
+    // operation, i.e. http/https link, filesystem path, or Blob.
+    parseTorrent.remote(torrentId, function (err, parsedTorrent) {
+      if (self.destroyed) return
+      if (err) return self._destroy(err)
+      self._onParsedTorrent(parsedTorrent)
+    })
+  }
 }
 
 Torrent.prototype._onParsedTorrent = function (parsedTorrent) {
-    var self = this
-    if (self.destroyed) return
+  var self = this
+  if (self.destroyed) return
 
-    self._processParsedTorrent(parsedTorrent)
+  self._processParsedTorrent(parsedTorrent)
 
-    if (!self.infoHash) {
-        return self._destroy(new Error('Malformed torrent data: No info hash'))
-    }
+  if (!self.infoHash) {
+    return self._destroy(new Error('Malformed torrent data: No info hash'))
+  }
 
-    if (!self.path) self.path = path.join(TMP, self.infoHash)
+  if (!self.path) self.path = path.join(TMP, self.infoHash)
 
-    self._rechokeIntervalId = setInterval(function () {
-        self._rechoke()
-    }, RECHOKE_INTERVAL)
-    if (self._rechokeIntervalId.unref) self._rechokeIntervalId.unref()
+  self._rechokeIntervalId = setInterval(function () {
+    self._rechoke()
+  }, RECHOKE_INTERVAL)
+  if (self._rechokeIntervalId.unref) self._rechokeIntervalId.unref()
 
-    // Private 'infoHash' event allows client.add to check for duplicate torrents and
-    // destroy them before the normal 'infoHash' event is emitted. Prevents user
-    // applications from needing to deal with duplicate 'infoHash' events.
-    self.emit('_infoHash', self.infoHash)
-    if (self.destroyed) return
+  // Private 'infoHash' event allows client.add to check for duplicate torrents and
+  // destroy them before the normal 'infoHash' event is emitted. Prevents user
+  // applications from needing to deal with duplicate 'infoHash' events.
+  self.emit('_infoHash', self.infoHash)
+  if (self.destroyed) return
 
-    self.emit('infoHash', self.infoHash)
-    if (self.destroyed) return // user might destroy torrent in event handler
+  self.emit('infoHash', self.infoHash)
+  if (self.destroyed) return // user might destroy torrent in event handler
 
-    if (self.client.listening) {
-        self._onListening()
-    } else {
-        self.client.once('listening', function () {
-            self._onListening()
-        })
-    }
+  if (self.client.listening) {
+    self._onListening()
+  } else {
+    self.client.once('listening', function () {
+      self._onListening()
+    })
+  }
 }
 
 Torrent.prototype._processParsedTorrent = function (parsedTorrent) {
-    this._debugId = parsedTorrent.infoHash.toString('hex').substring(0, 7)
+  this._debugId = parsedTorrent.infoHash.toString('hex').substring(0, 7)
 
-    if (this.announce) {
-        // Allow specifying trackers via `opts` parameter
-        parsedTorrent.announce = parsedTorrent.announce.concat(this.announce)
-    }
+  if (this.announce) {
+    // Allow specifying trackers via `opts` parameter
+    parsedTorrent.announce = parsedTorrent.announce.concat(this.announce)
+  }
 
-    if (this.client.tracker && global.WEBTORRENT_ANNOUNCE && !this.private) {
-        // So `webtorrent-hybrid` can force specific trackers to be used
-        parsedTorrent.announce = parsedTorrent.announce.concat(global.WEBTORRENT_ANNOUNCE)
-    }
+  if (this.client.tracker && global.WEBTORRENT_ANNOUNCE && !this.private) {
+    // So `webtorrent-hybrid` can force specific trackers to be used
+    parsedTorrent.announce = parsedTorrent.announce.concat(global.WEBTORRENT_ANNOUNCE)
+  }
 
-    if (this.urlList) {
-        // Allow specifying web seeds via `opts` parameter
-        parsedTorrent.urlList = parsedTorrent.urlList.concat(this.urlList)
-    }
+  if (this.urlList) {
+    // Allow specifying web seeds via `opts` parameter
+    parsedTorrent.urlList = parsedTorrent.urlList.concat(this.urlList)
+  }
 
-    uniq(parsedTorrent.announce)
-    uniq(parsedTorrent.urlList)
+  uniq(parsedTorrent.announce)
+  uniq(parsedTorrent.urlList)
 
-    extendMutable(this, parsedTorrent)
+  extendMutable(this, parsedTorrent)
 
-    this.magnetURI = parseTorrent.toMagnetURI(parsedTorrent)
-    this.torrentFile = parseTorrent.toTorrentFile(parsedTorrent)
+  this.magnetURI = parseTorrent.toMagnetURI(parsedTorrent)
+  this.torrentFile = parseTorrent.toTorrentFile(parsedTorrent)
 }
 
 Torrent.prototype._onListening = function () {
-    var self = this
-    if (self.discovery || self.destroyed) return
+  var self = this
+  if (self.discovery || self.destroyed) return
 
-    var trackerOpts = self.client.tracker
-    if (trackerOpts) {
-        trackerOpts = extend(self.client.tracker, {
-            getAnnounceOpts: function () {
-                var opts = {
-                    uploaded: self.uploaded,
-                    downloaded: self.downloaded,
-                    left: Math.max(self.length - self.downloaded, 0)
-                }
-                if (self.client.tracker.getAnnounceOpts) {
-                    extendMutable(opts, self.client.tracker.getAnnounceOpts())
-                }
-                if (self._getAnnounceOpts) {
-                    // TODO: consider deprecating this, as it's redundant with the former case
-                    extendMutable(opts, self._getAnnounceOpts())
-                }
-                return opts
-            }
-        })
-    }
-
-    // begin discovering peers via DHT and trackers
-    self.discovery = new Discovery({
-        infoHash: self.infoHash,
-        announce: self.announce,
-        peerId: self.client.peerId,
-        dht: !self.private && self.client.dht,
-        tracker: trackerOpts,
-        port: self.client.torrentPort,
-        userAgent: USER_AGENT
+  var trackerOpts = self.client.tracker
+  if (trackerOpts) {
+    trackerOpts = extend(self.client.tracker, {
+      getAnnounceOpts: function () {
+        var opts = {
+          uploaded: self.uploaded,
+          downloaded: self.downloaded,
+          left: Math.max(self.length - self.downloaded, 0)
+        }
+        if (self.client.tracker.getAnnounceOpts) {
+          extendMutable(opts, self.client.tracker.getAnnounceOpts())
+        }
+        if (self._getAnnounceOpts) {
+          // TODO: consider deprecating this, as it's redundant with the former case
+          extendMutable(opts, self._getAnnounceOpts())
+        }
+        return opts
+      }
     })
+  }
 
-    self.discovery.on('error', onError)
-    self.discovery.on('peer', onPeer)
-    self.discovery.on('trackerAnnounce', onTrackerAnnounce)
-    self.discovery.on('dhtAnnounce', onDHTAnnounce)
-    self.discovery.on('warning', onWarning)
+  // begin discovering peers via DHT and trackers
+  self.discovery = new Discovery({
+    infoHash: self.infoHash,
+    announce: self.announce,
+    peerId: self.client.peerId,
+    dht: !self.private && self.client.dht,
+    tracker: trackerOpts,
+    port: self.client.torrentPort,
+    userAgent: USER_AGENT
+  })
 
-    function onError (err) {
-        self._destroy(err)
-    }
+  self.discovery.on('error', onError)
+  self.discovery.on('peer', onPeer)
+  self.discovery.on('trackerAnnounce', onTrackerAnnounce)
+  self.discovery.on('dhtAnnounce', onDHTAnnounce)
+  self.discovery.on('warning', onWarning)
 
-    function onPeer (peer) {
-        // Don't create new outgoing TCP connections when torrent is done
-        if (typeof peer === 'string' && self.done) return
-        self.addPeer(peer)
-    }
+  function onError (err) {
+    self._destroy(err)
+  }
 
-    function onTrackerAnnounce () {
-        self.emit('trackerAnnounce')
-        if (self.numPeers === 0) self.emit('noPeers', 'tracker')
-    }
+  function onPeer (peer) {
+    // Don't create new outgoing TCP connections when torrent is done
+    if (typeof peer === 'string' && self.done) return
+    self.addPeer(peer)
+  }
 
-    function onDHTAnnounce () {
-        self.emit('dhtAnnounce')
-        if (self.numPeers === 0) self.emit('noPeers', 'dht')
-    }
+  function onTrackerAnnounce () {
+    self.emit('trackerAnnounce')
+    if (self.numPeers === 0) self.emit('noPeers', 'tracker')
+  }
 
-    function onWarning (err) {
-        self.emit('warning', err)
-    }
+  function onDHTAnnounce () {
+    self.emit('dhtAnnounce')
+    if (self.numPeers === 0) self.emit('noPeers', 'dht')
+  }
 
-    if (self.info) {
-        // if full metadata was included in initial torrent id, use it immediately. Otherwise,
-        // wait for torrent-discovery to find peers and ut_metadata to get the metadata.
-        self._onMetadata(self)
-    } else if (self.xs) {
-        self._getMetadataFromServer()
-    }
+  function onWarning (err) {
+    self.emit('warning', err)
+  }
+
+  if (self.info) {
+    // if full metadata was included in initial torrent id, use it immediately. Otherwise,
+    // wait for torrent-discovery to find peers and ut_metadata to get the metadata.
+    self._onMetadata(self)
+  } else if (self.xs) {
+    self._getMetadataFromServer()
+  }
 }
 
 Torrent.prototype._getMetadataFromServer = function () {
-    var self = this
-    var urls = Array.isArray(self.xs) ? self.xs : [ self.xs ]
+  var self = this
+  var urls = Array.isArray(self.xs) ? self.xs : [ self.xs ]
 
-    var tasks = urls.map(function (url) {
-        return function (cb) {
-            getMetadataFromURL(url, cb)
-        }
-    })
-    parallel(tasks)
-
-    function getMetadataFromURL (url, cb) {
-        if (url.indexOf('http://') !== 0 && url.indexOf('https://') !== 0) {
-            self.emit('warning', new Error('skipping non-http xs param: ' + url))
-            return cb(null)
-        }
-
-        var opts = {
-            url: url,
-            method: 'GET',
-            headers: {
-                'user-agent': USER_AGENT
-            }
-        }
-        var req
-        try {
-            req = get.concat(opts, onResponse)
-        } catch (err) {
-            self.emit('warning', new Error('skipping invalid url xs param: ' + url))
-            return cb(null)
-        }
-
-        self._xsRequests.push(req)
-
-        function onResponse (err, res, torrent) {
-            if (self.destroyed) return cb(null)
-            if (self.metadata) return cb(null)
-
-            if (err) {
-                self.emit('warning', new Error('http error from xs param: ' + url))
-                return cb(null)
-            }
-            if (res.statusCode !== 200) {
-                self.emit('warning', new Error('non-200 status code ' + res.statusCode + ' from xs param: ' + url))
-                return cb(null)
-            }
-
-            var parsedTorrent
-            try {
-                parsedTorrent = parseTorrent(torrent)
-            } catch (err) {}
-
-            if (!parsedTorrent) {
-                self.emit('warning', new Error('got invalid torrent file from xs param: ' + url))
-                return cb(null)
-            }
-
-            if (parsedTorrent.infoHash !== self.infoHash) {
-                self.emit('warning', new Error('got torrent file with incorrect info hash from xs param: ' + url))
-                return cb(null)
-            }
-
-            self._onMetadata(parsedTorrent)
-            cb(null)
-        }
+  var tasks = urls.map(function (url) {
+    return function (cb) {
+      getMetadataFromURL(url, cb)
     }
+  })
+  parallel(tasks)
+
+  function getMetadataFromURL (url, cb) {
+    if (url.indexOf('http://') !== 0 && url.indexOf('https://') !== 0) {
+      self.emit('warning', new Error('skipping non-http xs param: ' + url))
+      return cb(null)
+    }
+
+    var opts = {
+      url: url,
+      method: 'GET',
+      headers: {
+        'user-agent': USER_AGENT
+      }
+    }
+    var req
+    try {
+      req = get.concat(opts, onResponse)
+    } catch (err) {
+      self.emit('warning', new Error('skipping invalid url xs param: ' + url))
+      return cb(null)
+    }
+
+    self._xsRequests.push(req)
+
+    function onResponse (err, res, torrent) {
+      if (self.destroyed) return cb(null)
+      if (self.metadata) return cb(null)
+
+      if (err) {
+        self.emit('warning', new Error('http error from xs param: ' + url))
+        return cb(null)
+      }
+      if (res.statusCode !== 200) {
+        self.emit('warning', new Error('non-200 status code ' + res.statusCode + ' from xs param: ' + url))
+        return cb(null)
+      }
+
+      var parsedTorrent
+      try {
+        parsedTorrent = parseTorrent(torrent)
+      } catch (err) {}
+
+      if (!parsedTorrent) {
+        self.emit('warning', new Error('got invalid torrent file from xs param: ' + url))
+        return cb(null)
+      }
+
+      if (parsedTorrent.infoHash !== self.infoHash) {
+        self.emit('warning', new Error('got torrent file with incorrect info hash from xs param: ' + url))
+        return cb(null)
+      }
+
+      self._onMetadata(parsedTorrent)
+      cb(null)
+    }
+  }
 }
 
 /**
  * Called when the full torrent metadata is received.
  */
 Torrent.prototype._onMetadata = function (metadata) {
-    var self = this
-    if (self.metadata || self.destroyed) return
-    self._debug('got metadata')
+  var self = this
+  if (self.metadata || self.destroyed) return
+  self._debug('got metadata')
 
-    self._xsRequests.forEach(function (req) {
-        req.abort()
+  self._xsRequests.forEach(function (req) {
+    req.abort()
+  })
+  self._xsRequests = []
+
+  var parsedTorrent
+  if (metadata && metadata.infoHash) {
+    // `metadata` is a parsed torrent (from parse-torrent module)
+    parsedTorrent = metadata
+  } else {
+    try {
+      parsedTorrent = parseTorrent(metadata)
+    } catch (err) {
+      return self._destroy(err)
+    }
+  }
+
+  self._processParsedTorrent(parsedTorrent)
+  self.metadata = self.torrentFile
+
+  // add web seed urls (BEP19)
+  if (self.client.enableWebSeeds) {
+    self.urlList.forEach(function (url) {
+      self.addWebSeed(url)
     })
-    self._xsRequests = []
+  }
 
-    var parsedTorrent
-    if (metadata && metadata.infoHash) {
-        // `metadata` is a parsed torrent (from parse-torrent module)
-        parsedTorrent = metadata
-    } else {
-        try {
-            parsedTorrent = parseTorrent(metadata)
-        } catch (err) {
-            return self._destroy(err)
+  // start off selecting the entire torrent with low priority
+  // if (self.pieces.length !== 0) {                                        //pear modified
+  //   self.select(0, self.pieces.length - 1, false)
+  // }
+
+  self._rarityMap = new RarityMap(self)
+
+  // self.store = new ImmediateChunkStore(                                 //pear modified
+  //   new self._store(self.pieceLength, {
+  //     torrent: {
+  //       infoHash: self.infoHash
+  //     },
+  //     files: self.files.map(function (file) {
+  //       return {
+  //         path: path.join(self.path, file.path),
+  //         length: file.length,
+  //         offset: file.offset
+  //       }
+  //     }),
+  //     length: self.length
+  //   })
+  // )
+
+  self.files = self.files.map(function (file) {
+    return new File(self, file)
+  })
+
+  self._hashes = self.pieces
+
+  self.pieces = self.pieces.map(function (hash, i) {
+    var pieceLength = (i === self.pieces.length - 1)
+      ? self.lastPieceLength
+      : self.pieceLength
+    return new Piece(pieceLength)
+  })
+
+  self._reservations = self.pieces.map(function () {
+    return []
+  })
+
+  // self.bitfield = new BitField(self.pieces.length)                     //pear modified
+
+  self.wires.forEach(function (wire) {
+    // If we didn't have the metadata at the time ut_metadata was initialized for this
+    // wire, we still want to make it available to the peer in case they request it.
+    if (wire.ut_metadata) wire.ut_metadata.setMetadata(self.metadata)
+
+    self._onWireWithMetadata(wire)
+  })
+
+  self._debug('verifying existing torrent data')
+  if (self._fileModtimes && self._store === FSChunkStore) {
+    // don't verify if the files haven't been modified since we last checked
+    self.getFileModtimes(function (err, fileModtimes) {
+      if (err) return self._destroy(err)
+
+      var unchanged = self.files.map(function (_, index) {
+        return fileModtimes[index] === self._fileModtimes[index]
+      }).every(function (x) {
+        return x
+      })
+
+      if (unchanged) {
+        for (var index = 0; index < self.pieces.length; index++) {
+          self._markVerified(index)
         }
-    }
-
-    self._processParsedTorrent(parsedTorrent)
-    self.metadata = self.torrentFile
-
-    // add web seed urls (BEP19)
-    if (self.client.enableWebSeeds) {
-        self.urlList.forEach(function (url) {
-            self.addWebSeed(url)
-        })
-    }
-
-    // start off selecting the entire torrent with low priority
-    // if (self.pieces.length !== 0) {                                        //pear modified
-    //   self.select(0, self.pieces.length - 1, false)
-    // }
-
-    self._rarityMap = new RarityMap(self)
-
-    // self.store = new ImmediateChunkStore(                                 //pear modified
-    //   new self._store(self.pieceLength, {
-    //     torrent: {
-    //       infoHash: self.infoHash
-    //     },
-    //     files: self.files.map(function (file) {
-    //       return {
-    //         path: path.join(self.path, file.path),
-    //         length: file.length,
-    //         offset: file.offset
-    //       }
-    //     }),
-    //     length: self.length
-    //   })
-    // )
-
-    self.files = self.files.map(function (file) {
-        return new File(self, file)
-    })
-
-    self._hashes = self.pieces
-
-    self.pieces = self.pieces.map(function (hash, i) {
-        var pieceLength = (i === self.pieces.length - 1)
-            ? self.lastPieceLength
-            : self.pieceLength
-        return new Piece(pieceLength)
-    })
-
-    self._reservations = self.pieces.map(function () {
-        return []
-    })
-
-    // self.bitfield = new BitField(self.pieces.length)                     //pear modified
-
-    self.wires.forEach(function (wire) {
-        // If we didn't have the metadata at the time ut_metadata was initialized for this
-        // wire, we still want to make it available to the peer in case they request it.
-        if (wire.ut_metadata) wire.ut_metadata.setMetadata(self.metadata)
-
-        self._onWireWithMetadata(wire)
-    })
-
-    self._debug('verifying existing torrent data')
-    if (self._fileModtimes && self._store === FSChunkStore) {
-        // don't verify if the files haven't been modified since we last checked
-        self.getFileModtimes(function (err, fileModtimes) {
-            if (err) return self._destroy(err)
-
-            var unchanged = self.files.map(function (_, index) {
-                return fileModtimes[index] === self._fileModtimes[index]
-            }).every(function (x) {
-                return x
-            })
-
-            if (unchanged) {
-                for (var index = 0; index < self.pieces.length; index++) {
-                    self._markVerified(index)
-                }
-                self._onStore()
-            } else {
-                self._verifyPieces()
-            }
-        })
-    } else {
+        self._onStore()
+      } else {
         self._verifyPieces()
-    }
+      }
+    })
+  } else {
+    self._verifyPieces()
+  }
 
-    self.emit('metadata')
+  self.emit('metadata')
 }
 
 /*
@@ -20542,264 +20520,264 @@ Torrent.prototype._onMetadata = function (metadata) {
  * Only valid in Node, not in the browser.
  */
 Torrent.prototype.getFileModtimes = function (cb) {
-    var self = this
-    var ret = []
-    parallelLimit(self.files.map(function (file, index) {
-        return function (cb) {
-            fs.stat(path.join(self.path, file.path), function (err, stat) {
-                if (err && err.code !== 'ENOENT') return cb(err)
-                ret[index] = stat && stat.mtime.getTime()
-                cb(null)
-            })
-        }
-    }), FILESYSTEM_CONCURRENCY, function (err) {
-        self._debug('done getting file modtimes')
-        cb(err, ret)
-    })
+  var self = this
+  var ret = []
+  parallelLimit(self.files.map(function (file, index) {
+    return function (cb) {
+      fs.stat(path.join(self.path, file.path), function (err, stat) {
+        if (err && err.code !== 'ENOENT') return cb(err)
+        ret[index] = stat && stat.mtime.getTime()
+        cb(null)
+      })
+    }
+  }), FILESYSTEM_CONCURRENCY, function (err) {
+    self._debug('done getting file modtimes')
+    cb(err, ret)
+  })
 }
 
 Torrent.prototype._verifyPieces = function () {
-    var self = this
-    parallelLimit(self.pieces.map(function (_, index) {
-        return function (cb) {
-            if (self.destroyed) return cb(new Error('torrent is destroyed'))
+  var self = this
+  parallelLimit(self.pieces.map(function (_, index) {
+    return function (cb) {
+      if (self.destroyed) return cb(new Error('torrent is destroyed'))
 
-            self.store.get(index, function (err, buf) {
-                if (self.destroyed) return cb(new Error('torrent is destroyed'))
+      self.store.get(index, function (err, buf) {
+        if (self.destroyed) return cb(new Error('torrent is destroyed'))
 
-                if (err) return process.nextTick(cb, null) // ignore error
-                sha1(buf, function (hash) {
-                    if (self.destroyed) return cb(new Error('torrent is destroyed'))
+        if (err) return process.nextTick(cb, null) // ignore error
+        sha1(buf, function (hash) {
+          if (self.destroyed) return cb(new Error('torrent is destroyed'))
 
-                    if (hash === self._hashes[index]) {
-                        if (!self.pieces[index]) return
-                        self._debug('piece verified %s', index)
-                        self._markVerified(index)
-                    } else {
-                        self._debug('piece invalid %s', index)
-                    }
-                    cb(null)
-                })
-            })
-        }
-    }), FILESYSTEM_CONCURRENCY, function (err) {
-        if (err) return self._destroy(err)
-        self._debug('done verifying')
-        self._onStore()
-    })
+          if (hash === self._hashes[index]) {
+            if (!self.pieces[index]) return
+            self._debug('piece verified %s', index)
+            self._markVerified(index)
+          } else {
+            self._debug('piece invalid %s', index)
+          }
+          cb(null)
+        })
+      })
+    }
+  }), FILESYSTEM_CONCURRENCY, function (err) {
+    if (err) return self._destroy(err)
+    self._debug('done verifying')
+    self._onStore()
+  })
 }
 
 Torrent.prototype._markVerified = function (index) {
-    this.pieces[index] = null
-    this._reservations[index] = null;
-    if (!this.bitfield.get(index)) {                      //pear modified
-        this.emit('piecefromtorrent', index);
-    }
-    this.bitfield.set(index, true)
+  this.pieces[index] = null
+  this._reservations[index] = null;
+  if (!this.bitfield.get(index)) {                      //pear modified
+      this.emit('piecefromtorrent', index);
+  }
+  this.bitfield.set(index, true)
 }
 
 /**
  * Called when the metadata, listening server, and underlying chunk store is initialized.
  */
 Torrent.prototype._onStore = function () {
-    var self = this
-    if (self.destroyed) return
-    self._debug('on store')
+  var self = this
+  if (self.destroyed) return
+  self._debug('on store')
 
-    self.ready = true
-    self.emit('ready')
+  self.ready = true
+  self.emit('ready')
 
-    // Files may start out done if the file was already in the store
-    self._checkDone()
+  // Files may start out done if the file was already in the store
+  self._checkDone()
 
-    // In case any selections were made before torrent was ready
-    self._updateSelections()
+  // In case any selections were made before torrent was ready
+  self._updateSelections()
 }
 
 Torrent.prototype.destroy = function (cb) {
-    var self = this
-    self._destroy(null, cb)
+  var self = this
+  self._destroy(null, cb)
 }
 
 Torrent.prototype._destroy = function (err, cb) {
-    var self = this
-    if (self.destroyed) return
-    self.destroyed = true
-    self._debug('destroy')
+  var self = this
+  if (self.destroyed) return
+  self.destroyed = true
+  self._debug('destroy')
 
-    self.client._remove(self)
+  self.client._remove(self)
 
-    clearInterval(self._rechokeIntervalId)
+  clearInterval(self._rechokeIntervalId)
 
-    self._xsRequests.forEach(function (req) {
-        req.abort()
+  self._xsRequests.forEach(function (req) {
+    req.abort()
+  })
+
+  if (self._rarityMap) {
+    self._rarityMap.destroy()
+  }
+
+  for (var id in self._peers) {
+    self.removePeer(id)
+  }
+
+  self.files.forEach(function (file) {
+    if (file instanceof File) file._destroy()
+  })
+
+  var tasks = self._servers.map(function (server) {
+    return function (cb) {
+      server.destroy(cb)
+    }
+  })
+
+  if (self.discovery) {
+    tasks.push(function (cb) {
+      self.discovery.destroy(cb)
     })
-
-    if (self._rarityMap) {
-        self._rarityMap.destroy()
-    }
-
-    for (var id in self._peers) {
-        self.removePeer(id)
-    }
-
-    self.files.forEach(function (file) {
-        if (file instanceof File) file._destroy()
+  }
+  if (self.store) {
+    tasks.push(function (cb) {
+      self.store.close(cb)
     })
+  }
 
-    var tasks = self._servers.map(function (server) {
-        return function (cb) {
-            server.destroy(cb)
-        }
-    })
+  parallel(tasks, cb)
 
-    if (self.discovery) {
-        tasks.push(function (cb) {
-            self.discovery.destroy(cb)
-        })
+  if (err) {
+    // Torrent errors are emitted at `torrent.on('error')`. If there are no 'error'
+    // event handlers on the torrent instance, then the error will be emitted at
+    // `client.on('error')`. This prevents throwing an uncaught exception
+    // (unhandled 'error' event), but it makes it impossible to distinguish client
+    // errors versus torrent errors. Torrent errors are not fatal, and the client
+    // is still usable afterwards. Therefore, always listen for errors in both
+    // places (`client.on('error')` and `torrent.on('error')`).
+    if (self.listenerCount('error') === 0) {
+      self.client.emit('error', err)
+    } else {
+      self.emit('error', err)
     }
-    if (self.store) {
-        tasks.push(function (cb) {
-            self.store.close(cb)
-        })
-    }
+  }
 
-    parallel(tasks, cb)
+  self.emit('close')
 
-    if (err) {
-        // Torrent errors are emitted at `torrent.on('error')`. If there are no 'error'
-        // event handlers on the torrent instance, then the error will be emitted at
-        // `client.on('error')`. This prevents throwing an uncaught exception
-        // (unhandled 'error' event), but it makes it impossible to distinguish client
-        // errors versus torrent errors. Torrent errors are not fatal, and the client
-        // is still usable afterwards. Therefore, always listen for errors in both
-        // places (`client.on('error')` and `torrent.on('error')`).
-        if (self.listenerCount('error') === 0) {
-            self.client.emit('error', err)
-        } else {
-            self.emit('error', err)
-        }
-    }
-
-    self.emit('close')
-
-    self.client = null
-    self.files = []
-    self.discovery = null
-    self.store = null
-    self._rarityMap = null
-    self._peers = null
-    self._servers = null
-    self._xsRequests = null
+  self.client = null
+  self.files = []
+  self.discovery = null
+  self.store = null
+  self._rarityMap = null
+  self._peers = null
+  self._servers = null
+  self._xsRequests = null
 }
 
 Torrent.prototype.addPeer = function (peer) {
-    var self = this
-    if (self.destroyed) throw new Error('torrent is destroyed')
-    if (!self.infoHash) throw new Error('addPeer() must not be called before the `infoHash` event')
+  var self = this
+  if (self.destroyed) throw new Error('torrent is destroyed')
+  if (!self.infoHash) throw new Error('addPeer() must not be called before the `infoHash` event')
 
-    if (self.client.blocked) {
-        var host
-        if (typeof peer === 'string') {
-            var parts
-            try {
-                parts = addrToIPPort(peer)
-            } catch (e) {
-                self._debug('ignoring peer: invalid %s', peer)
-                self.emit('invalidPeer', peer)
-                return false
-            }
-            host = parts[0]
-        } else if (typeof peer.remoteAddress === 'string') {
-            host = peer.remoteAddress
-        }
-
-        if (host && self.client.blocked.contains(host)) {
-            self._debug('ignoring peer: blocked %s', peer)
-            if (typeof peer !== 'string') peer.destroy()
-            self.emit('blockedPeer', peer)
-            return false
-        }
-    }
-
-    var wasAdded = !!self._addPeer(peer)
-    if (wasAdded) {
-        self.emit('peer', peer)
-    } else {
+  if (self.client.blocked) {
+    var host
+    if (typeof peer === 'string') {
+      var parts
+      try {
+        parts = addrToIPPort(peer)
+      } catch (e) {
+        self._debug('ignoring peer: invalid %s', peer)
         self.emit('invalidPeer', peer)
+        return false
+      }
+      host = parts[0]
+    } else if (typeof peer.remoteAddress === 'string') {
+      host = peer.remoteAddress
     }
-    return wasAdded
+
+    if (host && self.client.blocked.contains(host)) {
+      self._debug('ignoring peer: blocked %s', peer)
+      if (typeof peer !== 'string') peer.destroy()
+      self.emit('blockedPeer', peer)
+      return false
+    }
+  }
+
+  var wasAdded = !!self._addPeer(peer)
+  if (wasAdded) {
+    self.emit('peer', peer)
+  } else {
+    self.emit('invalidPeer', peer)
+  }
+  return wasAdded
 }
 
 Torrent.prototype._addPeer = function (peer) {
-    var self = this
-    if (self.destroyed) {
-        if (typeof peer !== 'string') peer.destroy()
-        return null
-    }
-    if (typeof peer === 'string' && !self._validAddr(peer)) {
-        self._debug('ignoring peer: invalid %s', peer)
-        return null
-    }
+  var self = this
+  if (self.destroyed) {
+    if (typeof peer !== 'string') peer.destroy()
+    return null
+  }
+  if (typeof peer === 'string' && !self._validAddr(peer)) {
+    self._debug('ignoring peer: invalid %s', peer)
+    return null
+  }
 
-    var id = (peer && peer.id) || peer
-    if (self._peers[id]) {
-        self._debug('ignoring peer: duplicate (%s)', id)
-        if (typeof peer !== 'string') peer.destroy()
-        return null
-    }
+  var id = (peer && peer.id) || peer
+  if (self._peers[id]) {
+    self._debug('ignoring peer: duplicate (%s)', id)
+    if (typeof peer !== 'string') peer.destroy()
+    return null
+  }
 
-    if (self.paused) {
-        self._debug('ignoring peer: torrent is paused')
-        if (typeof peer !== 'string') peer.destroy()
-        return null
-    }
+  if (self.paused) {
+    self._debug('ignoring peer: torrent is paused')
+    if (typeof peer !== 'string') peer.destroy()
+    return null
+  }
 
-    self._debug('add peer %s', id)
+  self._debug('add peer %s', id)
 
-    var newPeer
-    if (typeof peer === 'string') {
-        // `peer` is an addr ("ip:port" string)
-        newPeer = Peer.createTCPOutgoingPeer(peer, self)
-    } else {
-        // `peer` is a WebRTC connection (simple-peer)
-        newPeer = Peer.createWebRTCPeer(peer, self)
-    }
+  var newPeer
+  if (typeof peer === 'string') {
+    // `peer` is an addr ("ip:port" string)
+    newPeer = Peer.createTCPOutgoingPeer(peer, self)
+  } else {
+    // `peer` is a WebRTC connection (simple-peer)
+    newPeer = Peer.createWebRTCPeer(peer, self)
+  }
 
-    self._peers[newPeer.id] = newPeer
-    self._peersLength += 1
+  self._peers[newPeer.id] = newPeer
+  self._peersLength += 1
 
-    if (typeof peer === 'string') {
-        // `peer` is an addr ("ip:port" string)
-        self._queue.push(newPeer)
-        self._drain()
-    }
+  if (typeof peer === 'string') {
+    // `peer` is an addr ("ip:port" string)
+    self._queue.push(newPeer)
+    self._drain()
+  }
 
-    return newPeer
+  return newPeer
 }
 
 Torrent.prototype.addWebSeed = function (url) {
-    if (this.destroyed) throw new Error('torrent is destroyed')
+  if (this.destroyed) throw new Error('torrent is destroyed')
 
-    if (!/^https?:\/\/.+/.test(url)) {
-        this.emit('warning', new Error('ignoring invalid web seed: ' + url))
-        this.emit('invalidPeer', url)
-        return
-    }
+  if (!/^https?:\/\/.+/.test(url)) {
+    this.emit('warning', new Error('ignoring invalid web seed: ' + url))
+    this.emit('invalidPeer', url)
+    return
+  }
 
-    if (this._peers[url]) {
-        this.emit('warning', new Error('ignoring duplicate web seed: ' + url))
-        this.emit('invalidPeer', url)
-        return
-    }
+  if (this._peers[url]) {
+    this.emit('warning', new Error('ignoring duplicate web seed: ' + url))
+    this.emit('invalidPeer', url)
+    return
+  }
 
-    this._debug('add web seed %s', url)
+  this._debug('add web seed %s', url)
 
-    var newPeer = Peer.createWebSeedPeer(url, this)
-    this._peers[newPeer.id] = newPeer
-    this._peersLength += 1
+  var newPeer = Peer.createWebSeedPeer(url, this)
+  this._peers[newPeer.id] = newPeer
+  this._peersLength += 1
 
-    this.emit('peer', url)
+  this.emit('peer', url)
 }
 
 /**
@@ -20807,512 +20785,512 @@ Torrent.prototype.addWebSeed = function (url) {
  * peer that has already sent a handshake.
  */
 Torrent.prototype._addIncomingPeer = function (peer) {
-    var self = this
-    if (self.destroyed) return peer.destroy(new Error('torrent is destroyed'))
-    if (self.paused) return peer.destroy(new Error('torrent is paused'))
+  var self = this
+  if (self.destroyed) return peer.destroy(new Error('torrent is destroyed'))
+  if (self.paused) return peer.destroy(new Error('torrent is paused'))
 
-    this._debug('add incoming peer %s', peer.id)
+  this._debug('add incoming peer %s', peer.id)
 
-    self._peers[peer.id] = peer
-    self._peersLength += 1
+  self._peers[peer.id] = peer
+  self._peersLength += 1
 }
 
 Torrent.prototype.removePeer = function (peer) {
-    var self = this
-    var id = (peer && peer.id) || peer
-    peer = self._peers[id]
+  var self = this
+  var id = (peer && peer.id) || peer
+  peer = self._peers[id]
 
-    if (!peer) return
+  if (!peer) return
 
-    this._debug('removePeer %s', id)
+  this._debug('removePeer %s', id)
 
-    delete self._peers[id]
-    self._peersLength -= 1
+  delete self._peers[id]
+  self._peersLength -= 1
 
-    peer.destroy()
+  peer.destroy()
 
-    // If torrent swarm was at capacity before, try to open a new connection now
-    self._drain()
+  // If torrent swarm was at capacity before, try to open a new connection now
+  self._drain()
 }
 
 Torrent.prototype.select = function (start, end, priority, notify) {
-    var self = this
-    if (self.destroyed) throw new Error('torrent is destroyed')
+  var self = this
+  if (self.destroyed) throw new Error('torrent is destroyed')
 
-    if (start < 0 || end < start || self.pieces.length <= end) {
-        console.log('start:'+start + 'end:'+end + 'length:'+self.pieces.length);
-        throw new Error('invalid selection ', start, ':', end)
-    }
-    priority = Number(priority) || 0
+  if (start < 0 || end < start || self.pieces.length <= end) {
+    console.log('start:'+start + 'end:'+end + 'length:'+self.pieces.length);
+    throw new Error('invalid selection ', start, ':', end)
+  }
+  priority = Number(priority) || 0
 
-    self._debug('select %s-%s (priority %s)', start, end, priority)
+  self._debug('select %s-%s (priority %s)', start, end, priority)
 
-    self._selections.push({
-        from: start,
-        to: end,
-        offset: 0,
-        priority: priority,
-        notify: notify || noop
-    })
+  self._selections.push({
+    from: start,
+    to: end,
+    offset: 0,
+    priority: priority,
+    notify: notify || noop
+  })
 
-    self._selections.sort(function (a, b) {
-        return b.priority - a.priority
-    })
+  self._selections.sort(function (a, b) {
+    return b.priority - a.priority
+  })
 
-    self._updateSelections()
+  self._updateSelections()
 }
 
 Torrent.prototype.deselect = function (start, end, priority) {
-    var self = this
-    if (self.destroyed) throw new Error('torrent is destroyed')
+  var self = this
+  if (self.destroyed) throw new Error('torrent is destroyed')
 
-    priority = Number(priority) || 0
-    self._debug('deselect %s-%s (priority %s)', start, end, priority)
+  priority = Number(priority) || 0
+  self._debug('deselect %s-%s (priority %s)', start, end, priority)
 
-    for (var i = 0; i < self._selections.length; ++i) {
-        var s = self._selections[i]
-        if (s.from === start && s.to === end && s.priority === priority) {
-            self._selections.splice(i, 1)
-            break
-        }
+  for (var i = 0; i < self._selections.length; ++i) {
+    var s = self._selections[i]
+    if (s.from === start && s.to === end && s.priority === priority) {
+      self._selections.splice(i, 1)
+      break
     }
+  }
 
-    self._updateSelections()
+  self._updateSelections()
 }
 
 Torrent.prototype.critical = function (start, end) {
-    var self = this
-    if (self.destroyed) throw new Error('torrent is destroyed')
+  var self = this
+  if (self.destroyed) throw new Error('torrent is destroyed')
 
-    self._debug('critical %s-%s', start, end)
+  self._debug('critical %s-%s', start, end)
 
-    for (var i = start; i <= end; ++i) {
-        self._critical[i] = true
-    }
+  for (var i = start; i <= end; ++i) {
+    self._critical[i] = true
+  }
 
-    self._updateSelections()
+  self._updateSelections()
 }
 
 Torrent.prototype._onWire = function (wire, addr) {
-    var self = this
-    self._debug('got wire %s (%s)', wire._debugId, addr || 'Unknown')
+  var self = this
+  self._debug('got wire %s (%s)', wire._debugId, addr || 'Unknown')
 
-    wire.on('download', function (downloaded) {
-        if (self.destroyed) return
-        self.received += downloaded
-        self._downloadSpeed(downloaded)
-        self.client._downloadSpeed(downloaded)
-        self.emit('download', downloaded)
-        self.client.emit('download', downloaded)
+  wire.on('download', function (downloaded) {
+    if (self.destroyed) return
+    self.received += downloaded
+    self._downloadSpeed(downloaded)
+    self.client._downloadSpeed(downloaded)
+    self.emit('download', downloaded)
+    self.client.emit('download', downloaded)
+  })
+
+  wire.on('upload', function (uploaded) {
+    if (self.destroyed) return
+    self.uploaded += uploaded
+    self._uploadSpeed(uploaded)
+    self.client._uploadSpeed(uploaded)
+    self.emit('upload', uploaded)
+    self.client.emit('upload', uploaded)
+  })
+
+  self.wires.push(wire)
+
+  if (addr) {
+    // Sometimes RTCPeerConnection.getStats() doesn't return an ip:port for peers
+    var parts = addrToIPPort(addr)
+    wire.remoteAddress = parts[0]
+    wire.remotePort = parts[1]
+  }
+
+  // When peer sends PORT message, add that DHT node to routing table
+  if (self.client.dht && self.client.dht.listening) {
+    wire.on('port', function (port) {
+      if (self.destroyed || self.client.dht.destroyed) {
+        return
+      }
+      if (!wire.remoteAddress) {
+        return self._debug('ignoring PORT from peer with no address')
+      }
+      if (port === 0 || port > 65536) {
+        return self._debug('ignoring invalid PORT from peer')
+      }
+
+      self._debug('port: %s (from %s)', port, addr)
+      self.client.dht.addNode({ host: wire.remoteAddress, port: port })
+    })
+  }
+
+  wire.on('timeout', function () {
+    self._debug('wire timeout (%s)', addr)
+    // TODO: this might be destroying wires too eagerly
+    wire.destroy()
+  })
+
+  // Timeout for piece requests to this peer
+  wire.setTimeout(PIECE_TIMEOUT, true)
+
+  // Send KEEP-ALIVE (every 60s) so peers will not disconnect the wire
+  wire.setKeepAlive(true)
+
+  // use ut_metadata extension
+  wire.use(utMetadata(self.metadata))
+
+  wire.ut_metadata.on('warning', function (err) {
+    self._debug('ut_metadata warning: %s', err.message)
+  })
+
+  if (!self.metadata) {
+    wire.ut_metadata.on('metadata', function (metadata) {
+      self._debug('got metadata via ut_metadata')
+      self._onMetadata(metadata)
+    })
+    wire.ut_metadata.fetch()
+  }
+
+  // use ut_pex extension if the torrent is not flagged as private
+  if (typeof utPex === 'function' && !self.private) {
+    wire.use(utPex())
+
+    wire.ut_pex.on('peer', function (peer) {
+      // Only add potential new peers when we're not seeding
+      if (self.done) return
+      self._debug('ut_pex: got peer: %s (from %s)', peer, addr)
+      self.addPeer(peer)
     })
 
-    wire.on('upload', function (uploaded) {
-        if (self.destroyed) return
-        self.uploaded += uploaded
-        self._uploadSpeed(uploaded)
-        self.client._uploadSpeed(uploaded)
-        self.emit('upload', uploaded)
-        self.client.emit('upload', uploaded)
-    })
-
-    self.wires.push(wire)
-
-    if (addr) {
-        // Sometimes RTCPeerConnection.getStats() doesn't return an ip:port for peers
-        var parts = addrToIPPort(addr)
-        wire.remoteAddress = parts[0]
-        wire.remotePort = parts[1]
-    }
-
-    // When peer sends PORT message, add that DHT node to routing table
-    if (self.client.dht && self.client.dht.listening) {
-        wire.on('port', function (port) {
-            if (self.destroyed || self.client.dht.destroyed) {
-                return
-            }
-            if (!wire.remoteAddress) {
-                return self._debug('ignoring PORT from peer with no address')
-            }
-            if (port === 0 || port > 65536) {
-                return self._debug('ignoring invalid PORT from peer')
-            }
-
-            self._debug('port: %s (from %s)', port, addr)
-            self.client.dht.addNode({ host: wire.remoteAddress, port: port })
-        })
-    }
-
-    wire.on('timeout', function () {
-        self._debug('wire timeout (%s)', addr)
-        // TODO: this might be destroying wires too eagerly
-        wire.destroy()
-    })
-
-    // Timeout for piece requests to this peer
-    wire.setTimeout(PIECE_TIMEOUT, true)
-
-    // Send KEEP-ALIVE (every 60s) so peers will not disconnect the wire
-    wire.setKeepAlive(true)
-
-    // use ut_metadata extension
-    wire.use(utMetadata(self.metadata))
-
-    wire.ut_metadata.on('warning', function (err) {
-        self._debug('ut_metadata warning: %s', err.message)
-    })
-
-    if (!self.metadata) {
-        wire.ut_metadata.on('metadata', function (metadata) {
-            self._debug('got metadata via ut_metadata')
-            self._onMetadata(metadata)
-        })
-        wire.ut_metadata.fetch()
-    }
-
-    // use ut_pex extension if the torrent is not flagged as private
-    if (typeof utPex === 'function' && !self.private) {
-        wire.use(utPex())
-
-        wire.ut_pex.on('peer', function (peer) {
-            // Only add potential new peers when we're not seeding
-            if (self.done) return
-            self._debug('ut_pex: got peer: %s (from %s)', peer, addr)
-            self.addPeer(peer)
-        })
-
-        wire.ut_pex.on('dropped', function (peer) {
-            // the remote peer believes a given peer has been dropped from the torrent swarm.
-            // if we're not currently connected to it, then remove it from the queue.
-            var peerObj = self._peers[peer]
-            if (peerObj && !peerObj.connected) {
-                self._debug('ut_pex: dropped peer: %s (from %s)', peer, addr)
-                self.removePeer(peer)
-            }
-        })
-
-        wire.once('close', function () {
-            // Stop sending updates to remote peer
-            wire.ut_pex.reset()
-        })
-    }
-
-    // Hook to allow user-defined `bittorrent-protocol` extensions
-    // More info: https://github.com/webtorrent/bittorrent-protocol#extension-api
-    self.emit('wire', wire, addr)
-
-    if (self.metadata) {
-        process.nextTick(function () {
-            // This allows wire.handshake() to be called (by Peer.onHandshake) before any
-            // messages get sent on the wire
-            self._onWireWithMetadata(wire)
-        })
-    }
-}
-
-Torrent.prototype._onWireWithMetadata = function (wire) {
-    var self = this
-    var timeoutId = null
-
-    function onChokeTimeout () {
-        if (self.destroyed || wire.destroyed) return
-
-        if (self._numQueued > 2 * (self._numConns - self.numPeers) &&
-            wire.amInterested) {
-            wire.destroy()
-        } else {
-            timeoutId = setTimeout(onChokeTimeout, CHOKE_TIMEOUT)
-            if (timeoutId.unref) timeoutId.unref()
-        }
-    }
-
-    var i
-    function updateSeedStatus () {
-        if (wire.peerPieces.buffer.length !== self.bitfield.buffer.length) return
-        for (i = 0; i < self.pieces.length; ++i) {
-            if (!wire.peerPieces.get(i)) return
-        }
-        wire.isSeeder = true
-        wire.choke() // always choke seeders
-    }
-
-    wire.on('bitfield', function () {
-        updateSeedStatus()
-        self._update()
-    })
-
-    wire.on('have', function () {
-        updateSeedStatus()
-        self._update()
-    })
-
-    wire.once('interested', function () {
-        wire.unchoke()
+    wire.ut_pex.on('dropped', function (peer) {
+      // the remote peer believes a given peer has been dropped from the torrent swarm.
+      // if we're not currently connected to it, then remove it from the queue.
+      var peerObj = self._peers[peer]
+      if (peerObj && !peerObj.connected) {
+        self._debug('ut_pex: dropped peer: %s (from %s)', peer, addr)
+        self.removePeer(peer)
+      }
     })
 
     wire.once('close', function () {
-        clearTimeout(timeoutId)
+      // Stop sending updates to remote peer
+      wire.ut_pex.reset()
     })
+  }
 
-    wire.on('choke', function () {
-        clearTimeout(timeoutId)
-        timeoutId = setTimeout(onChokeTimeout, CHOKE_TIMEOUT)
-        if (timeoutId.unref) timeoutId.unref()
+  // Hook to allow user-defined `bittorrent-protocol` extensions
+  // More info: https://github.com/webtorrent/bittorrent-protocol#extension-api
+  self.emit('wire', wire, addr)
+
+  if (self.metadata) {
+    process.nextTick(function () {
+      // This allows wire.handshake() to be called (by Peer.onHandshake) before any
+      // messages get sent on the wire
+      self._onWireWithMetadata(wire)
     })
+  }
+}
 
-    wire.on('unchoke', function () {
-        clearTimeout(timeoutId)
-        self._update()
-    })
+Torrent.prototype._onWireWithMetadata = function (wire) {
+  var self = this
+  var timeoutId = null
 
-    wire.on('request', function (index, offset, length, cb) {
-        if (length > MAX_BLOCK_LENGTH) {
-            // Per spec, disconnect from peers that request >128KB
-            return wire.destroy()
-        }
-        if (self.pieces[index]) return
-        self.store.get(index, { offset: offset, length: length }, cb)
-    })
+  function onChokeTimeout () {
+    if (self.destroyed || wire.destroyed) return
 
-    wire.bitfield(self.bitfield) // always send bitfield (required)
-    wire.interested() // always start out interested
-
-    // Send PORT message to peers that support DHT
-    if (wire.peerExtensions.dht && self.client.dht && self.client.dht.listening) {
-        wire.port(self.client.dht.address().port)
+    if (self._numQueued > 2 * (self._numConns - self.numPeers) &&
+      wire.amInterested) {
+      wire.destroy()
+    } else {
+      timeoutId = setTimeout(onChokeTimeout, CHOKE_TIMEOUT)
+      if (timeoutId.unref) timeoutId.unref()
     }
+  }
 
-    if (wire.type !== 'webSeed') { // do not choke on webseeds
-        timeoutId = setTimeout(onChokeTimeout, CHOKE_TIMEOUT)
-        if (timeoutId.unref) timeoutId.unref()
+  var i
+  function updateSeedStatus () {
+    if (wire.peerPieces.buffer.length !== self.bitfield.buffer.length) return
+    for (i = 0; i < self.pieces.length; ++i) {
+      if (!wire.peerPieces.get(i)) return
     }
+    wire.isSeeder = true
+    wire.choke() // always choke seeders
+  }
 
-    wire.isSeeder = false
+  wire.on('bitfield', function () {
     updateSeedStatus()
+    self._update()
+  })
+
+  wire.on('have', function () {
+    updateSeedStatus()
+    self._update()
+  })
+
+  wire.once('interested', function () {
+    wire.unchoke()
+  })
+
+  wire.once('close', function () {
+    clearTimeout(timeoutId)
+  })
+
+  wire.on('choke', function () {
+    clearTimeout(timeoutId)
+    timeoutId = setTimeout(onChokeTimeout, CHOKE_TIMEOUT)
+    if (timeoutId.unref) timeoutId.unref()
+  })
+
+  wire.on('unchoke', function () {
+    clearTimeout(timeoutId)
+    self._update()
+  })
+
+  wire.on('request', function (index, offset, length, cb) {
+    if (length > MAX_BLOCK_LENGTH) {
+      // Per spec, disconnect from peers that request >128KB
+      return wire.destroy()
+    }
+    if (self.pieces[index]) return
+    self.store.get(index, { offset: offset, length: length }, cb)
+  })
+
+  wire.bitfield(self.bitfield) // always send bitfield (required)
+  wire.interested() // always start out interested
+
+  // Send PORT message to peers that support DHT
+  if (wire.peerExtensions.dht && self.client.dht && self.client.dht.listening) {
+    wire.port(self.client.dht.address().port)
+  }
+
+  if (wire.type !== 'webSeed') { // do not choke on webseeds
+    timeoutId = setTimeout(onChokeTimeout, CHOKE_TIMEOUT)
+    if (timeoutId.unref) timeoutId.unref()
+  }
+
+  wire.isSeeder = false
+  updateSeedStatus()
 }
 
 /**
  * Called on selection changes.
  */
 Torrent.prototype._updateSelections = function () {
-    var self = this
-    if (!self.ready || self.destroyed) return
+  var self = this
+  if (!self.ready || self.destroyed) return
 
-    process.nextTick(function () {
-        self._gcSelections()
-    })
-    self._updateInterest()
-    self._update()
+  process.nextTick(function () {
+    self._gcSelections()
+  })
+  self._updateInterest()
+  self._update()
 }
 
 /**
  * Garbage collect selections with respect to the store's current state.
  */
 Torrent.prototype._gcSelections = function () {
-    var self = this
+  var self = this
 
-    for (var i = 0; i < self._selections.length; ++i) {
-        var s = self._selections[i]
-        var oldOffset = s.offset
+  for (var i = 0; i < self._selections.length; ++i) {
+    var s = self._selections[i]
+    var oldOffset = s.offset
 
-        // check for newly downloaded pieces in selection
-        while (self.bitfield.get(s.from + s.offset) && s.from + s.offset < s.to) {
-            s.offset += 1
-        }
-
-        if (oldOffset !== s.offset) s.notify()
-        if (s.to !== s.from + s.offset) continue
-        if (!self.bitfield.get(s.from + s.offset)) continue
-
-        self._selections.splice(i, 1) // remove fully downloaded selection
-        i -= 1 // decrement i to offset splice
-
-        s.notify()
-        self._updateInterest()
+    // check for newly downloaded pieces in selection
+    while (self.bitfield.get(s.from + s.offset) && s.from + s.offset < s.to) {
+      s.offset += 1
     }
 
-    if (!self._selections.length) self.emit('idle')
+    if (oldOffset !== s.offset) s.notify()
+    if (s.to !== s.from + s.offset) continue
+    if (!self.bitfield.get(s.from + s.offset)) continue
+
+    self._selections.splice(i, 1) // remove fully downloaded selection
+    i -= 1 // decrement i to offset splice
+
+    s.notify()
+    self._updateInterest()
+  }
+
+  if (!self._selections.length) self.emit('idle')
 }
 
 /**
  * Update interested status for all peers.
  */
 Torrent.prototype._updateInterest = function () {
-    var self = this
+  var self = this
 
-    var prev = self._amInterested
-    self._amInterested = !!self._selections.length
+  var prev = self._amInterested
+  self._amInterested = !!self._selections.length
 
-    self.wires.forEach(function (wire) {
-        // TODO: only call wire.interested if the wire has at least one piece we need
-        if (self._amInterested) wire.interested()
-        else wire.uninterested()
-    })
+  self.wires.forEach(function (wire) {
+    // TODO: only call wire.interested if the wire has at least one piece we need
+    if (self._amInterested) wire.interested()
+    else wire.uninterested()
+  })
 
-    if (prev === self._amInterested) return
-    if (self._amInterested) self.emit('interested')
-    else self.emit('uninterested')
+  if (prev === self._amInterested) return
+  if (self._amInterested) self.emit('interested')
+  else self.emit('uninterested')
 }
 
 /**
  * Heartbeat to update all peers and their requests.
  */
 Torrent.prototype._update = function () {
-    var self = this
-    if (self.destroyed) return
+  var self = this
+  if (self.destroyed) return
 
-    // update wires in random order for better request distribution
-    var ite = randomIterate(self.wires)
-    var wire
-    while ((wire = ite())) {
-        self._updateWire(wire)
-    }
+  // update wires in random order for better request distribution
+  var ite = randomIterate(self.wires)
+  var wire
+  while ((wire = ite())) {
+    self._updateWire(wire)
+  }
 }
 
 /**
  * Attempts to update a peer's requests
  */
 Torrent.prototype._updateWire = function (wire) {
-    var self = this
+  var self = this
 
-    if (wire.peerChoking) return
-    if (!wire.downloaded) return validateWire()
+  if (wire.peerChoking) return
+  if (!wire.downloaded) return validateWire()
 
-    var minOutstandingRequests = getBlockPipelineLength(wire, PIPELINE_MIN_DURATION)
-    if (wire.requests.length >= minOutstandingRequests) return
-    var maxOutstandingRequests = getBlockPipelineLength(wire, PIPELINE_MAX_DURATION)
+  var minOutstandingRequests = getBlockPipelineLength(wire, PIPELINE_MIN_DURATION)
+  if (wire.requests.length >= minOutstandingRequests) return
+  var maxOutstandingRequests = getBlockPipelineLength(wire, PIPELINE_MAX_DURATION)
 
-    trySelectWire(false) || trySelectWire(true)
+  trySelectWire(false) || trySelectWire(true)
 
-    function genPieceFilterFunc (start, end, tried, rank) {
-        return function (i) {
-            return i >= start && i <= end && !(i in tried) && wire.peerPieces.get(i) && (!rank || rank(i))
+  function genPieceFilterFunc (start, end, tried, rank) {
+    return function (i) {
+      return i >= start && i <= end && !(i in tried) && wire.peerPieces.get(i) && (!rank || rank(i))
+    }
+  }
+
+  // TODO: Do we need both validateWire and trySelectWire?
+  function validateWire () {
+    if (wire.requests.length) return
+
+    var i = self._selections.length
+    while (i--) {
+      var next = self._selections[i]
+      var piece
+      if (self.strategy === 'rarest') {
+        var start = next.from + next.offset
+        var end = next.to
+        var len = end - start + 1
+        var tried = {}
+        var tries = 0
+        var filter = genPieceFilterFunc(start, end, tried)
+
+        while (tries < len) {
+          piece = self._rarityMap.getRarestPiece(filter)
+          if (piece < 0) break
+          if (self._request(wire, piece, false)) return
+          tried[piece] = true
+          tries += 1
         }
+      } else {
+        for (piece = next.to; piece >= next.from + next.offset; --piece) {
+          if (!wire.peerPieces.get(piece)) continue
+          if (self._request(wire, piece, false)) return
+        }
+      }
     }
 
-    // TODO: Do we need both validateWire and trySelectWire?
-    function validateWire () {
-        if (wire.requests.length) return
+    // TODO: wire failed to validate as useful; should we close it?
+    // probably not, since 'have' and 'bitfield' messages might be coming
+  }
 
-        var i = self._selections.length
-        while (i--) {
-            var next = self._selections[i]
-            var piece
-            if (self.strategy === 'rarest') {
-                var start = next.from + next.offset
-                var end = next.to
-                var len = end - start + 1
-                var tried = {}
-                var tries = 0
-                var filter = genPieceFilterFunc(start, end, tried)
+  function speedRanker () {
+    var speed = wire.downloadSpeed() || 1
+    if (speed > SPEED_THRESHOLD) return function () { return true }
 
-                while (tries < len) {
-                    piece = self._rarityMap.getRarestPiece(filter)
-                    if (piece < 0) break
-                    if (self._request(wire, piece, false)) return
-                    tried[piece] = true
-                    tries += 1
-                }
-            } else {
-                for (piece = next.to; piece >= next.from + next.offset; --piece) {
-                    if (!wire.peerPieces.get(piece)) continue
-                    if (self._request(wire, piece, false)) return
-                }
-            }
-        }
+    var secs = Math.max(1, wire.requests.length) * Piece.BLOCK_LENGTH / speed
+    var tries = 10
+    var ptr = 0
 
-        // TODO: wire failed to validate as useful; should we close it?
-        // probably not, since 'have' and 'bitfield' messages might be coming
-    }
+    return function (index) {
+      if (!tries || self.bitfield.get(index)) return true
 
-    function speedRanker () {
-        var speed = wire.downloadSpeed() || 1
-        if (speed > SPEED_THRESHOLD) return function () { return true }
+      var missing = self.pieces[index].missing
 
-        var secs = Math.max(1, wire.requests.length) * Piece.BLOCK_LENGTH / speed
-        var tries = 10
-        var ptr = 0
+      for (; ptr < self.wires.length; ptr++) {
+        var otherWire = self.wires[ptr]
+        var otherSpeed = otherWire.downloadSpeed()
 
-        return function (index) {
-            if (!tries || self.bitfield.get(index)) return true
+        if (otherSpeed < SPEED_THRESHOLD) continue
+        if (otherSpeed <= speed) continue
+        if (!otherWire.peerPieces.get(index)) continue
+        if ((missing -= otherSpeed * secs) > 0) continue
 
-            var missing = self.pieces[index].missing
-
-            for (; ptr < self.wires.length; ptr++) {
-                var otherWire = self.wires[ptr]
-                var otherSpeed = otherWire.downloadSpeed()
-
-                if (otherSpeed < SPEED_THRESHOLD) continue
-                if (otherSpeed <= speed) continue
-                if (!otherWire.peerPieces.get(index)) continue
-                if ((missing -= otherSpeed * secs) > 0) continue
-
-                tries--
-                return false
-            }
-
-            return true
-        }
-    }
-
-    function shufflePriority (i) {
-        var last = i
-        for (var j = i; j < self._selections.length && self._selections[j].priority; j++) {
-            last = j
-        }
-        var tmp = self._selections[i]
-        self._selections[i] = self._selections[last]
-        self._selections[last] = tmp
-    }
-
-    function trySelectWire (hotswap) {
-        if (wire.requests.length >= maxOutstandingRequests) return true
-        var rank = speedRanker()
-
-        for (var i = 0; i < self._selections.length; i++) {
-            var next = self._selections[i]
-
-            var piece
-            if (self.strategy === 'rarest') {
-                var start = next.from + next.offset
-                var end = next.to
-                var len = end - start + 1
-                var tried = {}
-                var tries = 0
-                var filter = genPieceFilterFunc(start, end, tried, rank)
-
-                while (tries < len) {
-                    piece = self._rarityMap.getRarestPiece(filter)
-                    if (piece < 0) break
-
-                    // request all non-reserved blocks in this piece
-                    while (self._request(wire, piece, self._critical[piece] || hotswap)) {}
-
-                    if (wire.requests.length < maxOutstandingRequests) {
-                        tried[piece] = true
-                        tries++
-                        continue
-                    }
-
-                    if (next.priority) shufflePriority(i)
-                    return true
-                }
-            } else {
-                for (piece = next.from + next.offset; piece <= next.to; piece++) {
-                    if (!wire.peerPieces.get(piece) || !rank(piece)) continue
-
-                    // request all non-reserved blocks in piece
-                    while (self._request(wire, piece, self._critical[piece] || hotswap)) {}
-
-                    if (wire.requests.length < maxOutstandingRequests) continue
-
-                    if (next.priority) shufflePriority(i)
-                    return true
-                }
-            }
-        }
-
+        tries--
         return false
+      }
+
+      return true
     }
+  }
+
+  function shufflePriority (i) {
+    var last = i
+    for (var j = i; j < self._selections.length && self._selections[j].priority; j++) {
+      last = j
+    }
+    var tmp = self._selections[i]
+    self._selections[i] = self._selections[last]
+    self._selections[last] = tmp
+  }
+
+  function trySelectWire (hotswap) {
+    if (wire.requests.length >= maxOutstandingRequests) return true
+    var rank = speedRanker()
+
+    for (var i = 0; i < self._selections.length; i++) {
+      var next = self._selections[i]
+
+      var piece
+      if (self.strategy === 'rarest') {
+        var start = next.from + next.offset
+        var end = next.to
+        var len = end - start + 1
+        var tried = {}
+        var tries = 0
+        var filter = genPieceFilterFunc(start, end, tried, rank)
+
+        while (tries < len) {
+          piece = self._rarityMap.getRarestPiece(filter)
+          if (piece < 0) break
+
+          // request all non-reserved blocks in this piece
+          while (self._request(wire, piece, self._critical[piece] || hotswap)) {}
+
+          if (wire.requests.length < maxOutstandingRequests) {
+            tried[piece] = true
+            tries++
+            continue
+          }
+
+          if (next.priority) shufflePriority(i)
+          return true
+        }
+      } else {
+        for (piece = next.from + next.offset; piece <= next.to; piece++) {
+          if (!wire.peerPieces.get(piece) || !rank(piece)) continue
+
+          // request all non-reserved blocks in piece
+          while (self._request(wire, piece, self._critical[piece] || hotswap)) {}
+
+          if (wire.requests.length < maxOutstandingRequests) continue
+
+          if (next.priority) shufflePriority(i)
+          return true
+        }
+      }
+    }
+
+    return false
+  }
 }
 
 /**
@@ -21320,74 +21298,74 @@ Torrent.prototype._updateWire = function (wire) {
  * unchoking as described in BEP3.
  */
 Torrent.prototype._rechoke = function () {
-    var self = this
-    if (!self.ready) return
+  var self = this
+  if (!self.ready) return
 
-    if (self._rechokeOptimisticTime > 0) self._rechokeOptimisticTime -= 1
-    else self._rechokeOptimisticWire = null
+  if (self._rechokeOptimisticTime > 0) self._rechokeOptimisticTime -= 1
+  else self._rechokeOptimisticWire = null
 
-    var peers = []
+  var peers = []
 
-    self.wires.forEach(function (wire) {
-        if (!wire.isSeeder && wire !== self._rechokeOptimisticWire) {
-            peers.push({
-                wire: wire,
-                downloadSpeed: wire.downloadSpeed(),
-                uploadSpeed: wire.uploadSpeed(),
-                salt: Math.random(),
-                isChoked: true
-            })
-        }
-    })
+  self.wires.forEach(function (wire) {
+    if (!wire.isSeeder && wire !== self._rechokeOptimisticWire) {
+      peers.push({
+        wire: wire,
+        downloadSpeed: wire.downloadSpeed(),
+        uploadSpeed: wire.uploadSpeed(),
+        salt: Math.random(),
+        isChoked: true
+      })
+    }
+  })
 
-    peers.sort(rechokeSort)
+  peers.sort(rechokeSort)
 
-    var unchokeInterested = 0
-    var i = 0
-    for (; i < peers.length && unchokeInterested < self._rechokeNumSlots; ++i) {
-        peers[i].isChoked = false
-        if (peers[i].wire.peerInterested) unchokeInterested += 1
+  var unchokeInterested = 0
+  var i = 0
+  for (; i < peers.length && unchokeInterested < self._rechokeNumSlots; ++i) {
+    peers[i].isChoked = false
+    if (peers[i].wire.peerInterested) unchokeInterested += 1
+  }
+
+  // Optimistically unchoke a peer
+  if (!self._rechokeOptimisticWire && i < peers.length && self._rechokeNumSlots) {
+    var candidates = peers.slice(i).filter(function (peer) { return peer.wire.peerInterested })
+    var optimistic = candidates[randomInt(candidates.length)]
+
+    if (optimistic) {
+      optimistic.isChoked = false
+      self._rechokeOptimisticWire = optimistic.wire
+      self._rechokeOptimisticTime = RECHOKE_OPTIMISTIC_DURATION
+    }
+  }
+
+  // Unchoke best peers
+  peers.forEach(function (peer) {
+    if (peer.wire.amChoking !== peer.isChoked) {
+      if (peer.isChoked) peer.wire.choke()
+      else peer.wire.unchoke()
+    }
+  })
+
+  function rechokeSort (peerA, peerB) {
+    // Prefer higher download speed
+    if (peerA.downloadSpeed !== peerB.downloadSpeed) {
+      return peerB.downloadSpeed - peerA.downloadSpeed
     }
 
-    // Optimistically unchoke a peer
-    if (!self._rechokeOptimisticWire && i < peers.length && self._rechokeNumSlots) {
-        var candidates = peers.slice(i).filter(function (peer) { return peer.wire.peerInterested })
-        var optimistic = candidates[randomInt(candidates.length)]
-
-        if (optimistic) {
-            optimistic.isChoked = false
-            self._rechokeOptimisticWire = optimistic.wire
-            self._rechokeOptimisticTime = RECHOKE_OPTIMISTIC_DURATION
-        }
+    // Prefer higher upload speed
+    if (peerA.uploadSpeed !== peerB.uploadSpeed) {
+      return peerB.uploadSpeed - peerA.uploadSpeed
     }
 
-    // Unchoke best peers
-    peers.forEach(function (peer) {
-        if (peer.wire.amChoking !== peer.isChoked) {
-            if (peer.isChoked) peer.wire.choke()
-            else peer.wire.unchoke()
-        }
-    })
-
-    function rechokeSort (peerA, peerB) {
-        // Prefer higher download speed
-        if (peerA.downloadSpeed !== peerB.downloadSpeed) {
-            return peerB.downloadSpeed - peerA.downloadSpeed
-        }
-
-        // Prefer higher upload speed
-        if (peerA.uploadSpeed !== peerB.uploadSpeed) {
-            return peerB.uploadSpeed - peerA.uploadSpeed
-        }
-
-        // Prefer unchoked
-        if (peerA.wire.amChoking !== peerB.wire.amChoking) {
-            return peerA.wire.amChoking ? 1 : -1
-        }
-
-        // Random order
-        return peerA.salt - peerB.salt
+    // Prefer unchoked
+    if (peerA.wire.amChoking !== peerB.wire.amChoking) {
+      return peerA.wire.amChoking ? 1 : -1
     }
+
+    // Random order
+    return peerA.salt - peerB.salt
+  }
 }
 
 /**
@@ -21395,245 +21373,245 @@ Torrent.prototype._rechoke = function () {
  * given wire may effectively swap out the request for one of its own.
  */
 Torrent.prototype._hotswap = function (wire, index) {
-    var self = this
+  var self = this
 
-    var speed = wire.downloadSpeed()
-    if (speed < Piece.BLOCK_LENGTH) return false
-    if (!self._reservations[index]) return false
+  var speed = wire.downloadSpeed()
+  if (speed < Piece.BLOCK_LENGTH) return false
+  if (!self._reservations[index]) return false
 
-    var r = self._reservations[index]
-    if (!r) {
-        return false
-    }
+  var r = self._reservations[index]
+  if (!r) {
+    return false
+  }
 
-    var minSpeed = Infinity
-    var minWire
+  var minSpeed = Infinity
+  var minWire
 
-    var i
-    for (i = 0; i < r.length; i++) {
-        var otherWire = r[i]
-        if (!otherWire || otherWire === wire) continue
+  var i
+  for (i = 0; i < r.length; i++) {
+    var otherWire = r[i]
+    if (!otherWire || otherWire === wire) continue
 
-        var otherSpeed = otherWire.downloadSpeed()
-        if (otherSpeed >= SPEED_THRESHOLD) continue
-        if (2 * otherSpeed > speed || otherSpeed > minSpeed) continue
+    var otherSpeed = otherWire.downloadSpeed()
+    if (otherSpeed >= SPEED_THRESHOLD) continue
+    if (2 * otherSpeed > speed || otherSpeed > minSpeed) continue
 
-        minWire = otherWire
-        minSpeed = otherSpeed
-    }
+    minWire = otherWire
+    minSpeed = otherSpeed
+  }
 
-    if (!minWire) return false
+  if (!minWire) return false
 
-    for (i = 0; i < r.length; i++) {
-        if (r[i] === minWire) r[i] = null
-    }
+  for (i = 0; i < r.length; i++) {
+    if (r[i] === minWire) r[i] = null
+  }
 
-    for (i = 0; i < minWire.requests.length; i++) {
-        var req = minWire.requests[i]
-        if (req.piece !== index) continue
+  for (i = 0; i < minWire.requests.length; i++) {
+    var req = minWire.requests[i]
+    if (req.piece !== index) continue
 
-        self.pieces[index].cancel((req.offset / Piece.BLOCK_LENGTH) | 0)
-    }
+    self.pieces[index].cancel((req.offset / Piece.BLOCK_LENGTH) | 0)
+  }
 
-    self.emit('hotswap', minWire, wire, index)
-    return true
+  self.emit('hotswap', minWire, wire, index)
+  return true
 }
 
 /**
  * Attempts to request a block from the given wire.
  */
 Torrent.prototype._request = function (wire, index, hotswap) {
-    var self = this
-    var numRequests = wire.requests.length
-    var isWebSeed = wire.type === 'webSeed'
+  var self = this
+  var numRequests = wire.requests.length
+  var isWebSeed = wire.type === 'webSeed'
 
-    if (self.bitfield.get(index)) return false
+  if (self.bitfield.get(index)) return false
 
-    var maxOutstandingRequests = isWebSeed
-        ? Math.min(
-            getPiecePipelineLength(wire, PIPELINE_MAX_DURATION, self.pieceLength),
-            self.maxWebConns
-        )
-        : getBlockPipelineLength(wire, PIPELINE_MAX_DURATION)
+  var maxOutstandingRequests = isWebSeed
+    ? Math.min(
+        getPiecePipelineLength(wire, PIPELINE_MAX_DURATION, self.pieceLength),
+        self.maxWebConns
+      )
+    : getBlockPipelineLength(wire, PIPELINE_MAX_DURATION)
 
-    if (numRequests >= maxOutstandingRequests) return false
-    // var endGame = (wire.requests.length === 0 && self.store.numMissing < 30)
+  if (numRequests >= maxOutstandingRequests) return false
+  // var endGame = (wire.requests.length === 0 && self.store.numMissing < 30)
 
-    var piece = self.pieces[index]
-    var reservation = isWebSeed ? piece.reserveRemaining() : piece.reserve()
+  var piece = self.pieces[index]
+  var reservation = isWebSeed ? piece.reserveRemaining() : piece.reserve()
 
-    if (reservation === -1 && hotswap && self._hotswap(wire, index)) {
-        reservation = isWebSeed ? piece.reserveRemaining() : piece.reserve()
+  if (reservation === -1 && hotswap && self._hotswap(wire, index)) {
+    reservation = isWebSeed ? piece.reserveRemaining() : piece.reserve()
+  }
+  if (reservation === -1) return false
+
+  var r = self._reservations[index]
+  if (!r) r = self._reservations[index] = []
+  var i = r.indexOf(null)
+  if (i === -1) i = r.length
+  r[i] = wire
+
+  var chunkOffset = piece.chunkOffset(reservation)
+  var chunkLength = isWebSeed ? piece.chunkLengthRemaining(reservation) : piece.chunkLength(reservation)
+
+  wire.request(index, chunkOffset, chunkLength, function onChunk (err, chunk) {
+    if (self.destroyed) return
+
+    // TODO: what is this for?
+    if (!self.ready) return self.once('ready', function () { onChunk(err, chunk) })
+
+    if (r[i] === wire) r[i] = null
+
+    if (piece !== self.pieces[index]) return onUpdateTick()
+
+    if (err) {
+      self._debug(
+        'error getting piece %s (offset: %s length: %s) from %s: %s',
+        index, chunkOffset, chunkLength, wire.remoteAddress + ':' + wire.remotePort,
+        err.message
+      )
+      isWebSeed ? piece.cancelRemaining(reservation) : piece.cancel(reservation)
+      onUpdateTick()
+      return
     }
-    if (reservation === -1) return false
 
-    var r = self._reservations[index]
-    if (!r) r = self._reservations[index] = []
-    var i = r.indexOf(null)
-    if (i === -1) i = r.length
-    r[i] = wire
+    self._debug(
+      'got piece %s (offset: %s length: %s) from %s',
+      index, chunkOffset, chunkLength, wire.remoteAddress + ':' + wire.remotePort
+    )
 
-    var chunkOffset = piece.chunkOffset(reservation)
-    var chunkLength = isWebSeed ? piece.chunkLengthRemaining(reservation) : piece.chunkLength(reservation)
+    if (!piece.set(reservation, chunk, wire)) return onUpdateTick()
 
-    wire.request(index, chunkOffset, chunkLength, function onChunk (err, chunk) {
-        if (self.destroyed) return
+    var buf = piece.flush()
 
-        // TODO: what is this for?
-        if (!self.ready) return self.once('ready', function () { onChunk(err, chunk) })
+    // TODO: might need to set self.pieces[index] = null here since sha1 is async
 
-        if (r[i] === wire) r[i] = null
+    sha1(buf, function (hash) {
+      if (self.destroyed) return
 
-        if (piece !== self.pieces[index]) return onUpdateTick()
+      if (hash === self._hashes[index]) {
+        if (!self.pieces[index]) return
+        self._debug('piece verified %s', index)
 
-        if (err) {
-            self._debug(
-                'error getting piece %s (offset: %s length: %s) from %s: %s',
-                index, chunkOffset, chunkLength, wire.remoteAddress + ':' + wire.remotePort,
-                err.message
-            )
-            isWebSeed ? piece.cancelRemaining(reservation) : piece.cancel(reservation)
-            onUpdateTick()
-            return
+        self.pieces[index] = null
+        self._reservations[index] = null
+        if (!self.bitfield.get(index)) {                      //pear modified
+            self.emit('piecefromtorrent', index);
         }
-
-        self._debug(
-            'got piece %s (offset: %s length: %s) from %s',
-            index, chunkOffset, chunkLength, wire.remoteAddress + ':' + wire.remotePort
-        )
-
-        if (!piece.set(reservation, chunk, wire)) return onUpdateTick()
-
-        var buf = piece.flush()
-
-        // TODO: might need to set self.pieces[index] = null here since sha1 is async
-
-        sha1(buf, function (hash) {
-            if (self.destroyed) return
-
-            if (hash === self._hashes[index]) {
-                if (!self.pieces[index]) return
-                self._debug('piece verified %s', index)
-
-                self.pieces[index] = null
-                self._reservations[index] = null;
-                if (!self.bitfield.get(index)) {                      //pear modified
-                    self.emit('piecefromtorrent', index);
-                }
-                self.bitfield.set(index, true)
-                self.store.put(index, buf)
-                // console.log('self.store.put:'+index);
-                self.wires.forEach(function (wire) {
-                    wire.have(index)
-                })
-
-                // We also check `self.destroyed` since `torrent.destroy()` could have been
-                // called in the `torrent.on('done')` handler, triggered by `_checkDone()`.
-                if (self._checkDone() && !self.destroyed) self.discovery.complete()
-            } else {
-                self.pieces[index] = new Piece(piece.length)
-                self.emit('warning', new Error('Piece ' + index + ' failed verification'))
-            }
-            onUpdateTick()
+        self.bitfield.set(index, true)
+        self.store.put(index, buf)
+        // console.log('self.store.put:'+index);
+        self.wires.forEach(function (wire) {
+          wire.have(index)
         })
+
+        // We also check `self.destroyed` since `torrent.destroy()` could have been
+        // called in the `torrent.on('done')` handler, triggered by `_checkDone()`.
+        if (self._checkDone() && !self.destroyed) self.discovery.complete()
+      } else {
+        self.pieces[index] = new Piece(piece.length)
+        self.emit('warning', new Error('Piece ' + index + ' failed verification'))
+      }
+      onUpdateTick()
     })
+  })
 
-    function onUpdateTick () {
-        process.nextTick(function () { self._update() })
-    }
+  function onUpdateTick () {
+    process.nextTick(function () { self._update() })
+  }
 
-    return true
+  return true
 }
 
 Torrent.prototype._checkDone = function () {
-    var self = this
-    if (self.destroyed) return
+  var self = this
+  if (self.destroyed) return
 
-    // are any new files done?
-    self.files.forEach(function (file) {
-        if (file.done) return
-        for (var i = file._startPiece; i <= file._endPiece; ++i) {
-            if (!self.bitfield.get(i)) return
-        }
-        file.done = true
-        file.emit('done')
-        self._debug('file done: ' + file.name)
-    })
-
-    // is the torrent done? (if all current selections are satisfied, or there are
-    // no selections, then torrent is done)
-    var done = true
-    for (var i = 0; i < self._selections.length; i++) {
-        var selection = self._selections[i]
-        for (var piece = selection.from; piece <= selection.to; piece++) {
-            if (!self.bitfield.get(piece)) {
-                done = false
-                break
-            }
-        }
-        if (!done) break
+  // are any new files done?
+  self.files.forEach(function (file) {
+    if (file.done) return
+    for (var i = file._startPiece; i <= file._endPiece; ++i) {
+      if (!self.bitfield.get(i)) return
     }
-    if (!self.done && done) {
-        self.done = true
-        self._debug('torrent done: ' + self.infoHash)
-        self.emit('done')
-    }
-    self._gcSelections()
+    file.done = true
+    file.emit('done')
+    self._debug('file done: ' + file.name)
+  })
 
-    return done
+  // is the torrent done? (if all current selections are satisfied, or there are
+  // no selections, then torrent is done)
+  var done = true
+  for (var i = 0; i < self._selections.length; i++) {
+    var selection = self._selections[i]
+    for (var piece = selection.from; piece <= selection.to; piece++) {
+      if (!self.bitfield.get(piece)) {
+        done = false
+        break
+      }
+    }
+    if (!done) break
+  }
+  if (!self.done && done) {
+    self.done = true
+    self._debug('torrent done: ' + self.infoHash)
+    self.emit('done')
+  }
+  self._gcSelections()
+
+  return done
 }
 
 Torrent.prototype.load = function (streams, cb) {
-    var self = this
-    if (self.destroyed) throw new Error('torrent is destroyed')
-    if (!self.ready) return self.once('ready', function () { self.load(streams, cb) })
+  var self = this
+  if (self.destroyed) throw new Error('torrent is destroyed')
+  if (!self.ready) return self.once('ready', function () { self.load(streams, cb) })
 
-    if (!Array.isArray(streams)) streams = [ streams ]
-    if (!cb) cb = noop
+  if (!Array.isArray(streams)) streams = [ streams ]
+  if (!cb) cb = noop
 
-    var readable = new MultiStream(streams)
-    var writable = new ChunkStoreWriteStream(self.store, self.pieceLength)
+  var readable = new MultiStream(streams)
+  var writable = new ChunkStoreWriteStream(self.store, self.pieceLength)
 
-    pump(readable, writable, function (err) {
-        if (err) return cb(err)
-        self.pieces.forEach(function (piece, index) {
-            self.pieces[index] = null
-            self._reservations[index] = null;
-            if (!self.bitfield.get(index)) {                      //pear modified
-                self.emit('piecefromtorrent', index);
-            }
-            self.bitfield.set(index, true)
-        })
-        self._checkDone()
-        cb(null)
+  pump(readable, writable, function (err) {
+    if (err) return cb(err)
+    self.pieces.forEach(function (piece, index) {
+      self.pieces[index] = null
+      self._reservations[index] = null;
+      if (!self.bitfield.get(index)) {                      //pear modified
+          self.emit('piecefromtorrent', index);
+      }
+      self.bitfield.set(index, true)
     })
+    self._checkDone()
+    cb(null)
+  })
 }
 
 Torrent.prototype.createServer = function (requestListener) {
-    if (typeof Server !== 'function') throw new Error('node.js-only method')
-    if (this.destroyed) throw new Error('torrent is destroyed')
-    var server = new Server(this, requestListener)
-    this._servers.push(server)
-    return server
+  if (typeof Server !== 'function') throw new Error('node.js-only method')
+  if (this.destroyed) throw new Error('torrent is destroyed')
+  var server = new Server(this, requestListener)
+  this._servers.push(server)
+  return server
 }
 
 Torrent.prototype.pause = function () {
-    if (this.destroyed) return
-    this._debug('pause')
-    this.paused = true
+  if (this.destroyed) return
+  this._debug('pause')
+  this.paused = true
 }
 
 Torrent.prototype.resume = function () {
-    if (this.destroyed) return
-    this._debug('resume')
-    this.paused = false
-    this._drain()
+  if (this.destroyed) return
+  this._debug('resume')
+  this.paused = false
+  this._drain()
 }
 
 Torrent.prototype._debug = function () {
-    var args = [].slice.call(arguments)
-    args[0] = '[' + this.client._debugId + '] [' + this._debugId + '] ' + args[0]
-    debug.apply(null, args)
+  var args = [].slice.call(arguments)
+  args[0] = '[' + this.client._debugId + '] [' + this._debugId + '] ' + args[0]
+  debug.apply(null, args)
 }
 
 /**
@@ -21643,57 +21621,57 @@ Torrent.prototype._debug = function () {
  * queue until another connection closes.
  */
 Torrent.prototype._drain = function () {
-    var self = this
-    this._debug('_drain numConns %s maxConns %s', self._numConns, self.client.maxConns)
-    if (typeof net.connect !== 'function' || self.destroyed || self.paused ||
-        self._numConns >= self.client.maxConns) {
-        return
+  var self = this
+  this._debug('_drain numConns %s maxConns %s', self._numConns, self.client.maxConns)
+  if (typeof net.connect !== 'function' || self.destroyed || self.paused ||
+      self._numConns >= self.client.maxConns) {
+    return
+  }
+  this._debug('drain (%s queued, %s/%s peers)', self._numQueued, self.numPeers, self.client.maxConns)
+
+  var peer = self._queue.shift()
+  if (!peer) return // queue could be empty
+
+  this._debug('tcp connect attempt to %s', peer.addr)
+
+  var parts = addrToIPPort(peer.addr)
+  var opts = {
+    host: parts[0],
+    port: parts[1]
+  }
+
+  var conn = peer.conn = net.connect(opts)
+
+  conn.once('connect', function () { peer.onConnect() })
+  conn.once('error', function (err) { peer.destroy(err) })
+  peer.startConnectTimeout()
+
+  // When connection closes, attempt reconnect after timeout (with exponential backoff)
+  conn.on('close', function () {
+    if (self.destroyed) return
+
+    // TODO: If torrent is done, do not try to reconnect after a timeout
+
+    if (peer.retries >= RECONNECT_WAIT.length) {
+      self._debug(
+        'conn %s closed: will not re-add (max %s attempts)',
+        peer.addr, RECONNECT_WAIT.length
+      )
+      return
     }
-    this._debug('drain (%s queued, %s/%s peers)', self._numQueued, self.numPeers, self.client.maxConns)
 
-    var peer = self._queue.shift()
-    if (!peer) return // queue could be empty
+    var ms = RECONNECT_WAIT[peer.retries]
+    self._debug(
+      'conn %s closed: will re-add to queue in %sms (attempt %s)',
+      peer.addr, ms, peer.retries + 1
+    )
 
-    this._debug('tcp connect attempt to %s', peer.addr)
-
-    var parts = addrToIPPort(peer.addr)
-    var opts = {
-        host: parts[0],
-        port: parts[1]
-    }
-
-    var conn = peer.conn = net.connect(opts)
-
-    conn.once('connect', function () { peer.onConnect() })
-    conn.once('error', function (err) { peer.destroy(err) })
-    peer.startConnectTimeout()
-
-    // When connection closes, attempt reconnect after timeout (with exponential backoff)
-    conn.on('close', function () {
-        if (self.destroyed) return
-
-        // TODO: If torrent is done, do not try to reconnect after a timeout
-
-        if (peer.retries >= RECONNECT_WAIT.length) {
-            self._debug(
-                'conn %s closed: will not re-add (max %s attempts)',
-                peer.addr, RECONNECT_WAIT.length
-            )
-            return
-        }
-
-        var ms = RECONNECT_WAIT[peer.retries]
-        self._debug(
-            'conn %s closed: will re-add to queue in %sms (attempt %s)',
-            peer.addr, ms, peer.retries + 1
-        )
-
-        var reconnectTimeout = setTimeout(function reconnectTimeout () {
-            var newPeer = self._addPeer(peer.addr)
-            if (newPeer) newPeer.retries = peer.retries + 1
-        }, ms)
-        if (reconnectTimeout.unref) reconnectTimeout.unref()
-    })
+    var reconnectTimeout = setTimeout(function reconnectTimeout () {
+      var newPeer = self._addPeer(peer.addr)
+      if (newPeer) newPeer.retries = peer.retries + 1
+    }, ms)
+    if (reconnectTimeout.unref) reconnectTimeout.unref()
+  })
 }
 
 /**
@@ -21702,31 +21680,31 @@ Torrent.prototype._drain = function () {
  * @return {boolean}
  */
 Torrent.prototype._validAddr = function (addr) {
-    var parts
-    try {
-        parts = addrToIPPort(addr)
-    } catch (e) {
-        return false
-    }
-    var host = parts[0]
-    var port = parts[1]
-    return port > 0 && port < 65535 &&
-        !(host === '127.0.0.1' && port === this.client.torrentPort)
+  var parts
+  try {
+    parts = addrToIPPort(addr)
+  } catch (e) {
+    return false
+  }
+  var host = parts[0]
+  var port = parts[1]
+  return port > 0 && port < 65535 &&
+    !(host === '127.0.0.1' && port === this.client.torrentPort)
 }
 
 function getBlockPipelineLength (wire, duration) {
-    return 2 + Math.ceil(duration * wire.downloadSpeed() / Piece.BLOCK_LENGTH)
+  return 2 + Math.ceil(duration * wire.downloadSpeed() / Piece.BLOCK_LENGTH)
 }
 
 function getPiecePipelineLength (wire, duration, pieceLength) {
-    return 1 + Math.ceil(duration * wire.downloadSpeed() / pieceLength)
+  return 1 + Math.ceil(duration * wire.downloadSpeed() / pieceLength)
 }
 
 /**
  * Returns a random integer in [0,high)
  */
 function randomInt (high) {
-    return Math.random() * high | 0
+  return Math.random() * high | 0
 }
 
 function noop () {}
@@ -21796,6 +21774,7 @@ function NodeFilter(nodesArray, cb, range) {
             chenkDone();
         };
         xhr.send();
+
     };
 
     function chenkDone() {
@@ -22102,9 +22081,9 @@ var VERSION = require('./package.json').version
  *   '1.2.5' -> '0102'
  */
 var VERSION_STR = VERSION.match(/([0-9]+)/g)
-    .slice(0, 2)
-    .map(function (v) { return zeroFill(2, v) })
-    .join('')
+  .slice(0, 2)
+  .map(function (v) { return zeroFill(2, v) })
+  .join('')
 
 /**
  * Version prefix string (used in peer ID). WebTorrent uses the Azureus-style
@@ -22122,154 +22101,154 @@ inherits(WebTorrent, EventEmitter)
  * @param {Object=} opts
  */
 function WebTorrent (opts) {
-    var self = this
-    if (!(self instanceof WebTorrent)) return new WebTorrent(opts)
-    EventEmitter.call(self)
+  var self = this
+  if (!(self instanceof WebTorrent)) return new WebTorrent(opts)
+  EventEmitter.call(self)
 
-    if (!opts) opts = {}
+  if (!opts) opts = {}
 
-    if (typeof opts.peerId === 'string') {
-        self.peerId = opts.peerId
-    } else if (Buffer.isBuffer(opts.peerId)) {
-        self.peerId = opts.peerId.toString('hex')
-    } else {
-        self.peerId = Buffer.from(VERSION_PREFIX + randombytes(9).toString('base64')).toString('hex')
+  if (typeof opts.peerId === 'string') {
+    self.peerId = opts.peerId
+  } else if (Buffer.isBuffer(opts.peerId)) {
+    self.peerId = opts.peerId.toString('hex')
+  } else {
+    self.peerId = Buffer.from(VERSION_PREFIX + randombytes(9).toString('base64')).toString('hex')
+  }
+  self.peerIdBuffer = Buffer.from(self.peerId, 'hex')
+
+  if (typeof opts.nodeId === 'string') {
+    self.nodeId = opts.nodeId
+  } else if (Buffer.isBuffer(opts.nodeId)) {
+    self.nodeId = opts.nodeId.toString('hex')
+  } else {
+    self.nodeId = randombytes(20).toString('hex')
+  }
+  self.nodeIdBuffer = Buffer.from(self.nodeId, 'hex')
+
+  self._debugId = self.peerId.toString('hex').substring(0, 7)
+
+  self.destroyed = false
+  self.listening = false
+  self.torrentPort = opts.torrentPort || 0
+  self.dhtPort = opts.dhtPort || 0
+  self.tracker = opts.tracker !== undefined ? opts.tracker : {}
+  self.torrents = []
+  self.maxConns = Number(opts.maxConns) || 55
+
+  self._debug(
+    'new webtorrent (peerId %s, nodeId %s, port %s)',
+    self.peerId, self.nodeId, self.torrentPort
+  )
+
+  if (self.tracker) {
+    if (typeof self.tracker !== 'object') self.tracker = {}
+    if (opts.rtcConfig) {
+      // TODO: remove in v1
+      console.warn('WebTorrent: opts.rtcConfig is deprecated. Use opts.tracker.rtcConfig instead')
+      self.tracker.rtcConfig = opts.rtcConfig
     }
-    self.peerIdBuffer = Buffer.from(self.peerId, 'hex')
-
-    if (typeof opts.nodeId === 'string') {
-        self.nodeId = opts.nodeId
-    } else if (Buffer.isBuffer(opts.nodeId)) {
-        self.nodeId = opts.nodeId.toString('hex')
-    } else {
-        self.nodeId = randombytes(20).toString('hex')
+    if (opts.wrtc) {
+      // TODO: remove in v1
+      console.warn('WebTorrent: opts.wrtc is deprecated. Use opts.tracker.wrtc instead')
+      self.tracker.wrtc = opts.wrtc
     }
-    self.nodeIdBuffer = Buffer.from(self.nodeId, 'hex')
-
-    self._debugId = self.peerId.toString('hex').substring(0, 7)
-
-    self.destroyed = false
-    self.listening = false
-    self.torrentPort = opts.torrentPort || 0
-    self.dhtPort = opts.dhtPort || 0
-    self.tracker = opts.tracker !== undefined ? opts.tracker : {}
-    self.torrents = []
-    self.maxConns = Number(opts.maxConns) || 55
-
-    self._debug(
-        'new webtorrent (peerId %s, nodeId %s, port %s)',
-        self.peerId, self.nodeId, self.torrentPort
-    )
-
-    if (self.tracker) {
-        if (typeof self.tracker !== 'object') self.tracker = {}
-        if (opts.rtcConfig) {
-            // TODO: remove in v1
-            console.warn('WebTorrent: opts.rtcConfig is deprecated. Use opts.tracker.rtcConfig instead')
-            self.tracker.rtcConfig = opts.rtcConfig
-        }
-        if (opts.wrtc) {
-            // TODO: remove in v1
-            console.warn('WebTorrent: opts.wrtc is deprecated. Use opts.tracker.wrtc instead')
-            self.tracker.wrtc = opts.wrtc
-        }
-        if (global.WRTC && !self.tracker.wrtc) {
-            self.tracker.wrtc = global.WRTC
-        }
+    if (global.WRTC && !self.tracker.wrtc) {
+      self.tracker.wrtc = global.WRTC
     }
+  }
 
-    if (typeof TCPPool === 'function') {
-        self._tcpPool = new TCPPool(self)
-    } else {
-        process.nextTick(function () {
-            self._onListening()
-        })
-    }
+  if (typeof TCPPool === 'function') {
+    self._tcpPool = new TCPPool(self)
+  } else {
+    process.nextTick(function () {
+      self._onListening()
+    })
+  }
 
-    // stats
-    self._downloadSpeed = speedometer()
-    self._uploadSpeed = speedometer()
+  // stats
+  self._downloadSpeed = speedometer()
+  self._uploadSpeed = speedometer()
 
-    if (opts.dht !== false && typeof DHT === 'function' /* browser exclude */) {
-        // use a single DHT instance for all torrents, so the routing table can be reused
-        self.dht = new DHT(extend({ nodeId: self.nodeId }, opts.dht))
+  if (opts.dht !== false && typeof DHT === 'function' /* browser exclude */) {
+    // use a single DHT instance for all torrents, so the routing table can be reused
+    self.dht = new DHT(extend({ nodeId: self.nodeId }, opts.dht))
 
-        self.dht.once('error', function (err) {
-            self._destroy(err)
-        })
+    self.dht.once('error', function (err) {
+      self._destroy(err)
+    })
 
-        self.dht.once('listening', function () {
-            var address = self.dht.address()
-            if (address) self.dhtPort = address.port
-        })
+    self.dht.once('listening', function () {
+      var address = self.dht.address()
+      if (address) self.dhtPort = address.port
+    })
 
-        // Ignore warning when there are > 10 torrents in the client
-        self.dht.setMaxListeners(0)
+    // Ignore warning when there are > 10 torrents in the client
+    self.dht.setMaxListeners(0)
 
-        self.dht.listen(self.dhtPort)
-    } else {
-        self.dht = false
-    }
+    self.dht.listen(self.dhtPort)
+  } else {
+    self.dht = false
+  }
 
-    // Enable or disable BEP19 (Web Seeds). Enabled by default:
-    self.enableWebSeeds = opts.webSeeds !== false
+  // Enable or disable BEP19 (Web Seeds). Enabled by default:
+  self.enableWebSeeds = opts.webSeeds !== false
 
-    if (typeof loadIPSet === 'function' && opts.blocklist != null) {
-        loadIPSet(opts.blocklist, {
-            headers: {
-                'user-agent': 'WebTorrent/' + VERSION + ' (https://webtorrent.io)'
-            }
-        }, function (err, ipSet) {
-            if (err) return self.error('Failed to load blocklist: ' + err.message)
-            self.blocked = ipSet
-            ready()
-        })
-    } else {
-        process.nextTick(ready)
-    }
+  if (typeof loadIPSet === 'function' && opts.blocklist != null) {
+    loadIPSet(opts.blocklist, {
+      headers: {
+        'user-agent': 'WebTorrent/' + VERSION + ' (https://webtorrent.io)'
+      }
+    }, function (err, ipSet) {
+      if (err) return self.error('Failed to load blocklist: ' + err.message)
+      self.blocked = ipSet
+      ready()
+    })
+  } else {
+    process.nextTick(ready)
+  }
 
-    function ready () {
-        if (self.destroyed) return
-        self.ready = true
-        self.emit('ready')
-    }
+  function ready () {
+    if (self.destroyed) return
+    self.ready = true
+    self.emit('ready')
+  }
 }
 
 WebTorrent.WEBRTC_SUPPORT = Peer.WEBRTC_SUPPORT
 
 Object.defineProperty(WebTorrent.prototype, 'downloadSpeed', {
-    get: function () { return this._downloadSpeed() }
+  get: function () { return this._downloadSpeed() }
 })
 
 Object.defineProperty(WebTorrent.prototype, 'uploadSpeed', {
-    get: function () { return this._uploadSpeed() }
+  get: function () { return this._uploadSpeed() }
 })
 
 Object.defineProperty(WebTorrent.prototype, 'progress', {
-    get: function () {
-        var torrents = this.torrents.filter(function (torrent) {
-            return torrent.progress !== 1
-        })
-        var downloaded = torrents.reduce(function (total, torrent) {
-            return total + torrent.downloaded
-        }, 0)
-        var length = torrents.reduce(function (total, torrent) {
-                return total + (torrent.length || 0)
-            }, 0) || 1
-        return downloaded / length
-    }
+  get: function () {
+    var torrents = this.torrents.filter(function (torrent) {
+      return torrent.progress !== 1
+    })
+    var downloaded = torrents.reduce(function (total, torrent) {
+      return total + torrent.downloaded
+    }, 0)
+    var length = torrents.reduce(function (total, torrent) {
+      return total + (torrent.length || 0)
+    }, 0) || 1
+    return downloaded / length
+  }
 })
 
 Object.defineProperty(WebTorrent.prototype, 'ratio', {
-    get: function () {
-        var uploaded = this.torrents.reduce(function (total, torrent) {
-            return total + torrent.uploaded
-        }, 0)
-        var received = this.torrents.reduce(function (total, torrent) {
-                return total + torrent.received
-            }, 0) || 1
-        return uploaded / received
-    }
+  get: function () {
+    var uploaded = this.torrents.reduce(function (total, torrent) {
+      return total + torrent.uploaded
+    }, 0)
+    var received = this.torrents.reduce(function (total, torrent) {
+      return total + torrent.received
+    }, 0) || 1
+    return uploaded / received
+  }
 })
 
 /**
@@ -22281,34 +22260,34 @@ Object.defineProperty(WebTorrent.prototype, 'ratio', {
  * @return {Torrent|null}
  */
 WebTorrent.prototype.get = function (torrentId) {
-    var self = this
-    var i, torrent
-    var len = self.torrents.length
+  var self = this
+  var i, torrent
+  var len = self.torrents.length
 
-    if (torrentId instanceof Torrent) {
-        for (i = 0; i < len; i++) {
-            torrent = self.torrents[i]
-            if (torrent === torrentId) return torrent
-        }
-    } else {
-        var parsed
-        try { parsed = parseTorrent(torrentId) } catch (err) {}
-
-        if (!parsed) return null
-        if (!parsed.infoHash) throw new Error('Invalid torrent identifier')
-
-        for (i = 0; i < len; i++) {
-            torrent = self.torrents[i]
-            if (torrent.infoHash === parsed.infoHash) return torrent
-        }
+  if (torrentId instanceof Torrent) {
+    for (i = 0; i < len; i++) {
+      torrent = self.torrents[i]
+      if (torrent === torrentId) return torrent
     }
-    return null
+  } else {
+    var parsed
+    try { parsed = parseTorrent(torrentId) } catch (err) {}
+
+    if (!parsed) return null
+    if (!parsed.infoHash) throw new Error('Invalid torrent identifier')
+
+    for (i = 0; i < len; i++) {
+      torrent = self.torrents[i]
+      if (torrent.infoHash === parsed.infoHash) return torrent
+    }
+  }
+  return null
 }
 
 // TODO: remove in v1
 WebTorrent.prototype.download = function (torrentId, opts, ontorrent) {
-    console.warn('WebTorrent: client.download() is deprecated. Use client.add() instead')
-    return this.add(torrentId, opts, ontorrent)
+  console.warn('WebTorrent: client.download() is deprecated. Use client.add() instead')
+  return this.add(torrentId, opts, ontorrent)
 }
 
 /**
@@ -22318,47 +22297,47 @@ WebTorrent.prototype.download = function (torrentId, opts, ontorrent) {
  * @param {function=} ontorrent called when the torrent is ready (has metadata)
  */
 WebTorrent.prototype.add = function (torrentId, opts, ontorrent) {
-    var self = this
-    if (self.destroyed) throw new Error('client is destroyed')
-    if (typeof opts === 'function') return self.add(torrentId, null, opts)
+  var self = this
+  if (self.destroyed) throw new Error('client is destroyed')
+  if (typeof opts === 'function') return self.add(torrentId, null, opts)
 
-    self._debug('add')
-    opts = opts ? extend(opts) : {}
+  self._debug('add')
+  opts = opts ? extend(opts) : {}
 
-    var torrent = new Torrent(torrentId, self, opts)
-    self.torrents.push(torrent)
+  var torrent = new Torrent(torrentId, self, opts)
+  self.torrents.push(torrent)
 
-    torrent.once('_infoHash', onInfoHash)
-    torrent.once('ready', onReady)
-    torrent.once('close', onClose)
-    // torrent.on('piecefromtorrent', function (index) {
-    //     self.emit('piecefromtorrent', index);
-    // })
+  torrent.once('_infoHash', onInfoHash)
+  torrent.once('ready', onReady)
+  torrent.once('close', onClose)
+  // torrent.on('piecefromtorrent', function (index) {
+  //     self.emit('piecefromtorrent', index);
+  // })
 
-    function onInfoHash () {
-        if (self.destroyed) return
-        for (var i = 0, len = self.torrents.length; i < len; i++) {
-            var t = self.torrents[i]
-            if (t.infoHash === torrent.infoHash && t !== torrent) {
-                torrent._destroy(new Error('Cannot add duplicate torrent ' + torrent.infoHash))
-                return
-            }
-        }
+  function onInfoHash () {
+    if (self.destroyed) return
+    for (var i = 0, len = self.torrents.length; i < len; i++) {
+      var t = self.torrents[i]
+      if (t.infoHash === torrent.infoHash && t !== torrent) {
+        torrent._destroy(new Error('Cannot add duplicate torrent ' + torrent.infoHash))
+        return
+      }
     }
+  }
 
-    function onReady () {
-        if (self.destroyed) return
-        if (typeof ontorrent === 'function') ontorrent(torrent)
-        self.emit('torrent', torrent)
-    }
+  function onReady () {
+    if (self.destroyed) return
+    if (typeof ontorrent === 'function') ontorrent(torrent)
+    self.emit('torrent', torrent)
+  }
 
-    function onClose () {
-        torrent.removeListener('_infoHash', onInfoHash)
-        torrent.removeListener('ready', onReady)
-        torrent.removeListener('close', onClose)
-    }
+  function onClose () {
+    torrent.removeListener('_infoHash', onInfoHash)
+    torrent.removeListener('ready', onReady)
+    torrent.removeListener('close', onClose)
+  }
 
-    return torrent
+  return torrent
 }
 
 /**
@@ -22368,80 +22347,80 @@ WebTorrent.prototype.add = function (torrentId, opts, ontorrent) {
  * @param  {function=} onseed called when torrent is seeding
  */
 WebTorrent.prototype.seed = function (input, opts, onseed) {
-    var self = this
-    if (self.destroyed) throw new Error('client is destroyed')
-    if (typeof opts === 'function') return self.seed(input, null, opts)
+  var self = this
+  if (self.destroyed) throw new Error('client is destroyed')
+  if (typeof opts === 'function') return self.seed(input, null, opts)
 
-    self._debug('seed')
-    opts = opts ? extend(opts) : {}
+  self._debug('seed')
+  opts = opts ? extend(opts) : {}
 
-    // When seeding from fs path, initialize store from that path to avoid a copy
-    if (typeof input === 'string') opts.path = path.dirname(input)
-    if (!opts.createdBy) opts.createdBy = 'WebTorrent/' + VERSION_STR
+  // When seeding from fs path, initialize store from that path to avoid a copy
+  if (typeof input === 'string') opts.path = path.dirname(input)
+  if (!opts.createdBy) opts.createdBy = 'WebTorrent/' + VERSION_STR
 
-    var torrent = self.add(null, opts, onTorrent)
-    var streams
+  var torrent = self.add(null, opts, onTorrent)
+  var streams
 
-    if (isFileList(input)) input = Array.prototype.slice.call(input)
-    if (!Array.isArray(input)) input = [ input ]
+  if (isFileList(input)) input = Array.prototype.slice.call(input)
+  if (!Array.isArray(input)) input = [ input ]
 
-    parallel(input.map(function (item) {
-        return function (cb) {
-            if (isReadable(item)) concat(item, cb)
-            else cb(null, item)
-        }
-    }), function (err, input) {
+  parallel(input.map(function (item) {
+    return function (cb) {
+      if (isReadable(item)) concat(item, cb)
+      else cb(null, item)
+    }
+  }), function (err, input) {
+    if (self.destroyed) return
+    if (err) return torrent._destroy(err)
+
+    createTorrent.parseInput(input, opts, function (err, files) {
+      if (self.destroyed) return
+      if (err) return torrent._destroy(err)
+
+      streams = files.map(function (file) {
+        return file.getStream
+      })
+
+      createTorrent(input, opts, function (err, torrentBuf) {
         if (self.destroyed) return
         if (err) return torrent._destroy(err)
 
-        createTorrent.parseInput(input, opts, function (err, files) {
-            if (self.destroyed) return
-            if (err) return torrent._destroy(err)
-
-            streams = files.map(function (file) {
-                return file.getStream
-            })
-
-            createTorrent(input, opts, function (err, torrentBuf) {
-                if (self.destroyed) return
-                if (err) return torrent._destroy(err)
-
-                var existingTorrent = self.get(torrentBuf)
-                if (existingTorrent) {
-                    torrent._destroy(new Error('Cannot add duplicate torrent ' + existingTorrent.infoHash))
-                } else {
-                    torrent._onTorrentId(torrentBuf)
-                }
-            })
-        })
-    })
-
-    function onTorrent (torrent) {
-        var tasks = [
-            function (cb) {
-                torrent.load(streams, cb)
-            }
-        ]
-        if (self.dht) {
-            tasks.push(function (cb) {
-                torrent.once('dhtAnnounce', cb)
-            })
+        var existingTorrent = self.get(torrentBuf)
+        if (existingTorrent) {
+          torrent._destroy(new Error('Cannot add duplicate torrent ' + existingTorrent.infoHash))
+        } else {
+          torrent._onTorrentId(torrentBuf)
         }
-        parallel(tasks, function (err) {
-            if (self.destroyed) return
-            if (err) return torrent._destroy(err)
-            _onseed(torrent)
-        })
-    }
+      })
+    })
+  })
 
-    function _onseed (torrent) {
-        self._debug('on seed')
-        if (typeof onseed === 'function') onseed(torrent)
-        torrent.emit('seed')
-        self.emit('seed', torrent)
+  function onTorrent (torrent) {
+    var tasks = [
+      function (cb) {
+        torrent.load(streams, cb)
+      }
+    ]
+    if (self.dht) {
+      tasks.push(function (cb) {
+        torrent.once('dhtAnnounce', cb)
+      })
     }
+    parallel(tasks, function (err) {
+      if (self.destroyed) return
+      if (err) return torrent._destroy(err)
+      _onseed(torrent)
+    })
+  }
 
-    return torrent
+  function _onseed (torrent) {
+    self._debug('on seed')
+    if (typeof onseed === 'function') onseed(torrent)
+    torrent.emit('seed')
+    self.emit('seed', torrent)
+  }
+
+  return torrent
 }
 
 /**
@@ -22450,24 +22429,24 @@ WebTorrent.prototype.seed = function (input, opts, onseed) {
  * @param  {function} cb
  */
 WebTorrent.prototype.remove = function (torrentId, cb) {
-    this._debug('remove')
-    var torrent = this.get(torrentId)
-    if (!torrent) throw new Error('No torrent with id ' + torrentId)
-    this._remove(torrentId, cb)
+  this._debug('remove')
+  var torrent = this.get(torrentId)
+  if (!torrent) throw new Error('No torrent with id ' + torrentId)
+  this._remove(torrentId, cb)
 }
 
 WebTorrent.prototype._remove = function (torrentId, cb) {
-    var torrent = this.get(torrentId)
-    if (!torrent) return
-    this.torrents.splice(this.torrents.indexOf(torrent), 1)
-    torrent.destroy(cb)
+  var torrent = this.get(torrentId)
+  if (!torrent) return
+  this.torrents.splice(this.torrents.indexOf(torrent), 1)
+  torrent.destroy(cb)
 }
 
 WebTorrent.prototype.address = function () {
-    if (!this.listening) return null
-    return this._tcpPool
-        ? this._tcpPool.server.address()
-        : { address: '0.0.0.0', family: 'IPv4', port: 0 }
+  if (!this.listening) return null
+  return this._tcpPool
+    ? this._tcpPool.server.address()
+    : { address: '0.0.0.0', family: 'IPv4', port: 0 }
 }
 
 /**
@@ -22475,59 +22454,59 @@ WebTorrent.prototype.address = function () {
  * @param  {function} cb
  */
 WebTorrent.prototype.destroy = function (cb) {
-    if (this.destroyed) throw new Error('client already destroyed')
-    this._destroy(null, cb)
+  if (this.destroyed) throw new Error('client already destroyed')
+  this._destroy(null, cb)
 }
 
 WebTorrent.prototype._destroy = function (err, cb) {
-    var self = this
-    self._debug('client destroy')
-    self.destroyed = true
+  var self = this
+  self._debug('client destroy')
+  self.destroyed = true
 
-    var tasks = self.torrents.map(function (torrent) {
-        return function (cb) {
-            torrent.destroy(cb)
-        }
+  var tasks = self.torrents.map(function (torrent) {
+    return function (cb) {
+      torrent.destroy(cb)
+    }
+  })
+
+  if (self._tcpPool) {
+    tasks.push(function (cb) {
+      self._tcpPool.destroy(cb)
     })
+  }
 
-    if (self._tcpPool) {
-        tasks.push(function (cb) {
-            self._tcpPool.destroy(cb)
-        })
-    }
+  if (self.dht) {
+    tasks.push(function (cb) {
+      self.dht.destroy(cb)
+    })
+  }
 
-    if (self.dht) {
-        tasks.push(function (cb) {
-            self.dht.destroy(cb)
-        })
-    }
+  parallel(tasks, cb)
 
-    parallel(tasks, cb)
+  if (err) self.emit('error', err)
 
-    if (err) self.emit('error', err)
-
-    self.torrents = []
-    self._tcpPool = null
-    self.dht = null
+  self.torrents = []
+  self._tcpPool = null
+  self.dht = null
 }
 
 WebTorrent.prototype._onListening = function () {
-    this._debug('listening')
-    this.listening = true
+  this._debug('listening')
+  this.listening = true
 
-    if (this._tcpPool) {
-        // Sometimes server.address() returns `null` in Docker.
-        var address = this._tcpPool.server.address()
-        if (address) this.torrentPort = address.port
-    }
+  if (this._tcpPool) {
+    // Sometimes server.address() returns `null` in Docker.
+    var address = this._tcpPool.server.address()
+    if (address) this.torrentPort = address.port
+  }
 
-    this.emit('listening')
+  this.emit('listening')
 }
 
 WebTorrent.prototype._debug = function () {
-    var args = [].slice.call(arguments)
-    args[0] = '[' + this._debugId + '] ' + args[0]
-    debug.apply(null, args)
+  var args = [].slice.call(arguments)
+  args[0] = '[' + this._debugId + '] ' + args[0]
+  debug.apply(null, args)
 }
 
 /**
@@ -22536,7 +22515,7 @@ WebTorrent.prototype._debug = function () {
  * @return {boolean}
  */
 function isReadable (obj) {
-    return typeof obj === 'object' && obj != null && typeof obj.pipe === 'function'
+  return typeof obj === 'object' && obj != null && typeof obj.pipe === 'function'
 }
 
 /**
@@ -22545,7 +22524,7 @@ function isReadable (obj) {
  * @return {boolean}
  */
 function isFileList (obj) {
-    return typeof FileList !== 'undefined' && obj instanceof FileList
+  return typeof FileList !== 'undefined' && obj instanceof FileList
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
@@ -23237,7 +23216,7 @@ var nodeFilter = require('./node-filter');
 var inherits = require('inherits');
 var EventEmitter = require('events').EventEmitter;
 var Set = require('./set');
-var WebTorrent = require('./pear-torrent');
+var PearTorrent = require('./pear-torrent');
 var Scheduler = require('./node-scheduler');
 
 // var WEBSOCKET_ADDR = 'ws://signal.webrtc.win:9600/ws';             //test
@@ -23320,7 +23299,6 @@ function Worker(urlStr, token, opts) {
     };
 
     self._start();
-
 }
 
 Worker.isRTCSupported = function () {
@@ -23371,7 +23349,7 @@ Worker.prototype._start = function () {
                 //     self._pearSignalHandshake();
                 // }
             } else {
-                self._fallBack();
+                self._fallBackToWRTC();
             }
         });
     }
@@ -23382,7 +23360,30 @@ Worker.prototype._fallBack = function () {
     debug('PearDownloader _fallBack');
 
     this.emit('fallback');
-}
+};
+
+Worker.prototype._fallBackToWRTC = function () {
+    var self = this;
+    debug('_fallBackToWRTC');
+    if (self._debugInfo.signalServerConnected === true) {         //如果websocket已经连接上
+        nodeFilter([{uri: self.src, type: 'server'}], function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+
+            var length = nodes.length;
+            if (length) {
+                // self.fileLength = fileLength;
+                debug('nodeFilter fileLength:'+fileLength);
+                self.fileLength = fileLength;
+                self._startPlaying(nodes);
+            } else {
+
+                self._fallBack();
+            }
+        });
+    } else {
+        self._fallBack();
+    }
+
+};
 
 Worker.prototype._getNodes = function (token, cb) {
     var self = this;
@@ -23410,7 +23411,7 @@ Worker.prototype._getNodes = function (token, cb) {
         cb(null);
     };
     xhr.onerror = function () {
-        self._fallBack();
+        self._fallBackToWRTC();
     };
     xhr.onload = function () {
         if (this.status >= 200 && this.status < 300 || this.status == 304) {
@@ -23420,15 +23421,16 @@ Worker.prototype._getNodes = function (token, cb) {
             var res = JSON.parse(this.response);
             // debug(res.nodes);
             if (res.size) {                         //如果filesize大于0
-                // self.fileLength = res.size;           //test
+                self.fileLength = res.size;
 
                 // if (self.useDataChannel) {
                 //     self._pearSignalHandshake();
                 // }
 
-                if (!res.nodes){      //如果没有可用节点则回源
+                if (!res.nodes){                            //如果没有可用节点则切换到纯webrtc模式
                     // cb(null);
-                    cb([{uri: self.src, type: 'server'}]);
+                    // cb([{uri: self.src, type: 'server'}]);
+                    self._fallBackToWRTC();
                 } else {
 
                     var nodes = res.nodes;
@@ -23494,7 +23496,7 @@ Worker.prototype._getNodes = function (token, cb) {
             } else {
                 cb(null);
             }
-        } else {
+        } else {                             //返回码不正常
             // self._fallBack();
             cb(null);
         }
@@ -23659,6 +23661,29 @@ Worker.prototype._startPlaying = function (nodes) {
                 });
             }
         }, {start: 10, end: 30});
+
+        if (self.useTorrent && self.magnetURI) {
+            var client = new PearTorrent();
+            // client.on('error', function () {
+            //
+            // });
+            debug('magnetURI:'+self.magnetURI);
+            client.add(self.magnetURI, {
+                    announce: self.trackers || [
+                        "wss://tracker.openwebtorrent.com",
+                        "wss://tracker.btorrent.xyz"
+                    ],
+                    store: d.store,
+                    bitfield: d.bitfield,
+                    strategy: 'rarest'
+                },
+                function (torrent) {
+                    debug('Torrent:', torrent);
+
+                    d.addTorrent(torrent);
+                }
+            );
+        }
     });
 
     var file = new File(d, fileConfig);

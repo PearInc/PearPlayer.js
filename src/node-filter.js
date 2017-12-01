@@ -59,6 +59,7 @@ function NodeFilter(nodesArray, cb, range) {
             chenkDone();
         };
         xhr.send();
+
     };
 
     function chenkDone() {

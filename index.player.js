@@ -9,7 +9,6 @@ var inherits = require('inherits');
 var render = require('render-media');
 var PearDownloader = require('./src/index.downloader');
 var WebTorrent = require('webtorrent');
-var PearTorrent = require('./src/pear-torrent');
 
 inherits(PearPlayer, PearDownloader);
 
@@ -58,29 +57,7 @@ PearPlayer.prototype.setupListeners = function () {
         var canPlayDelay = (self.canPlayDelayEnd - self.canPlayDelayStart);
         self.emit('canplay', canPlayDelay);
 
-        var dispatcher = self.dispatcher;
-        if (dispatcher && self.useTorrent && self.magnetURI) {
-            var client = new PearTorrent();
-            // client.on('error', function () {
-            //
-            // });
-            debug('magnetURI:'+self.magnetURI);
-            client.add(self.magnetURI, {
-                    announce: self.trackers || [
-                        "wss://tracker.openwebtorrent.com",
-                        "wss://tracker.btorrent.xyz"
-                    ],
-                    store: dispatcher.store,
-                    bitfield: dispatcher.bitfield,
-                    strategy: 'rarest'
-                },
-                function (torrent) {
-                    debug('Torrent:', torrent);
 
-                    dispatcher.addTorrent(torrent);
-                }
-            );
-        }
     });
 
     self.video.addEventListener('loadedmetadata', function () {

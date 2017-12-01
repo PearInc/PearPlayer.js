@@ -16,7 +16,7 @@ var nodeFilter = require('./node-filter');
 var inherits = require('inherits');
 var EventEmitter = require('events').EventEmitter;
 var Set = require('./set');
-var WebTorrent = require('./pear-torrent');
+var PearTorrent = require('./pear-torrent');
 var Scheduler = require('./node-scheduler');
 
 // var WEBSOCKET_ADDR = 'ws://signal.webrtc.win:9600/ws';             //test
@@ -99,7 +99,6 @@ function Worker(urlStr, token, opts) {
     };
 
     self._start();
-
 }
 
 Worker.isRTCSupported = function () {
@@ -150,7 +149,7 @@ Worker.prototype._start = function () {
                 //     self._pearSignalHandshake();
                 // }
             } else {
-                self._fallBack();
+                self._fallBackToWRTC();
             }
         });
     }
@@ -161,7 +160,30 @@ Worker.prototype._fallBack = function () {
     debug('PearDownloader _fallBack');
 
     this.emit('fallback');
-}
+};
+
+Worker.prototype._fallBackToWRTC = function () {
+    var self = this;
+    debug('_fallBackToWRTC');
+    if (self._debugInfo.signalServerConnected === true) {         //如果websocket已经连接上
+        nodeFilter([{uri: self.src, type: 'server'}], function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+
+            var length = nodes.length;
+            if (length) {
+                // self.fileLength = fileLength;
+                debug('nodeFilter fileLength:'+fileLength);
+                self.fileLength = fileLength;
+                self._startPlaying(nodes);
+            } else {
+
+                self._fallBack();
+            }
+        });
+    } else {
+        self._fallBack();
+    }
+
+};
 
 Worker.prototype._getNodes = function (token, cb) {
     var self = this;
@@ -189,7 +211,7 @@ Worker.prototype._getNodes = function (token, cb) {
         cb(null);
     };
     xhr.onerror = function () {
-        self._fallBack();
+        self._fallBackToWRTC();
     };
     xhr.onload = function () {
         if (this.status >= 200 && this.status < 300 || this.status == 304) {
@@ -199,15 +221,16 @@ Worker.prototype._getNodes = function (token, cb) {
             var res = JSON.parse(this.response);
             // debug(res.nodes);
             if (res.size) {                         //如果filesize大于0
-                // self.fileLength = res.size;           //test
+                self.fileLength = res.size;
 
                 // if (self.useDataChannel) {
                 //     self._pearSignalHandshake();
                 // }
 
-                if (!res.nodes){      //如果没有可用节点则回源
+                if (!res.nodes){                            //如果没有可用节点则切换到纯webrtc模式
                     // cb(null);
-                    cb([{uri: self.src, type: 'server'}]);
+                    // cb([{uri: self.src, type: 'server'}]);
+                    self._fallBackToWRTC();
                 } else {
 
                     var nodes = res.nodes;
@@ -273,7 +296,7 @@ Worker.prototype._getNodes = function (token, cb) {
             } else {
                 cb(null);
             }
-        } else {
+        } else {                             //返回码不正常
             // self._fallBack();
             cb(null);
         }
@@ -438,6 +461,29 @@ Worker.prototype._startPlaying = function (nodes) {
                 });
             }
         }, {start: 10, end: 30});
+
+        if (self.useTorrent && self.magnetURI) {
+            var client = new PearTorrent();
+            // client.on('error', function () {
+            //
+            // });
+            debug('magnetURI:'+self.magnetURI);
+            client.add(self.magnetURI, {
+                    announce: self.trackers || [
+                        "wss://tracker.openwebtorrent.com",
+                        "wss://tracker.btorrent.xyz"
+                    ],
+                    store: d.store,
+                    bitfield: d.bitfield,
+                    strategy: 'rarest'
+                },
+                function (torrent) {
+                    debug('Torrent:', torrent);
+
+                    d.addTorrent(torrent);
+                }
+            );
+        }
     });
 
     var file = new File(d, fileConfig);
