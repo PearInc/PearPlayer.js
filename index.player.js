@@ -22,6 +22,7 @@ function PearPlayer(selector, token, opts) {
     self.video = document.querySelector(selector);
     opts.selector = selector;
     opts.render = render;
+    opts.sequencial = true;                           //player必须有序下载buffer
     opts.interval = 3000;
 
     //monitor

@@ -25,8 +25,8 @@
 //            src: 'https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4',
             scheduler: 'IdleFirst',      //节点调度算法，默认IdleFirst，其它内置调度算法有“WebRTCFirst“和”CloudFirst”
             autoplay: true,             //是否自动播发视频,默认true
-            interval: 5000,             //滑动窗口的时间间隔,单位毫秒,默认10s
-            useDataChannel: true,       //是否开启data channel,默认true
+            interval: 5000,             //滑动窗口的时间间隔,单位毫秒,默认5s
+            useDataChannel: false,       //是否开启data channel,默认true
             dataChannels: 20,           //创建data channel的最大数量,默认20
             useTorrent: true,           //是否开启Browser P2P(基于Webtorrent)，默认true
 //      magnetURI: 'magnet:?xt=...',       //可手动传入magnetURI，需先将useTorrent设为true

@@ -70,10 +70,12 @@ function Worker(urlStr, token, opts) {
     self.dispatcherConfig = {
 
         chunkSize: opts.chunkSize && (opts.chunkSize%BLOCK_LENGTH === 0 ? opts.chunkSize : Math.ceil(opts.chunkSize/BLOCK_LENGTH)*BLOCK_LENGTH),   //每个chunk的大小,默认1M
-        interval: opts.interval,                                 //滑动窗口的时间间隔,单位毫秒,默认10s,
+        interval: opts.interval ? opts.interval : (opts.sequencial ? 5000 : 2000),                                 //滑动窗口的时间间隔,单位毫秒,默认10s,
         auto: self.auto,
         useMonitor: self.useMonitor,
-        scheduler: Scheduler[self.scheduler]
+        scheduler: Scheduler[self.scheduler],
+        sequencial: opts.sequencial,
+        maxLoaders: opts.maxLoaders || (opts.sequencial ? 5 : 15)
     };
 
     if (self.useDataChannel) {

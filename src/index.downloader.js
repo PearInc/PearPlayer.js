@@ -31,7 +31,7 @@ function PearDownloader(urlStr, token, opts) {
 PearDownloader.isWebRTCSupported = function () {
 
     return Worker.isRTCSupported();
-}
+};
 
 // class  PearDownloaderTag extends HTMLElement {
 //     constructor() {
@@ -121,7 +121,5 @@ PearDownloader.isWebRTCSupported = function () {
 //     }
 // }
 //
-// if (!window.customElements.get('pear-downloader')) {
-//     window.customElements.define('pear-downloader', PearDownloaderTag);
-// }
+// window.customElements.define('pear-downloader', PearDownloaderTag);
 
