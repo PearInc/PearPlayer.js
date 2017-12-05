@@ -26,7 +26,7 @@ PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/pearplayer)]** 
 只需将`pear-player.min.js`通过`<script>`标签导入到HTML就可以使用。 参考以下[代码示例](#快速开始)，也可以查看[`/examples/player-test.html`](/examples/player-test.html)来了解使用方法。
 参考[get-started](docs/get-started.md)来了解基本使用方法。<br/>
 
-### 特性
+## 特性
 
 - P2P能力基于**WebRTC**，无须安装任何插件
 - 多协议(HTTP、HTTPS、WebRTC)、多源
@@ -80,10 +80,10 @@ PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/pearplayer)]** 
 ```
 恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！
 
-## 如何为自己的视频加速？
+### 如何为自己的视频加速？
 示例中的视频是已经分发过的，那么如何为任意视频加速呢？很简单，只需在[视频分发系统](https://oss.webrtc.win/)中添加您的视频URL，即可利用Pear的海量节点为您的视频加速！具体教程请点击[这里](https://manual.webrtc.win/oss/)（目前仅支持分发`MP4`格式，视频的名字需要加上`Pear-Demo`前缀，如`Pear-Demo-movie.mp4`）
 
-### 谁在用我们的产品？
+## 谁在用我们的产品？
 
 + [Pear Limited](https://pear.hk)
 + [Lenovo China](https://www.lenovo.com.cn/)
@@ -94,17 +94,17 @@ PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/pearplayer)]** 
 + [Tencent X5/TBS](https://x5.tencent.com/tbs/)
 + [Tencent APD](http://www.chinaz.com/news/2016/0707/548873.shtml)
 
-### Pear Player 文档
+## Pear Player 文档
 - **[阅读get-started文档](docs/get-started.md)**
 - **[阅读API文档](docs/api.md)**
 
-### 致谢
+## 致谢
 特别感谢以下项目，为本项目提供了部分灵感来源以及API设计参考：
 
 - [WebTorrent](https://github.com/webtorrent/webtorrent)
 - [Peer5](https://www.peer5.com/#)
 
-### 演讲与媒体报道
+## 演讲与媒体报道
 
 - 2017.11.24 （金色财经） - [谛听科技正式进军区块链领域，战略投资梨享计算](http://www.jinse.com/blockchain/99767.html)
 - 2017.09.01 （未来网络开放社区联盟） - [继云计算之后，雾计算再起 —— 谈谈 P2P CDN](https://mp.weixin.qq.com/s/39dfSA6cTj2eoo-KqsC3AQ)  
@@ -115,9 +115,9 @@ PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/pearplayer)]** 
 - 2017.05.08 （台湾逢甲大学） - A Cooler Fruit Venture: Scaling up a Network from Cloud to Fog with Crowdsourcing
 - 2016.08.17 （香港科技大学） - From Cloud to Fog: Scaling up a Network with Crowdsourcing
 
-### License
+## License
 
 MIT. Copyright (c) [Pear Limited](https://pear.hk) and [snowinszu](https://github.com/snowinszu).
 
-### 帮助与支持
+## 帮助与支持
 E-mail: <service@pear.hk>；用户QQ群：`373594967`；[CP/CDN接入、OEM与其他商务合作](https://github.com/PearInc/FogVDN)
