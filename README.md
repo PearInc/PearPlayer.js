@@ -8,7 +8,7 @@
 
 <h4 align="center">一个支持多协议、多源、混合P2P-CDN的流媒体播放器</h4>
 <p align="center">
-  <a href="https://www.npmjs.com/package/pearplayer"><img src="https://img.shields.io/badge/npm-v2.4.2-blue.svg" alt="npm"></a>
+  <a href="https://www.npmjs.com/package/pearplayer"><img src="https://img.shields.io/npm/v/pearplayer.svg?style=flat" alt="npm"></a>
    <a href="https://www.jsdelivr.com/package/npm/pearplayer"><img src="https://data.jsdelivr.com/v1/package/npm/pearplayer/badge" alt="jsdelivr"></a>
  <a href="https://www.jsdelivr.com/package/npm/pearplayer"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
 </p>
