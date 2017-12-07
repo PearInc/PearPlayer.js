@@ -49,7 +49,7 @@ function Worker(urlStr, token, opts) {
     self.scheduler = opts.scheduler || 'IdleFirst';
     self.token = token;
     self.useDataChannel = (opts.useDataChannel === false)? false : true;
-    self.useMonitor = (opts.useMonitor === true)? true : false;
+    self.useMonitor = (opts.useMonitor === false)? false : true;
     self.useTorrent = (opts.useTorrent === false)? false : true;
     self.magnetURI = opts.magnetURI || undefined;
     self.trackers = opts.trackers && Array.isArray(opts.trackers) && opts.trackers.length > 0 ? opts.trackers : null;

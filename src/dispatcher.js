@@ -369,7 +369,6 @@ Dispatcher.prototype._fillWindow = function () {
     var count = 0;
     // var index = self._windowOffset;                       //TODO:修复auto下为零
     var index = self.sequencial ? self._windowOffset : self._windowEnd;
-    console.log('_fillWindow _windowEnd:'+self._windowEnd);
     self.emit('fillwindow', index, self._windowLength);
     while (count !== self._windowLength){
         debug('_fillWindow _windowLength:'+self._windowLength + ' downloadersLength:' + self.downloaders.length);
