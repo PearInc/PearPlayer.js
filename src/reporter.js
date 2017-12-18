@@ -36,11 +36,11 @@ function reportTraffic(uuid, fileSize, traffics) {
 }
 
 function finalyReportTraffic(uuid, fileSize, traffics) {
-    var body = JSON.stringify({
+    var body = {
         uuid: uuid,
         size: Number(fileSize),
         traffic: traffics
-    });
+    };
     axios({
         method: 'post',
         url: '/traffic',
