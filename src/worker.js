@@ -18,6 +18,7 @@ var EventEmitter = require('events').EventEmitter;
 var Set = require('./set');
 var PearTorrent = require('./pear-torrent');
 var Scheduler = require('./node-scheduler');
+var Reporter = require('./reporter');
 
 // var WEBSOCKET_ADDR = 'ws://signal.webrtc.win:9600/ws';             //test
 var WEBSOCKET_ADDR = 'wss://signal.webrtc.win:7601/wss';
@@ -97,7 +98,8 @@ function Worker(urlStr, token, opts) {
         usefulHTTPAndHTTPS: 0,
         windowOffset: 0,
         windowLength: 0,
-        signalServerConnected: false
+        signalServerConnected: false,
+        traffics: {}
     };
 
     self._start();
@@ -447,9 +449,17 @@ Worker.prototype._startPlaying = function (nodes) {
 
         self.emit('begin', self.fileLength, chunks);
 
-        // if (self.useDataChannel) {
-        //     self._pearSignalHandshake();
-        // }
+        //开始上报节点流量
+        self.reportTrafficId = setInterval(function () {
+
+            var traffics = [];
+            var sourceObj = self._debugInfo.traffics;
+            for (var mac in sourceObj) {
+                traffics.push(sourceObj[mac]);
+            }
+            // console.warn('traffics:'+JSON.stringify(traffics));
+            Reporter.reportTraffic(self.peerId, self.fileLength, traffics);
+        }, 5000);
 
         nodeFilter(self.nodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
 
@@ -557,6 +567,17 @@ Worker.prototype._startPlaying = function (nodes) {
     });
     d.once('done', function () {
 
+        var traffics = [];
+        var sourceObj = self._debugInfo.traffics;
+        for (var mac in sourceObj) {
+            traffics.push(sourceObj[mac]);
+        }
+        // console.warn('traffics:'+JSON.stringify(traffics));
+        Reporter.finalyReportTraffic(self.peerId, self.fileLength, traffics);
+        //移除interval
+        clearInterval(self.reportTrafficId);
+        self.reportTrafficId = null;
+
         self.emit('done');
     });
     d.on('downloaded', function (downloaded) {
@@ -590,6 +611,13 @@ Worker.prototype._startPlaying = function (nodes) {
     });
     d.on('traffic', function (mac, size, type) {
 
+        if (!self._debugInfo.traffics[mac]) {
+            self._debugInfo.traffics[mac] = {};
+            self._debugInfo.traffics[mac].mac = mac;
+            self._debugInfo.traffics[mac].traffic = size;
+        } else {
+            self._debugInfo.traffics[mac].traffic += size;
+        }
         self.emit('traffic', mac, size, type);
     });
     d.on('datachannelerror', function () {

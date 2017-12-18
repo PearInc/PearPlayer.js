@@ -16,6 +16,7 @@ function PearDownloader(urlStr, token, opts) {
     if (!(self instanceof PearDownloader)) return new PearDownloader(urlStr, token, opts);
     // if (!(self instanceof PearPlayer)) return new PearPlayer(selector, opts);
     if (typeof token === 'object') return PearDownloader(urlStr, '', token);
+    if (!opts) opts = {};
     if (opts.debug) {
         debug.enable('pear:*');
     } else {

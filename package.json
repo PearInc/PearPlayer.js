@@ -1,9 +1,10 @@
 {
   "name": "pearplayer",
-  "version": "2.4.5",
+  "version": "2.4.7",
   "description": "",
   "main": "./dist/pear-player.js",
   "dependencies": {
+    "axios": "^0.17.1",
     "babili": "^0.1.4",
     "blueimp-md5": "^2.7.0",
     "buffer": "^5.0.6",

@@ -441,7 +441,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
                     if (fogRatio >= self.fogRatio) {
                         self.emit('fograte', fogRatio);
                     }
-                    self.emit('fogspeed', self.downloaders.getCurrentSpeed([1, 2]));
+                    self.emit('fogspeed', self.downloaders.getCurrentSpeed([1]));
                     hd.type === 1 ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
                 } else {
                     self.emit('cloudspeed', self.downloaders.getCurrentSpeed([0]));
@@ -487,7 +487,7 @@ Dispatcher.prototype._setupDC = function (jd) {
                 if (fogRatio >= self.fogRatio) {
                     self.emit('fograte', fogRatio);
                 }
-                self.emit('fogspeed', self.downloaders.getCurrentSpeed([1,2]));
+                self.emit('fogspeed', self.downloaders.getCurrentSpeed([2]));
                 self.bufferSources[index] = 'd';
                 self.emit('buffersources', self.bufferSources);
                 self.emit('sourcemap', 'd', index);
@@ -553,7 +553,7 @@ Dispatcher.prototype.addTorrent = function (torrent) {
                 self.emit('fograte', fogRatio);
             }
             // debug('torrent.downloadSpeed:'+torrent.downloadSpeed/1024);
-            self.emit('fogspeed', self.downloaders.getCurrentSpeed([1, 2]) + torrent.downloadSpeed/1024);
+            self.emit('fogspeed', torrent.downloadSpeed/1024);
             self.bufferSources[index] = 'b';
             self.emit('buffersources', self.bufferSources);
             self.emit('sourcemap', 'b', index);
@@ -701,12 +701,12 @@ Array.prototype.getCurrentSpeed = function (typeArr) {              //根据传�
     if (typeArr) {
         for (var i = 0; i < this.length; i++) {
             if (typeArr.indexOf(this[i].type) >= 0) {
-                sum+=this[i].meanSpeed;
+                sum+=this[i].speed;
             }
         }
     } else {
         for (var i = 0; i < this.length; i++) {
-            sum+=this[i].meanSpeed;
+            sum+=this[i].speed;
         }
     }
     return Math.floor(sum);
