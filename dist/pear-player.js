@@ -19992,7 +19992,7 @@ module.exports = function zeroFill (width, number, pad) {
 },{}],134:[function(require,module,exports){
 module.exports={
   "name": "pearplayer",
-  "version": "2.4.7",
+  "version": "2.4.8",
   "description": "",
   "main": "./dist/pear-player.js",
   "dependencies": {
@@ -23951,11 +23951,11 @@ function reportTraffic(uuid, fileSize, traffics) {
         temp += traffics[i].traffic;
     }
     if (temp >= totalReportTraffic + 10485760) {             //如果流量增加大于10
-        var body = JSON.stringify({
+        var body = {
             uuid: uuid,
             size: Number(fileSize),
             traffic: traffics
-        });
+        };
         axios({
             method: 'post',
             url: '/traffic',

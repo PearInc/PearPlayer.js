@@ -16,11 +16,11 @@ function reportTraffic(uuid, fileSize, traffics) {
         temp += traffics[i].traffic;
     }
     if (temp >= totalReportTraffic + 10485760) {             //如果流量增加大于10
-        var body = JSON.stringify({
+        var body = {
             uuid: uuid,
             size: Number(fileSize),
             traffic: traffics
-        });
+        };
         axios({
             method: 'post',
             url: '/traffic',
