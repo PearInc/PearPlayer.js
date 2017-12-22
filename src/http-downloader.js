@@ -97,7 +97,8 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
             // self.speed = Math.floor((event.total * 1000) / ((self.endTime - self.startTime) * 1024));  //单位: KB/s
             self.speed = Math.floor(event.total / (self.endTime - self.startTime));  //单位: KB/s
             debug('http speed:' + self.speed + 'KB/s');
-            self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
+            // self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
+            self.meanSpeed = 0.95*self.meanSpeed*self.counter + 0.05*self.speed;
             debug('http '+self.uri+' meanSpeed:' + self.meanSpeed + 'KB/s');
             if (!self.isAsync) {
                 if (self.queue.length > 0){             //如果下载队列不为空

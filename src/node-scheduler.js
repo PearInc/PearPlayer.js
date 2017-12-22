@@ -26,7 +26,7 @@ module.exports = {
         // }
 
         idles.sort(function (a, b) {          //速度从大到小排序
-            return b.speed - a.speed;
+            return b.meanSpeed - a.meanSpeed;
         });
 
         // for (var i=0;i<idles.length;++i) {
@@ -40,7 +40,7 @@ module.exports = {
         });
 
         busys.sort(function (a, b) {          //速度从大到小排序
-            return b.speed - a.speed;
+            return b.meanSpeed - a.meanSpeed;
         });
 
         var ret = idles.concat(busys);

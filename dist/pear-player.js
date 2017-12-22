@@ -19992,7 +19992,7 @@ module.exports = function zeroFill (width, number, pad) {
 },{}],134:[function(require,module,exports){
 module.exports={
   "name": "pearplayer",
-  "version": "2.4.8",
+  "version": "2.4.9",
   "description": "",
   "main": "./dist/pear-player.js",
   "dependencies": {
@@ -20219,7 +20219,6 @@ Dispatcher.prototype.deselect = function (start, end, priority) {
 
 Dispatcher.prototype._slide = function () {
     var self = this;
-
     if (self.done) return;
     debug('[dispatcher] slide window downloader length:'+self.downloaders.length);
     self._fillWindow();
@@ -20681,7 +20680,7 @@ Dispatcher.prototype._throttle = function (method, context) {
 
 Dispatcher.prototype.autoSlide = function () {
     var self = this;
-
+    self._slide();
     setTimeout(function () {
         self._slide();
         self._checkDone();
@@ -21105,7 +21104,8 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
             // self.speed = Math.floor((event.total * 1000) / ((self.endTime - self.startTime) * 1024));  //单位: KB/s
             self.speed = Math.floor(event.total / (self.endTime - self.startTime));  //单位: KB/s
             debug('http speed:' + self.speed + 'KB/s');
-            self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
+            // self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
+            self.meanSpeed = 0.95*self.meanSpeed*self.counter + 0.05*self.speed;
             debug('http '+self.uri+' meanSpeed:' + self.meanSpeed + 'KB/s');
             if (!self.isAsync) {
                 if (self.queue.length > 0){             //如果下载队列不为空
@@ -23205,7 +23205,7 @@ module.exports = {
         // }
 
         idles.sort(function (a, b) {          //速度从大到小排序
-            return b.speed - a.speed;
+            return b.meanSpeed - a.meanSpeed;
         });
 
         // for (var i=0;i<idles.length;++i) {
@@ -23219,7 +23219,7 @@ module.exports = {
         });
 
         busys.sort(function (a, b) {          //速度从大到小排序
-            return b.speed - a.speed;
+            return b.meanSpeed - a.meanSpeed;
         });
 
         var ret = idles.concat(busys);
@@ -24532,7 +24532,8 @@ RTCDownloader.prototype._receive = function (chunk) {
             // self.speed = Math.floor(((self.end - self.start) * 1000) / ((self.endTime - self.startTime) * 1024));  //单位: KB/s
             self.speed = Math.floor((self.end - self.start + 1) / (self.endTime - self.startTime));  //单位: KB/s
             debug('pear_webrtc speed:' + self.speed + 'KB/s');
-            self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
+            // self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
+            self.meanSpeed = 0.95*self.meanSpeed*self.counter + 0.05*self.speed;
             debug('datachannel '+self.dc_id+' meanSpeed:' + self.meanSpeed + 'KB/s');
 
             for (var i = 0; i < length; i++) {

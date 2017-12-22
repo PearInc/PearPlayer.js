@@ -127,7 +127,7 @@ index是对应的索引。
 ## `player.on('canplay', function(delay) {})`
 该事件类似video的“canplay”事件，但回调出来的参数是从PearPLayer实例化到开始播放的延迟时间。
 
-- 请参考[`/examples/test.html`](/examples/test.html)来了解API使用方法。
+- 请参考[`/examples/player-test.html`](/examples/player-test.html)来了解API使用方法。
 - CP接入方法：[Pear FogVDN](https://github.com/PearInc/FogVDN/blob/master/For_CPs.md)
 
 

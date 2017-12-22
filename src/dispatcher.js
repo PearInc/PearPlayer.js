@@ -175,7 +175,6 @@ Dispatcher.prototype.deselect = function (start, end, priority) {
 
 Dispatcher.prototype._slide = function () {
     var self = this;
-
     if (self.done) return;
     debug('[dispatcher] slide window downloader length:'+self.downloaders.length);
     self._fillWindow();
@@ -637,7 +636,7 @@ Dispatcher.prototype._throttle = function (method, context) {
 
 Dispatcher.prototype.autoSlide = function () {
     var self = this;
-
+    self._slide();
     setTimeout(function () {
         self._slide();
         self._checkDone();
