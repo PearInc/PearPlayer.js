@@ -5,7 +5,7 @@
 module.exports = NodeFilter;
 
 /*
-    nodesArray: {uri: string type: string}
+    nodesArray: {uri: string type: string capacity: number}
     cb: function
     range: {start: number end: number}
  */
@@ -69,20 +69,21 @@ function NodeFilter(nodesArray, cb, range) {
         // }
 
         if (doneCount === (range.end-range.start)) {
+
+            //根据capacity对节点进行排序
+            usefulNodes.sort(function (a, b) {          //按能力值从大到小排序
+                return b.capacity - a.capacity;
+            });
+
+            for(var i = 0; i < usefulNodes.length; i++) {
+                debug('node ' + i + ' capacity ' + usefulNodes[i].capacity);
+            }
+            debug('length: ' + usefulNodes.filter(function (node) {
+                return node.capacity >= 5;
+            }).length);
+
             cb(usefulNodes, fileLength);
         }
     }
 
 };
-
-// Array.prototype.unique = function()
-// {
-//     var n = []; //一个新的临时数组
-//     for(var i = 0; i < this.length; i++) //遍历当前数组
-//     {
-//         //如果当前数组的第i已经保存进了临时数组，那么跳过，
-//         //否则把当前项push到临时数组里面
-//         if (n.indexOf(this[i]) == -1) n.push(this[i]);
-//     }
-//     return n;
-// };

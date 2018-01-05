@@ -12,7 +12,8 @@
  useMonitor: boolean,      //开启监控器,默认关闭
  scheduler: function       //节点调度算法
  sequencial: boolean       //是否有序下载，默认false
- maxLoaders: number        //同时下载的节点数量
+ maxLoaders: number        //push算法中同时下载的节点数量
+ algorithm: string         //下载采用的算法
  }
  */
 module.exports = Dispatcher;
@@ -67,9 +68,13 @@ function Dispatcher(config) {
 
     //firstaid参数自适应
     self.sequencial = config.sequencial || false;
-    self.maxLoaders = config.maxLoaders;
-    self._windowLength = self.initialDownloaders.length <= self.maxLoaders ? self.initialDownloaders.length : self.maxLoaders;
-    // self._windowLength = 15;
+
+    var pushLength = self.initialDownloaders.filter(function (node) {            //能力值超过平均值得节点个数
+        return node.ability > 5;
+    }).length;
+    self.maxLoaders = (pushLength > 5 && pushLength <= self.maxLoaders) ? pushLength : config.maxLoaders;
+    self._windowLength = self.initialDownloaders.length >= 10 ? 10 : self.initialDownloaders.length;
+    // self._windowLength = 5;
     // self._colddown = self._windowLength;                        //窗口滑动的冷却时间
     self._colddown = 5;                        //窗口滑动的冷却时间
     self.downloaders = [];
@@ -80,6 +85,8 @@ function Dispatcher(config) {
     //scheduler
     self.scheduler = config.scheduler;
     self._windowEnd = 0;                        //当前窗口的end
+
+    self.algorithm = config.algorithm;
 };
 
 Dispatcher.prototype._init = function () {
@@ -100,10 +107,16 @@ Dispatcher.prototype._init = function () {
     // debug('self.path:'+self.path);
     self.bitfield = new BitField(self.chunks);       //记录哪个块已经下好
 
-    self.queue = [];                     //初始化下载队列
+    if (self.algorithm === 'push') {
+        while (self._windowEnd !== self.chunks) {
+            self._createPushStream();
+        }
+        self._windowEnd = 0;
+    }
+    // self._checkDone();
+
     // self._slide();
     if (self.auto) {
-        // self.startFrom(0, false);
         self.select(0, self.chunks-1, true);
         self.autoSlide();
         self.slide = noop;
@@ -355,7 +368,7 @@ Dispatcher.prototype._getNodes = function (index) {      //返回节点构成的
 Dispatcher.prototype._fillWindow = function () {
     var self = this;
 
-
+    if (self.done) return;
     var sortedNodes = self.scheduler(this.downloaders,
         {
             windowLength: self._windowLength,
@@ -370,7 +383,44 @@ Dispatcher.prototype._fillWindow = function () {
     var index = self.sequencial ? self._windowOffset : self._windowEnd;
     self.emit('fillwindow', index, self._windowLength);
     while (count !== self._windowLength){
-        debug('_fillWindow _windowLength:'+self._windowLength + ' downloadersLength:' + self.downloaders.length);
+        // debug('_fillWindow _windowLength:'+self._windowLength + ' downloadersLength:' + self.downloaders.length);
+        if (index >= self.chunks){
+            break;
+        }
+        // debug('index:'+index);
+        if (count >= sortedNodes.length) break;
+
+        if (!self.bitfield.get(index)) {
+
+            var pair = self._calRange(index);
+            // var node = self._getNodes(count);
+            // node.select(pair[0],pair[1]);
+            var node = sortedNodes[count % sortedNodes.length];
+            // var node = sortedNodes[count];
+            node.select(pair[0],pair[1]);
+            count ++;
+        } else {
+
+        }
+        index ++;
+    }
+    self._windowEnd = index;
+    debug('_fillWindow _windowEnd:'+self._windowEnd);
+};
+
+Dispatcher.prototype._createPushStream = function () {
+    var self = this;
+
+    var sortedNodes = this.downloaders;
+
+    if (sortedNodes.length === 0) return;
+
+    var count = 0;
+
+    var index = self._windowEnd;
+
+    while (count !== self.maxLoaders){
+        // debug('_fillWindow _windowLength:'+self._windowLength + ' downloadersLength:' + self.downloaders.length);
         if (index >= self.chunks){
             break;
         }
@@ -432,7 +482,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
                 self.downloaded += size;
                 self.emit('downloaded', self.downloaded/self.fileSize);
                 // hd.downloaded += size;
-                self.emit('traffic', hd.mac, size, hd.type === 1 ? 'HTTP_Node' : 'HTTP_Server');
+                self.emit('traffic', hd.mac, size, hd.type === 1 ? 'HTTP_Node' : 'HTTP_Server', hd.meanSpeed);
                 debug('ondata hd.type:' + hd.type +' index:' + index);
                 if (hd.type === 1) {          //node
                     self.fogDownloaded += size;
@@ -441,10 +491,12 @@ Dispatcher.prototype._setupHttp = function (hd) {
                         self.emit('fograte', fogRatio);
                     }
                     self.emit('fogspeed', self.downloaders.getCurrentSpeed([1]));
-                    hd.type === 1 ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
+                    // hd.type === 1 ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
+                    hd.type === 1 ? self.bufferSources[index] = hd.id : self.bufferSources[index] = 'b';     //test
                 } else {
                     self.emit('cloudspeed', self.downloaders.getCurrentSpeed([0]));
-                    self.bufferSources[index] = 's'
+                    // self.bufferSources[index] = 's'
+                    self.bufferSources[index] = hd.id;                                   //test
                 }
                 self.emit('buffersources', self.bufferSources);
                 self.emit('sourcemap', hd.type === 1 ? 'n' : 's', index);
@@ -491,7 +543,7 @@ Dispatcher.prototype._setupDC = function (jd) {
                 self.emit('buffersources', self.bufferSources);
                 self.emit('sourcemap', 'd', index);
                 // jd.downloaded += size;
-                self.emit('traffic', jd.mac, size, 'WebRTC_Node');
+                self.emit('traffic', jd.mac, size, 'WebRTC_Node', jd.meanSpeed);
             }
         } else {
             debug('重复下载');
@@ -573,7 +625,7 @@ Dispatcher.prototype.addDataChannel = function (dc) {
     //     this._windowLength ++;
     // }
     this._setupDC(dc);
-    if (!this.sequencial && this._windowLength < this.maxLoaders) this._windowLength ++;     //
+    if (!this.sequencial && this._windowLength < 10) this._windowLength ++;     //
 };
 
 Dispatcher.prototype.addNode = function (node) {     //node是httpdownloader对象
@@ -581,7 +633,7 @@ Dispatcher.prototype.addNode = function (node) {     //node是httpdownloader对�
     this._setupHttp(node);
     this.downloaders.push(node);
     debug('dispatcher add node: '+node.uri);
-    if (!this.sequencial && this._windowLength < this.maxLoaders) this._windowLength ++;
+    if (!this.sequencial && this._windowLength < 10) this._windowLength ++;
 };
 
 Dispatcher.prototype.requestMoreNodes = function () {
@@ -636,7 +688,9 @@ Dispatcher.prototype._throttle = function (method, context) {
 
 Dispatcher.prototype.autoSlide = function () {
     var self = this;
-    self._slide();
+    if (self.algorithm === 'pull') {
+        self._slide();
+    }
     setTimeout(function () {
         self._slide();
         self._checkDone();

@@ -16,6 +16,11 @@ function PearDownloader(urlStr, token, opts) {
     if (!(self instanceof PearDownloader)) return new PearDownloader(urlStr, token, opts);
     // if (!(self instanceof PearPlayer)) return new PearPlayer(selector, opts);
     if (typeof token === 'object') return PearDownloader(urlStr, '', token);
+
+    //validate
+    if (opts.algorithm && ['push', 'pull'].indexOf(opts.algorithm) == -1) throw new Error('Algorithm ' + opts.algorithm + ' is not supported');
+
+
     if (!opts) opts = {};
     if (opts.debug) {
         debug.enable('pear:*');

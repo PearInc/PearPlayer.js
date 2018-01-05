@@ -65,7 +65,7 @@ FileStream.prototype._notify = function () {
     self._notifying = true;
 
     var p = self._piece;
-    debug('FileStream get piece:' + p);
+    // debug('FileStream get piece:' + p);
     self._dispatcher.store.get(p, function (err, buffer) {
         self._notifying = false;
         if (self.destroyed) return;

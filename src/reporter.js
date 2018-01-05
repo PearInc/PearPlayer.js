@@ -7,6 +7,8 @@ var axios = require('axios');
 
 axios.defaults.baseURL = 'https://statdapi.webrtc.win:9801';
 
+var abilitiesURL = 'https://api.webrtc.win/v2/customer/stats/nodes/capacity';
+
 
 var totalReportTraffic = 0;
 
@@ -27,7 +29,7 @@ function reportTraffic(uuid, fileSize, traffics) {
             data: body
         })
         .then(function(response) {
-            debug('reportTraffic response:'+JSON.stringify(response)+' temp:'+temp+' totalReportTraffic:'+totalReportTraffic);
+            // debug('reportTraffic response:'+JSON.stringify(response)+' temp:'+temp+' totalReportTraffic:'+totalReportTraffic);
             if (response.status == 200) {
                 totalReportTraffic = temp;
             }
@@ -53,10 +55,32 @@ function finalyReportTraffic(uuid, fileSize, traffics) {
     });
 }
 
+function reportAbilities(abilities) {
+    var benchmark = 0;
+    for (var mac in abilities) {
+        benchmark += abilities[mac];
+    }
+    benchmark = benchmark/Object.getOwnPropertyNames(abilities).length;
+    var normalizeAbilities = {};
+    for (var mac in abilities) {
+        normalizeAbilities[mac] = abilities[mac]/benchmark*5;
+        console.log('reportAbilities mac:'+mac+' ability:'+normalizeAbilities[mac]);
+    }
+    axios({
+        method: 'post',
+        url: abilitiesURL,
+        data: normalizeAbilities
+    })
+    .then(function(response) {
+        debug('reportAbilities response:'+JSON.stringify(response));
+    });
+}
+
 module.exports = {
 
     reportTraffic : reportTraffic,
-    finalyReportTraffic: finalyReportTraffic
+    finalyReportTraffic: finalyReportTraffic,
+    reportAbilities: reportAbilities
 };
 
 

@@ -24,6 +24,7 @@ function PearPlayer(selector, token, opts) {
     opts.render = render;
     opts.sequencial = true;                           //player必须有序下载buffer
     opts.interval = 3000;
+    if (!opts.algorithm) opts.algorithm = 'pull';     //algorithm默认‘pull’
 
     //monitor
     self.canPlayDelayStart = (new Date()).getTime();

@@ -25,6 +25,7 @@ function PearPlayer(selector, token, opts) {
     opts.render = render;
     opts.sequencial = true;                           //player必须有序下载buffer
     opts.interval = 3000;
+    if (!opts.algorithm) opts.algorithm = 'pull';     //algorithm默认‘pull’
 
     //monitor
     self.canPlayDelayStart = (new Date()).getTime();
@@ -6484,8 +6485,8 @@ function objectToString(o) {
   return Object.prototype.toString.call(o);
 }
 
-}).call(this,{"isBuffer":require("../../../../../../../../usr/local/lib/node_modules/browserify/node_modules/is-buffer/index.js")})
-},{"../../../../../../../../usr/local/lib/node_modules/browserify/node_modules/is-buffer/index.js":166}],50:[function(require,module,exports){
+}).call(this,{"isBuffer":require("../../../../../../../../../usr/local/lib/node_modules/browserify/node_modules/is-buffer/index.js")})
+},{"../../../../../../../../../usr/local/lib/node_modules/browserify/node_modules/is-buffer/index.js":166}],50:[function(require,module,exports){
 (function (process,global,Buffer){
 module.exports = createTorrent
 module.exports.parseInput = parseInput
@@ -19992,7 +19993,7 @@ module.exports = function zeroFill (width, number, pad) {
 },{}],134:[function(require,module,exports){
 module.exports={
   "name": "pearplayer",
-  "version": "2.4.9",
+  "version": "2.4.11",
   "description": "",
   "main": "./dist/pear-player.js",
   "dependencies": {
@@ -20056,7 +20057,8 @@ module.exports={
  useMonitor: boolean,      //开启监控器,默认关闭
  scheduler: function       //节点调度算法
  sequencial: boolean       //是否有序下载，默认false
- maxLoaders: number        //同时下载的节点数量
+ maxLoaders: number        //push算法中同时下载的节点数量
+ algorithm: string         //下载采用的算法
  }
  */
 module.exports = Dispatcher;
@@ -20111,9 +20113,13 @@ function Dispatcher(config) {
 
     //firstaid参数自适应
     self.sequencial = config.sequencial || false;
-    self.maxLoaders = config.maxLoaders;
-    self._windowLength = self.initialDownloaders.length <= self.maxLoaders ? self.initialDownloaders.length : self.maxLoaders;
-    // self._windowLength = 15;
+
+    var pushLength = self.initialDownloaders.filter(function (node) {            //能力值超过平均值得节点个数
+        return node.ability > 5;
+    }).length;
+    self.maxLoaders = (pushLength > 5 && pushLength <= self.maxLoaders) ? pushLength : config.maxLoaders;
+    self._windowLength = self.initialDownloaders.length >= 10 ? 10 : self.initialDownloaders.length;
+    // self._windowLength = 5;
     // self._colddown = self._windowLength;                        //窗口滑动的冷却时间
     self._colddown = 5;                        //窗口滑动的冷却时间
     self.downloaders = [];
@@ -20124,6 +20130,8 @@ function Dispatcher(config) {
     //scheduler
     self.scheduler = config.scheduler;
     self._windowEnd = 0;                        //当前窗口的end
+
+    self.algorithm = config.algorithm;
 };
 
 Dispatcher.prototype._init = function () {
@@ -20144,10 +20152,16 @@ Dispatcher.prototype._init = function () {
     // debug('self.path:'+self.path);
     self.bitfield = new BitField(self.chunks);       //记录哪个块已经下好
 
-    self.queue = [];                     //初始化下载队列
+    if (self.algorithm === 'push') {
+        while (self._windowEnd !== self.chunks) {
+            self._createPushStream();
+        }
+        self._windowEnd = 0;
+    }
+    // self._checkDone();
+
     // self._slide();
     if (self.auto) {
-        // self.startFrom(0, false);
         self.select(0, self.chunks-1, true);
         self.autoSlide();
         self.slide = noop;
@@ -20399,7 +20413,7 @@ Dispatcher.prototype._getNodes = function (index) {      //返回节点构成的
 Dispatcher.prototype._fillWindow = function () {
     var self = this;
 
-
+    if (self.done) return;
     var sortedNodes = self.scheduler(this.downloaders,
         {
             windowLength: self._windowLength,
@@ -20414,7 +20428,44 @@ Dispatcher.prototype._fillWindow = function () {
     var index = self.sequencial ? self._windowOffset : self._windowEnd;
     self.emit('fillwindow', index, self._windowLength);
     while (count !== self._windowLength){
-        debug('_fillWindow _windowLength:'+self._windowLength + ' downloadersLength:' + self.downloaders.length);
+        // debug('_fillWindow _windowLength:'+self._windowLength + ' downloadersLength:' + self.downloaders.length);
+        if (index >= self.chunks){
+            break;
+        }
+        // debug('index:'+index);
+        if (count >= sortedNodes.length) break;
+
+        if (!self.bitfield.get(index)) {
+
+            var pair = self._calRange(index);
+            // var node = self._getNodes(count);
+            // node.select(pair[0],pair[1]);
+            var node = sortedNodes[count % sortedNodes.length];
+            // var node = sortedNodes[count];
+            node.select(pair[0],pair[1]);
+            count ++;
+        } else {
+
+        }
+        index ++;
+    }
+    self._windowEnd = index;
+    debug('_fillWindow _windowEnd:'+self._windowEnd);
+};
+
+Dispatcher.prototype._createPushStream = function () {
+    var self = this;
+
+    var sortedNodes = this.downloaders;
+
+    if (sortedNodes.length === 0) return;
+
+    var count = 0;
+
+    var index = self._windowEnd;
+
+    while (count !== self.maxLoaders){
+        // debug('_fillWindow _windowLength:'+self._windowLength + ' downloadersLength:' + self.downloaders.length);
         if (index >= self.chunks){
             break;
         }
@@ -20476,7 +20527,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
                 self.downloaded += size;
                 self.emit('downloaded', self.downloaded/self.fileSize);
                 // hd.downloaded += size;
-                self.emit('traffic', hd.mac, size, hd.type === 1 ? 'HTTP_Node' : 'HTTP_Server');
+                self.emit('traffic', hd.mac, size, hd.type === 1 ? 'HTTP_Node' : 'HTTP_Server', hd.meanSpeed);
                 debug('ondata hd.type:' + hd.type +' index:' + index);
                 if (hd.type === 1) {          //node
                     self.fogDownloaded += size;
@@ -20485,10 +20536,12 @@ Dispatcher.prototype._setupHttp = function (hd) {
                         self.emit('fograte', fogRatio);
                     }
                     self.emit('fogspeed', self.downloaders.getCurrentSpeed([1]));
-                    hd.type === 1 ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
+                    // hd.type === 1 ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
+                    hd.type === 1 ? self.bufferSources[index] = hd.id : self.bufferSources[index] = 'b';     //test
                 } else {
                     self.emit('cloudspeed', self.downloaders.getCurrentSpeed([0]));
-                    self.bufferSources[index] = 's'
+                    // self.bufferSources[index] = 's'
+                    self.bufferSources[index] = hd.id;                                   //test
                 }
                 self.emit('buffersources', self.bufferSources);
                 self.emit('sourcemap', hd.type === 1 ? 'n' : 's', index);
@@ -20535,7 +20588,7 @@ Dispatcher.prototype._setupDC = function (jd) {
                 self.emit('buffersources', self.bufferSources);
                 self.emit('sourcemap', 'd', index);
                 // jd.downloaded += size;
-                self.emit('traffic', jd.mac, size, 'WebRTC_Node');
+                self.emit('traffic', jd.mac, size, 'WebRTC_Node', jd.meanSpeed);
             }
         } else {
             debug('重复下载');
@@ -20617,7 +20670,7 @@ Dispatcher.prototype.addDataChannel = function (dc) {
     //     this._windowLength ++;
     // }
     this._setupDC(dc);
-    if (!this.sequencial && this._windowLength < this.maxLoaders) this._windowLength ++;     //
+    if (!this.sequencial && this._windowLength < 10) this._windowLength ++;     //
 };
 
 Dispatcher.prototype.addNode = function (node) {     //node是httpdownloader对象
@@ -20625,7 +20678,7 @@ Dispatcher.prototype.addNode = function (node) {     //node是httpdownloader对�
     this._setupHttp(node);
     this.downloaders.push(node);
     debug('dispatcher add node: '+node.uri);
-    if (!this.sequencial && this._windowLength < this.maxLoaders) this._windowLength ++;
+    if (!this.sequencial && this._windowLength < 10) this._windowLength ++;
 };
 
 Dispatcher.prototype.requestMoreNodes = function () {
@@ -20680,7 +20733,9 @@ Dispatcher.prototype._throttle = function (method, context) {
 
 Dispatcher.prototype.autoSlide = function () {
     var self = this;
-    self._slide();
+    if (self.algorithm === 'pull') {
+        self._slide();
+    }
     setTimeout(function () {
         self._slide();
         self._checkDone();
@@ -20825,7 +20880,7 @@ FileStream.prototype._notify = function () {
     self._notifying = true;
 
     var p = self._piece;
-    debug('FileStream get piece:' + p);
+    // debug('FileStream get piece:' + p);
     self._dispatcher.store.get(p, function (err, buffer) {
         self._notifying = false;
         if (self.destroyed) return;
@@ -21090,7 +21145,7 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
     self._xhr = xhr;
     xhr.open("GET", self.uri);
     xhr.responseType = "arraybuffer";
-    // xhr.timeout = 3000;
+    xhr.timeout = 2000;
     self.startTime=(new Date()).getTime();
     // debug('get_file_index: start:'+begin+' end:'+end);
     var range = "bytes="+begin+"-"+end;
@@ -21105,7 +21160,8 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
             self.speed = Math.floor(event.total / (self.endTime - self.startTime));  //单位: KB/s
             debug('http speed:' + self.speed + 'KB/s');
             // self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
-            self.meanSpeed = 0.95*self.meanSpeed*self.counter + 0.05*self.speed;
+            if (self.meanSpeed == -1) self.meanSpeed = self.speed;
+            self.meanSpeed = 0.95*self.meanSpeed + 0.05*self.speed;
             debug('http '+self.uri+' meanSpeed:' + self.meanSpeed + 'KB/s');
             if (!self.isAsync) {
                 if (self.queue.length > 0){             //如果下载队列不为空
@@ -21125,14 +21181,10 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
 
         self.emit('error');
     };
-    // xhr.ontimeout = function (_) {
-    //     debug('HttpDownloader ' + self.uri + ' timeout');
-    //     self.emit('error');
-    //     // self.weight -= 0.2;
-    //     // if (self.weight < 0.1) {
-    //     //     self.emit('error');
-    //     // }
-    // };
+    xhr.ontimeout = function (_) {
+        debug('HttpDownloader ' + self.uri + ' timeout');
+        self.emit('error');
+    };
     xhr.send();
 };
 
@@ -21168,6 +21220,11 @@ function PearDownloader(urlStr, token, opts) {
     if (!(self instanceof PearDownloader)) return new PearDownloader(urlStr, token, opts);
     // if (!(self instanceof PearPlayer)) return new PearPlayer(selector, opts);
     if (typeof token === 'object') return PearDownloader(urlStr, '', token);
+
+    //validate
+    if (opts.algorithm && ['push', 'pull'].indexOf(opts.algorithm) == -1) throw new Error('Algorithm ' + opts.algorithm + ' is not supported');
+
+
     if (!opts) opts = {};
     if (opts.debug) {
         debug.enable('pear:*');
@@ -23095,7 +23152,7 @@ arguments[4][128][0].apply(exports,arguments)
 module.exports = NodeFilter;
 
 /*
-    nodesArray: {uri: string type: string}
+    nodesArray: {uri: string type: string capacity: number}
     cb: function
     range: {start: number end: number}
  */
@@ -23159,23 +23216,25 @@ function NodeFilter(nodesArray, cb, range) {
         // }
 
         if (doneCount === (range.end-range.start)) {
+
+            //根据capacity对节点进行排序
+            usefulNodes.sort(function (a, b) {          //按能力值从大到小排序
+                return b.capacity - a.capacity;
+            });
+
+            for(var i = 0; i < usefulNodes.length; i++) {
+                debug('node ' + i + ' capacity ' + usefulNodes[i].capacity);
+            }
+            debug('length: ' + usefulNodes.filter(function (node) {
+                return node.capacity >= 5;
+            }).length);
+
             cb(usefulNodes, fileLength);
         }
     }
 
 };
 
-// Array.prototype.unique = function()
-// {
-//     var n = []; //一个新的临时数组
-//     for(var i = 0; i < this.length; i++) //遍历当前数组
-//     {
-//         //如果当前数组的第i已经保存进了临时数组，那么跳过，
-//         //否则把当前项push到临时数组里面
-//         if (n.indexOf(this[i]) == -1) n.push(this[i]);
-//     }
-//     return n;
-// };
 },{"debug":27}],147:[function(require,module,exports){
 /**
  * 节点调度算法的默认实现
@@ -23942,6 +24001,8 @@ var axios = require('axios');
 
 axios.defaults.baseURL = 'https://statdapi.webrtc.win:9801';
 
+var abilitiesURL = 'https://api.webrtc.win/v2/customer/stats/nodes/capacity';
+
 
 var totalReportTraffic = 0;
 
@@ -23962,7 +24023,7 @@ function reportTraffic(uuid, fileSize, traffics) {
             data: body
         })
         .then(function(response) {
-            debug('reportTraffic response:'+JSON.stringify(response)+' temp:'+temp+' totalReportTraffic:'+totalReportTraffic);
+            // debug('reportTraffic response:'+JSON.stringify(response)+' temp:'+temp+' totalReportTraffic:'+totalReportTraffic);
             if (response.status == 200) {
                 totalReportTraffic = temp;
             }
@@ -23988,10 +24049,32 @@ function finalyReportTraffic(uuid, fileSize, traffics) {
     });
 }
 
+function reportAbilities(abilities) {
+    var benchmark = 0;
+    for (var mac in abilities) {
+        benchmark += abilities[mac];
+    }
+    benchmark = benchmark/Object.getOwnPropertyNames(abilities).length;
+    var normalizeAbilities = {};
+    for (var mac in abilities) {
+        normalizeAbilities[mac] = abilities[mac]/benchmark*5;
+        console.log('reportAbilities mac:'+mac+' ability:'+normalizeAbilities[mac]);
+    }
+    axios({
+        method: 'post',
+        url: abilitiesURL,
+        data: normalizeAbilities
+    })
+    .then(function(response) {
+        debug('reportAbilities response:'+JSON.stringify(response));
+    });
+}
+
 module.exports = {
 
     reportTraffic : reportTraffic,
-    finalyReportTraffic: finalyReportTraffic
+    finalyReportTraffic: finalyReportTraffic,
+    reportAbilities: reportAbilities
 };
 
 
@@ -24533,7 +24616,8 @@ RTCDownloader.prototype._receive = function (chunk) {
             self.speed = Math.floor((self.end - self.start + 1) / (self.endTime - self.startTime));  //单位: KB/s
             debug('pear_webrtc speed:' + self.speed + 'KB/s');
             // self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
-            self.meanSpeed = 0.95*self.meanSpeed*self.counter + 0.05*self.speed;
+            if (self.meanSpeed == -1) self.meanSpeed = self.speed;
+            self.meanSpeed = 0.95*self.meanSpeed + 0.05*self.speed;
             debug('datachannel '+self.dc_id+' meanSpeed:' + self.meanSpeed + 'KB/s');
 
             for (var i = 0; i < length; i++) {
@@ -24664,6 +24748,7 @@ var Reporter = require('./reporter');
 // var WEBSOCKET_ADDR = 'ws://signal.webrtc.win:9600/ws';             //test
 var WEBSOCKET_ADDR = 'wss://signal.webrtc.win:7601/wss';
 var GETNODES_ADDR = 'https://api.webrtc.win:6601/v1/customer/nodes';
+
 var BLOCK_LENGTH = 32 * 1024;
 
 inherits(Worker, EventEmitter);
@@ -24717,7 +24802,8 @@ function Worker(urlStr, token, opts) {
         useMonitor: self.useMonitor,
         scheduler: Scheduler[self.scheduler],
         sequencial: opts.sequencial,
-        maxLoaders: opts.maxLoaders || (opts.sequencial ? 5 : 15)
+        maxLoaders: opts.maxLoaders || 10,
+        algorithm: opts.algorithm  || 'push'            // push or pull
     };
 
     if (self.useDataChannel) {
@@ -24740,7 +24826,8 @@ function Worker(urlStr, token, opts) {
         windowOffset: 0,
         windowLength: 0,
         signalServerConnected: false,
-        traffics: {}
+        traffics: {},
+        abilities: {}
     };
 
     self._start();
@@ -24885,24 +24972,48 @@ Worker.prototype._getNodes = function (token, cb) {
                     var httpCount = 0;
                     for (var i=0; i<nodes.length; ++i) {
                         var protocol = nodes[i].protocol;
-                        if (protocol === 'webtorrent') {
+
+                        if (protocol && protocol === 'webtorrent') {                                   //webtorrent
                             if (!self.magnetURI) {                     //如果用户没有指定magnetURI
                                 self.magnetURI = nodes[i].magnet_uri;
                                 debug('_getNodes magnetURI:'+nodes[i].magnet_uri);
                             }
-                        } else {
-                            protocol === 'https' ? httpsCount++ : httpCount++;
-                            if (isLocationHTTP || protocol !== 'http') {
-                                var host = nodes[i].host;
-                                var type = nodes[i].type;
-                                var path = self.urlObj.host + self.urlObj.path;
-                                var url = protocol+'://'+host+'/'+path;
-                                if (!self.nodeSet.has(url)) {
-                                    allNodes.push({uri: url, type: type});
-                                    self.nodeSet.add(url);
-                                }
+                        } else {                                                                        //http/https
+                            httpsCount ++;
+                            httpCount ++;
+                            protocol = isLocationHTTP ? 'http' : 'https';
+                            var port = isLocationHTTP ? nodes[i].http_port : nodes[i].https_port;
+                            var host = nodes[i].host + ':' + port;
+                            var type = nodes[i].type;
+                            var capacity = nodes[i].capacity;
+                            var path = self.urlObj.host + self.urlObj.path;
+                            var url = protocol+'://'+host+'/'+path;
+                            if (!self.nodeSet.has(url)) {
+                                allNodes.push({uri: url, type: type, capacity: capacity});
+                                self.nodeSet.add(url);
                             }
                         }
+
+
+                        // if (protocol === 'webtorrent') {
+                        //     if (!self.magnetURI) {                     //如果用户没有指定magnetURI
+                        //         self.magnetURI = nodes[i].magnet_uri;
+                        //         debug('_getNodes magnetURI:'+nodes[i].magnet_uri);
+                        //     }
+                        // } else {
+                        //     protocol === 'https' ? httpsCount++ : httpCount++;
+                        //     if (isLocationHTTP || protocol !== 'http') {
+                        //         var host = nodes[i].host;
+                        //         var type = nodes[i].type;
+                        //         var capacity = nodes[i].capacity;
+                        //         var path = self.urlObj.host + self.urlObj.path;
+                        //         var url = protocol+'://'+host+'/'+path;
+                        //         if (!self.nodeSet.has(url)) {
+                        //             allNodes.push({uri: url, type: type, capacity: capacity});
+                        //             self.nodeSet.add(url);
+                        //         }
+                        //     }
+                        // }
                     }
 
                     self._debugInfo.totalHTTPS = httpsCount;
@@ -24936,7 +25047,7 @@ Worker.prototype._getNodes = function (token, cb) {
                             // self._fallBack();
                             cb([{uri: self.src, type: 'server'}]);
                         }
-                    }, {start: 0, end: 10});
+                    }, {start: 0, end: 30});
                 }
             } else {
                 cb(null);
@@ -25066,6 +25177,7 @@ Worker.prototype._startPlaying = function (nodes) {
     for (var i=0;i<nodes.length;++i) {
         var node = nodes[i];
         var hd = new HttpDownloader(node.uri, node.type);
+        hd.id = i;                                                 //test
         self.dispatcherConfig.initialDownloaders.push(hd);
     }
     self.dispatcherConfig.fileSize = self.fileLength;
@@ -25102,18 +25214,24 @@ Worker.prototype._startPlaying = function (nodes) {
             Reporter.reportTraffic(self.peerId, self.fileLength, traffics);
         }, 5000);
 
-        nodeFilter(self.nodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+        //开始上报节点能力值
+        self.reportAbilitiesId = setInterval(function () {
 
-            if (nodes.length) {
+            Reporter.reportAbilities(self._debugInfo.abilities);
+        }, 10000);
 
-                self._debugInfo.usefulHTTPAndHTTPS += nodes.length;
-                nodes.map(function (item) {
-
-                    var hd = new HttpDownloader(item.uri, item.type);
-                    d.addNode(hd);
-                });
-            }
-        }, {start: 10, end: 30});
+        // nodeFilter(self.nodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
+        //
+        //     if (nodes.length) {
+        //
+        //         self._debugInfo.usefulHTTPAndHTTPS += nodes.length;
+        //         nodes.map(function (item) {
+        //
+        //             var hd = new HttpDownloader(item.uri, item.type);
+        //             d.addNode(hd);
+        //         });
+        //     }
+        // }, {start: 30, end: 50});
 
         if (self.useTorrent && self.magnetURI) {
             var client = new PearTorrent();
@@ -25217,6 +25335,7 @@ Worker.prototype._startPlaying = function (nodes) {
         Reporter.finalyReportTraffic(self.peerId, self.fileLength, traffics);
         //移除interval
         clearInterval(self.reportTrafficId);
+        clearInterval(self.reportAbilitiesId);
         self.reportTrafficId = null;
 
         self.emit('done');
@@ -25227,6 +25346,7 @@ Worker.prototype._startPlaying = function (nodes) {
         self.emit('progress', progress);
     });
     d.on('meanspeed', function (meanSpeed) {
+
 
         self.emit('meanspeed', meanSpeed);
     });
@@ -25250,8 +25370,9 @@ Worker.prototype._startPlaying = function (nodes) {
 
         self.emit('sourcemap', sourceType, index);
     });
-    d.on('traffic', function (mac, size, type) {
+    d.on('traffic', function (mac, size, type, meanSpeed) {
 
+        //流量上报
         if (!self._debugInfo.traffics[mac]) {
             self._debugInfo.traffics[mac] = {};
             self._debugInfo.traffics[mac].mac = mac;
@@ -25259,6 +25380,12 @@ Worker.prototype._startPlaying = function (nodes) {
         } else {
             self._debugInfo.traffics[mac].traffic += size;
         }
+
+        //能力值上报
+        if (meanSpeed) {
+            self._debugInfo.abilities[mac] = meanSpeed;
+        }
+
         self.emit('traffic', mac, size, type);
     });
     d.on('datachannelerror', function () {

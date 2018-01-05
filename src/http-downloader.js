@@ -83,7 +83,7 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
     self._xhr = xhr;
     xhr.open("GET", self.uri);
     xhr.responseType = "arraybuffer";
-    // xhr.timeout = 3000;
+    xhr.timeout = 2000;
     self.startTime=(new Date()).getTime();
     // debug('get_file_index: start:'+begin+' end:'+end);
     var range = "bytes="+begin+"-"+end;
@@ -98,7 +98,8 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
             self.speed = Math.floor(event.total / (self.endTime - self.startTime));  //单位: KB/s
             debug('http speed:' + self.speed + 'KB/s');
             // self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
-            self.meanSpeed = 0.95*self.meanSpeed*self.counter + 0.05*self.speed;
+            if (self.meanSpeed == -1) self.meanSpeed = self.speed;
+            self.meanSpeed = 0.95*self.meanSpeed + 0.05*self.speed;
             debug('http '+self.uri+' meanSpeed:' + self.meanSpeed + 'KB/s');
             if (!self.isAsync) {
                 if (self.queue.length > 0){             //如果下载队列不为空
@@ -118,14 +119,10 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
 
         self.emit('error');
     };
-    // xhr.ontimeout = function (_) {
-    //     debug('HttpDownloader ' + self.uri + ' timeout');
-    //     self.emit('error');
-    //     // self.weight -= 0.2;
-    //     // if (self.weight < 0.1) {
-    //     //     self.emit('error');
-    //     // }
-    // };
+    xhr.ontimeout = function (_) {
+        debug('HttpDownloader ' + self.uri + ' timeout');
+        self.emit('error');
+    };
     xhr.send();
 };
 

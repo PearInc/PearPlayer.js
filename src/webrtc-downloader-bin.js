@@ -157,7 +157,8 @@ RTCDownloader.prototype._receive = function (chunk) {
             self.speed = Math.floor((self.end - self.start + 1) / (self.endTime - self.startTime));  //单位: KB/s
             debug('pear_webrtc speed:' + self.speed + 'KB/s');
             // self.meanSpeed = (self.meanSpeed*self.counter + self.speed)/(++self.counter);
-            self.meanSpeed = 0.95*self.meanSpeed*self.counter + 0.05*self.speed;
+            if (self.meanSpeed == -1) self.meanSpeed = self.speed;
+            self.meanSpeed = 0.95*self.meanSpeed + 0.05*self.speed;
             debug('datachannel '+self.dc_id+' meanSpeed:' + self.meanSpeed + 'KB/s');
 
             for (var i = 0; i < length; i++) {
