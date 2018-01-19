@@ -18,7 +18,13 @@ function PearPlayer(selector, token, opts) {
     if (!(self instanceof PearPlayer)) return new PearPlayer(selector, token, opts);
     if (typeof token === 'object') return PearPlayer(selector, '', token);
     if (!opts) opts = {};
-    if (typeof selector !== 'string') throw new Error('video selector must be a string!');
+    if (typeof selector === 'string') {
+        self.video = document.querySelector(selector);        
+    } else if (Object.prototype.toString.call(selector) === '[object HTMLVideoElement]') {
+        self.video = selector;
+    } else {
+        throw new Error('illegal video selector');
+    }
     self.video = document.querySelector(selector);
     opts.selector = selector;
     opts.render = render;
