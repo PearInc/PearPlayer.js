@@ -25,7 +25,6 @@ function PearPlayer(selector, token, opts) {
     } else {
         throw new Error('illegal video selector');
     }
-    self.video = document.querySelector(selector);
     opts.selector = selector;
     opts.render = render;
     opts.sequencial = true;                           //player必须有序下载buffer
