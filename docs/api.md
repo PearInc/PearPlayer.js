@@ -73,6 +73,7 @@ if (PearPlayer.isWebRTCSupported()) {
   sources: [],                 //指定下载源，增加这个字段后pearplayer不会再向后台请求节点，建议下载源多于5个以保证流畅播放
   useMonitor: true,            //是否开启monitor,会稍微影响性能,默认false
   BTMode: false,               //是否开启纯BT下载模式（基于webtorrent），默认false，如果设为true，需要手动传入magnetURI（参考https://github.com/webtorrent/webtorrent）
+  algorithm: 'pull',           //下载算法，有‘push’和‘pull’两种，默认‘pull’
   debug: true                  //是否开启debug模式，开启后可以在console中查看log，默认false
 }
 ```
