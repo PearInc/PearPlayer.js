@@ -53,9 +53,11 @@ if (PearPlayer.isWebRTCSupported()) {
 }
 ```
 
-## `var player = new PearPlayer('#pearvideo', opts)`
+## `var player = new PearPlayer('#pearvideo', token, opts)`
 
 创建一个新的PearPlayer实例，`#pearvideo`是video标签的id。
+
+token是CP登陆后获取的token，具体获取方式可以参考https://github.com/PearInc/FogVDN/blob/master/For_CPs.md
 
 其中`opts`可以指定PearPlayer的具体配置，相关字段的说明如下：
 

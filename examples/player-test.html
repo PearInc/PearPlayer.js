@@ -8,20 +8,21 @@
 <body>
 <div id="main">
     <!--<video id="pearvideo" controls>-->
-    <video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>
+    <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Corporate-Video-V5.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-demo-your-name.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/newifi/Pear-Demo-planet.earth.ii.s01e04.mp4" controls>-->
     <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-SoundOfMusic_172.mp4" controls>-->
-    <!--<video id="pearvideo" src="https://qq.webrtc.win/free/Pear-Demo-sintel-1024-surround.mp4" controls>-->
+    <video id="pearvideo" src="http://jitrtc.com/download/test.mp4" controls>
     </video>
 </div>
 <script src="../dist/pear-player.js"></script>
 <script>
 
+    var token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwZWFyIjoicGVhci1yZXN0ZnVsLWFwaS0zMzQ0IiwiZXhwIjoxNTE3OTgxNzIwLCJqdGkiOiIxMzczIiwiaWF0Ijo4LCJpc3MiOiJmb2ctbG9naW4tYXBpIiwic3ViIjoiY3dpbmcifQ.XjyEJ9uZLZiaHnMzV1ftATziiv3022eN08Cemc6ur10'
     //第一个参数为video标签的id或class
     if (PearPlayer.isMSESupported()) {
-        var player = new PearPlayer('#pearvideo', {
+        var player = new PearPlayer('#pearvideo', token, {
 //            src: 'https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4',
             scheduler: 'IdleFirst',      //节点调度算法，默认IdleFirst，其它内置调度算法有“WebRTCFirst“和”CloudFirst”
             autoplay: true,             //是否自动播发视频,默认true
@@ -35,7 +36,8 @@
             useMonitor: true,            //是否开启monitor,会稍微影响性能,默认true
             BTMode: false,                //是否开启纯BT下载模式（基于webtorrent），默认false,
             debug: true,                  //是否开启debug模式，开启后可以在console中查看log，默认false
-            algorithm: 'pull'             //下载算法，有‘push’和‘pull’两种，默认‘pull’
+            algorithm: 'pull',             //下载算法，有‘push’和‘pull’两种，默认‘pull’
+
         });
 
         player.on('fallback', onFallback);                  //播放器出现异常时的回调函数
