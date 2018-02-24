@@ -16,34 +16,35 @@
 
 **[English](https://github.com/PearInc/PearPlayer.js/blob/master/README_EN.md)**
 
-PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/)]**  is a streaming media player framework written completely with HTML5 and JavaScript. The player uses HTTP (including HTTPS, HTTP2) and WebRTC(data channels) for code work. The WebRTC is multi-protocol, multi-source，having low latency and high bandwidth utilization. Why can PearPlayer guarantee the maximum P2P rate and user's fluent video experience? There are two reasons. One is MSE (Media Source Extension) technology, another is our designed algorithm. We know MSE technology based on H5 technology can collect the Buffer block from multiple source nodes to the player. Besides, the designed algorithm is to achieve the best scheduling strategy and handle of various abnormal situations.
+PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/)]**  is a streaming media player framework written completely with HTML5 and JavaScript. The player implements multiprotocols , multisources , low latency and high bandwidth of no plugin in webside . The player support HTTP protocol (including HTTPS, HTTP2) and WebRTC protocol . Why can PearPlayer guarantee the maximum P2P ratio and user's fluent video experience ?  Firstly , H5 MSE ( Media Source Extension) technology can collect the Buffer block from multiple source nodes to the player. Secondly, the well-designed algorithm is to achieve the best scheduling mechanism and configure to failover automatically.
+
+
 
 ![PearPlayer](fig/PearPlayer.png)
 <br>
 <br>
 ![multisources](fig/fogvdn_multisources.png)
 
-Now, through the html label`<script>`,simply include the`pear-player.min.js` on your webpages .Refer to the following [code examples](#快速开始)，or[`/examples/player-test.html`](/examples/player-test.html)can help you.
-WOW! See the basic method[get-started](docs/get-started.md) below .<br/>
+You can use PearPlayer only by importing `pear-player.min.js` through the  `<script>` script tag to HTML. Refer to the following [code examples](#快速开始)，or [`/examples/player-test.html`](/examples/player-test.html) can help you. Get reference [get-started](docs/get-started.md) below to understand the basic usage .<br/>  
+
 
 ## Feature
 - It can be used without plugins, extensions, or installations because of P2P ability for WebRTC
-- Multi-protocol(HTTP, HTTPS, WebRTC)and multi-source
-- Scheduling algorithm can guarantee the P2P rate and user's fluent video experience
-- no parameter( the system can adapt by itself bases on the video rate ). Even on the high usage patterns, the player can adjust it's algorithm and parameter by itself 
-- No unlimited buffers to save bandwidth / traffic for CP users 
-- Support Chrome, Firefox, Opera, IE, Edge and other mainstream browsers. Besides, it will support Safari, Tencent WeChat and X5/TBS.
-- access to low cost, high availability Pear [Fog CDN](https://github.com/PearInc/FogVDN)
-- Protocol by TLS/DTLS, no DPI features; eliminate statistical characteristics through Pear Fog dynamic port
-- Easy using ,like using HTML5 <video> label, and integrating with popular player framework such as [video.js](https://github.com/videojs/video.js)
+- Multiprotocols (HTTP, HTTPS, WebRTC) and multisources
+-	Scheduling algorithm can ensure the users smooth video experience under maximizing P2P ratio 
+-	no parameter( the system can adapt by itself bases on the video bit rate ). Even the player can adjust algorithms and parameters by itself on advanced usage patterns
+-	No unlimited buffers to save bandwidth / traffic for CP users
+-	Support Chrome, Firefox, Opera, IE, Edge and other mainstream browsers. Besides, and will support Safari, Tencent WeChat and X5/TBS( multi-source transmission ; the playing issues can be well resolved by MSE.) 
+-	access to low cost, high availability Pear Fog CDN
+-	The protocols are fully encrypted by TLS/DTLS with no DPI feature; eliminate statistical characteristics via Pear Fog dynamic port
+-	As easy as using HTML5 <video> script tag and easy to integrate with popular player fameworks such as video.js
 - The ability of browser P2P（base on WebTorrent）
-
 
 
 ![bitmap](fig/bitmap_en.png)
 
 ## Quick Start
-It's time to witness a miracle - please copy the following code into Web HTML5 code, and then open a webpage .
+It's time to witness a migic - please copy the following code into Web HTML5 code, and then open a webpage .
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/pearplayer@latest"></script>
@@ -56,7 +57,7 @@ It's time to witness a miracle - please copy the following code into Web HTML5 c
 ## ## Using Method 
 
 ###  Simply include the video label on the js packet
-And then use the script label to import pear-player.min.js：
+And then import the <script> script tag to pear-player.min.js：
 ```html
 <script src="./dist/pear-player.min.js"></script>
 ```
@@ -64,11 +65,11 @@ or use CDN：
 ```html
 <script src="https://cdn.jsdelivr.net/npm/pearplayer@latest"></script>
 ```
-Suppose we want to use video label to paly the fllowing video, see HTML below：
+Suppose we want to use video script tag  to paly the fllowing video, see HTML below：
 ```html
 <video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-Yosemite_National_Park.mp4" controls>
 ```
-Import PearPlayer to the video label , using the codes below:
+Import PearPlayer to the video script tag  , using the codes below:
 ```html
 <script>
   /**
@@ -80,10 +81,10 @@ Import PearPlayer to the video label , using the codes below:
   }
 </script>
 ```
-Congratulations! NOW your player has the P2P abilitie and no plugin!
+Congratulations! NOW your player has the P2P ability and no plugin!
 
 ### How to speed up the videos？
-The videos above  is already distributed, so how to speed up any other video? SO EASY! Add your video's URL into[Video distribution system](https://oss.webrtc.win/). And now you can use Pear's huge amounts of nodes to speed up your videos！Please click [here](https://manual.webrtc.win/oss/)（only support  `MP4`format，and add `Pear-Demo`prefix of the video's name ,such as `Pear-Demo-movie.mp4`）
+The videos above  is already distributed into Pear’s massive nodes . So how to speed up any other video?  Add your video's URL into[Video distribution system](https://oss.webrtc.win/). And now you can use Pear's massive odes to speed up your videos！Please click [here](https://manual.webrtc.win/oss/)（only support  `MP4`format，and add `Pear-Demo` in front of the video's name ,such as `Pear-Demo-movie.mp4`）
 
 ## Who is using Pear Player today？
 
