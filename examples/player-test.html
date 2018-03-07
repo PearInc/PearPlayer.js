@@ -35,7 +35,7 @@
             BTMode: false,                //是否开启纯BT下载模式（基于webtorrent），默认false,
             debug: true,                  //是否开启debug模式，开启后可以在console中查看log，默认false
             algorithm: 'pull',             //下载算法，有‘push’和‘pull’两种，默认‘pull’
-
+            geoEnabled: false               //是否开启geo接口，默认false
         });
 
         player.on('fallback', onFallback);                  //播放器出现异常时的回调函数

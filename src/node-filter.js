@@ -5,41 +5,41 @@
 module.exports = NodeFilter;
 
 /*
-    nodesArray: {uri: string type: string capacity: number}
-    cb: function
-    range: {start: number end: number}
+ nodesArray: {uri: string type: string capacity: number}
+ cb: function
+ range: {start: number end: number}
  */
 
 var debug = require('debug')('pear:node-filter');
 
 function NodeFilter(nodesArray, cb, range) {
 
-    // var ipArray = array.unique();
-    var doneCount = 0;
-    var usefulNodes = [];
-    var fileLength = 0;
-    if (!range) {
-        range = {
-            start: 0,
-            end: nodesArray.length
-        }
-    } else if (range.end > nodesArray.length) {
-        range.end = nodesArray.length;
-    }
-
-    for (var i=range.start;i<range.end;++i) {
-
-        try {
-            connectTest(nodesArray[i]);
-        } catch (e) {
-            // debug(nodesArray[i].uri + ':' + JSON.stringify(e))
-        }
-    }
+    cb(nodesArray, 0);
+    // var doneCount = 0;
+    // var usefulNodes = [];
+    // var fileLength = 0;
+    // if (!range) {
+    //     range = {
+    //         start: 0,
+    //         end: nodesArray.length
+    //     }
+    // } else if (range.end > nodesArray.length) {
+    //     range.end = nodesArray.length;
+    // }
+    //
+    // for (var i=range.start;i<range.end;++i) {
+    //
+    //     try {
+    //         connectTest(nodesArray[i]);
+    //     } catch (e) {
+    //         // debug(nodesArray[i].uri + ':' + JSON.stringify(e))
+    //     }
+    // }
 
     function connectTest(node) {
 
         var xhr = new XMLHttpRequest;
-        xhr.timeout = 1000;
+        xhr.timeout = 6000;
         xhr.open('head', node.uri);
         xhr.onload = function () {
             doneCount ++;
@@ -79,8 +79,8 @@ function NodeFilter(nodesArray, cb, range) {
                 debug('node ' + i + ' capacity ' + usefulNodes[i].capacity);
             }
             debug('length: ' + usefulNodes.filter(function (node) {
-                return node.capacity >= 5;
-            }).length);
+                    return node.capacity >= 5;
+                }).length);
 
             cb(usefulNodes, fileLength);
         }

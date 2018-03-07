@@ -83,7 +83,7 @@ HttpDownloader.prototype._getChunk = function (begin,end) {
     self._xhr = xhr;
     xhr.open("GET", self.uri);
     xhr.responseType = "arraybuffer";
-    xhr.timeout = 2000;
+    // xhr.timeout = 2000;
     self.startTime=(new Date()).getTime();
     // debug('get_file_index: start:'+begin+' end:'+end);
     var range = "bytes="+begin+"-"+end;

@@ -464,6 +464,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
             if (self._windowLength > 3) self._windowLength --;
         }
         self.checkoutDownloaders();
+        self.emit('httperror');
     });
     hd.on('data',function (buffer, start, end, speed) {
 
