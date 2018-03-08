@@ -15,7 +15,8 @@
     <!--<video id="pearvideo" src="https://qq.webrtc.win/tv/Pear-Demo-SoundOfMusic_172.mp4" controls>-->
     </video>
 </div>
-<script src="../dist/pear-player.js"></script>
+<!--<script src="../dist/pear-player.js"></script>-->
+<script src="../dist/pear-player.min.js"></script>
 <script>
 //    console.log(encodeURI('http://localhost:6075/downloader/binary-file?src=https://qq.webrtc.win/binary/Pear-Demo-kodexplorer4.00.zip'))
     //第一个参数为video标签的id或class
@@ -35,7 +36,7 @@
             BTMode: false,                //是否开启纯BT下载模式（基于webtorrent），默认false,
             debug: true,                  //是否开启debug模式，开启后可以在console中查看log，默认false
             algorithm: 'pull',             //下载算法，有‘push’和‘pull’两种，默认‘pull’
-            geoEnabled: false               //是否开启geo接口，默认false
+            geoEnabled: true               //是否开启geo接口，默认false
         });
 
         player.on('fallback', onFallback);                  //播放器出现异常时的回调函数
