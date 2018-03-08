@@ -109,6 +109,7 @@ Special thanks to the following projects to provide some source of inspiration a
 
 ## Speech and media coverage
 
+- Feb 2018 （36Kr） - [「Pear梨享」让雾计算落地，百万边缘节点的背后是提高效率和成本控制](http://36kr.com/p/5118296.html) 
 - Nov 2017（Gold Science and Technology） - [DITING Technologies Inc，which invested Pear Limited， has entered Blockchain domain ](http://www.jinse.com/blockchain/99767.html)
 - Sep 2017 Future Network and Open Community Alliance） - [Fog Computing has begun after Cloud Computing ——about P2P CDN](https://mp.weixin.qq.com/s/39dfSA6cTj2eoo-KqsC3AQ)  
 - Aug 2017（IT biggie talk） - [Will WebRTC be the mainstream？It's era to crowdsource ！](http://mp.weixin.qq.com/s/cx_ljl2sexE0XkgliZfnmQ)
