@@ -19998,7 +19998,7 @@ module.exports = function zeroFill (width, number, pad) {
 },{}],134:[function(require,module,exports){
 module.exports={
   "name": "pearplayer",
-  "version": "2.4.15",
+  "version": "2.4.16",
   "description": "",
   "main": "./dist/pear-player.js",
   "dependencies": {
@@ -23165,29 +23165,29 @@ module.exports = NodeFilter;
 
 var debug = require('debug')('pear:node-filter');
 
-function NodeFilter(nodesArray, cb, range) {
+function NodeFilter(nodesArray, cb, range, expectedSize) {
 
     cb(nodesArray, 0);
-    // var doneCount = 0;
-    // var usefulNodes = [];
-    // var fileLength = 0;
-    // if (!range) {
-    //     range = {
-    //         start: 0,
-    //         end: nodesArray.length
-    //     }
-    // } else if (range.end > nodesArray.length) {
-    //     range.end = nodesArray.length;
-    // }
-    //
-    // for (var i=range.start;i<range.end;++i) {
-    //
-    //     try {
-    //         connectTest(nodesArray[i]);
-    //     } catch (e) {
-    //         // debug(nodesArray[i].uri + ':' + JSON.stringify(e))
-    //     }
-    // }
+    var doneCount = 0;
+    var usefulNodes = [];
+    var fileLength = 0;
+    if (!range) {
+        range = {
+            start: 0,
+            end: nodesArray.length
+        }
+    } else if (range.end > nodesArray.length) {
+        range.end = nodesArray.length;
+    }
+
+    for (var i=range.start;i<range.end;++i) {
+
+        try {
+            connectTest(nodesArray[i]);
+        } catch (e) {
+            // debug(nodesArray[i].uri + ':' + JSON.stringify(e))
+        }
+    }
 
     function connectTest(node) {
 
@@ -23199,6 +23199,7 @@ function NodeFilter(nodesArray, cb, range) {
             if (this.status >= 200 && this.status<300) {
                 usefulNodes.push(node);
                 fileLength = xhr.getResponseHeader('content-length');
+                node.fileLength = fileLength;
             }
             chenkDone();
         };
@@ -23228,12 +23229,19 @@ function NodeFilter(nodesArray, cb, range) {
                 return b.capacity - a.capacity;
             });
 
-            for(var i = 0; i < usefulNodes.length; i++) {
-                debug('node ' + i + ' capacity ' + usefulNodes[i].capacity);
+            // for(var i = 0; i < usefulNodes.length; i++) {
+            //     debug('node ' + i + ' capacity ' + usefulNodes[i].capacity);
+            // }
+            // debug('length: ' + usefulNodes.filter(function (node) {
+            //         return node.capacity >= 5;
+            //     }).length);
+
+            //过滤掉长度不符的节点
+            if (expectedSize) {
+                usefulNodes = usefulNodes.filter(function (node) {
+                    node.fileLength === expectedSize;
+                });
             }
-            debug('length: ' + usefulNodes.filter(function (node) {
-                    return node.capacity >= 5;
-                }).length);
 
             cb(usefulNodes, fileLength);
         }
@@ -25057,7 +25065,7 @@ Worker.prototype._getNodes = function (token, cb) {
                             // self._fallBack();
                             cb([{uri: self.src, type: 'server'}]);
                         }
-                    }, {start: 0, end: 30});
+                    }, {start: 0, end: 30}, self.fileLength);
                 }
             } else {
                 cb(null);

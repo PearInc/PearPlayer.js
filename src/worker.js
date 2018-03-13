@@ -326,7 +326,7 @@ Worker.prototype._getNodes = function (token, cb) {
                             // self._fallBack();
                             cb([{uri: self.src, type: 'server'}]);
                         }
-                    }, {start: 0, end: 30});
+                    }, {start: 0, end: 30}, self.fileLength);
                 }
             } else {
                 cb(null);
