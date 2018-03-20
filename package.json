@@ -1,6 +1,6 @@
 {
   "name": "pearplayer",
-  "version": "2.4.16",
+  "version": "2.5.0",
   "description": "",
   "main": "./dist/pear-player.js",
   "dependencies": {

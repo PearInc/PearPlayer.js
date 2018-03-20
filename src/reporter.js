@@ -78,9 +78,15 @@ function reportAbilities(abilities) {
 
 module.exports = {
 
-    reportTraffic : reportTraffic,
-    finalyReportTraffic: finalyReportTraffic,
-    reportAbilities: reportAbilities
+    reportTraffic : function () {
+
+    },
+    finalyReportTraffic: function () {
+
+    },
+    reportAbilities: function () {
+
+}
 };
 
 

@@ -19998,7 +19998,7 @@ module.exports = function zeroFill (width, number, pad) {
 },{}],134:[function(require,module,exports){
 module.exports={
   "name": "pearplayer",
-  "version": "2.4.16",
+  "version": "2.5.0",
   "description": "",
   "main": "./dist/pear-player.js",
   "dependencies": {
@@ -20375,7 +20375,7 @@ Dispatcher.prototype._checkDone = function () {
         // debug('dispatcher done');
         self.emit('done');
         if (self.useMonitor) {
-            self.emit('downloaded', 1.0);
+            // self.emit('downloaded', 1.0);
         }
         for (var k=0;k<self.downloaders.length;++k) {
             if (self.downloaders[k].type === 2) {               //datachannel
@@ -20531,7 +20531,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
             self._checkDone();
             if (self.useMonitor) {
                 self.downloaded += size;
-                self.emit('downloaded', self.downloaded/self.fileSize);
+                self.emit('downloaded', size);
                 // hd.downloaded += size;
                 self.emit('traffic', hd.mac, size, hd.type === 1 ? 'HTTP_Node' : 'HTTP_Server', hd.meanSpeed);
                 debug('ondata hd.type:' + hd.type +' index:' + index);
@@ -20542,12 +20542,12 @@ Dispatcher.prototype._setupHttp = function (hd) {
                         self.emit('fograte', fogRatio);
                     }
                     self.emit('fogspeed', self.downloaders.getCurrentSpeed([1]));
-                    // hd.type === 1 ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
-                    hd.type === 1 ? self.bufferSources[index] = hd.id : self.bufferSources[index] = 'b';     //test
+                    hd.type === 1 ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
+                    // hd.type === 1 ? self.bufferSources[index] = hd.id : self.bufferSources[index] = 'b';     //test
                 } else {
                     self.emit('cloudspeed', self.downloaders.getCurrentSpeed([0]));
-                    // self.bufferSources[index] = 's'
-                    self.bufferSources[index] = hd.id;                                   //test
+                    self.bufferSources[index] = 's'
+                    // self.bufferSources[index] = hd.id;                                   //test
                 }
                 self.emit('buffersources', self.bufferSources);
                 self.emit('sourcemap', hd.type === 1 ? 'n' : 's', index);
@@ -20584,7 +20584,7 @@ Dispatcher.prototype._setupDC = function (jd) {
                 self.downloaded += size;
                 self.fogDownloaded += size;
                 debug('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
-                self.emit('downloaded', self.downloaded/self.fileSize);
+                self.emit('downloaded', size);
                 var fogRatio = self.fogDownloaded/self.downloaded;
                 if (fogRatio >= self.fogRatio) {
                     self.emit('fograte', fogRatio);
@@ -20649,7 +20649,7 @@ Dispatcher.prototype.addTorrent = function (torrent) {
             self.downloaded += self.pieceLength;
             self.fogDownloaded += self.pieceLength;
             torrent.pear_downloaded += self.pieceLength;
-            self.emit('downloaded', self.downloaded/self.fileSize);
+            self.emit('downloaded', self.downloaded);
             var fogRatio = self.fogDownloaded/self.downloaded;
             if (fogRatio >= self.fogRatio) {
                 self.emit('fograte', fogRatio);
@@ -23198,7 +23198,11 @@ function NodeFilter(nodesArray, cb, range, expectedSize) {
             doneCount ++;
             if (this.status >= 200 && this.status<300) {
                 usefulNodes.push(node);
-                fileLength = xhr.getResponseHeader('content-length');
+                var size = xhr.getResponseHeader('content-length');
+                if (size > 0) {
+                    fileLength = size
+                }
+                console.warn(`connectTest fileLength ${fileLength}`);
                 node.fileLength = fileLength;
             }
             chenkDone();
@@ -24086,9 +24090,15 @@ function reportAbilities(abilities) {
 
 module.exports = {
 
-    reportTraffic : reportTraffic,
-    finalyReportTraffic: finalyReportTraffic,
-    reportAbilities: reportAbilities
+    reportTraffic : function () {
+
+    },
+    finalyReportTraffic: function () {
+
+    },
+    reportAbilities: function () {
+
+}
 };
 
 
@@ -24801,6 +24811,7 @@ function Worker(urlStr, token, opts) {
     self.peerId = getPeerId();
     self.isPlaying = false;
     self.fileLength = 0;
+    self.downloaded = 0;
     self.nodes = [];
     self.websocket = null;
     self.dispatcher = null;
@@ -24882,7 +24893,7 @@ Worker.prototype._start = function () {
             if (length) {
                 // self.fileLength = fileLength;
                 debug('nodeFilter fileLength:'+fileLength);
-
+                // nodes = [{uri: self.src, type: 'server'}];                   //test
                 self._startPlaying(nodes);
             } else {
 
@@ -24970,9 +24981,10 @@ Worker.prototype._getNodes = function (token, cb) {
 
             var res = JSON.parse(this.response);
             // debug(res.nodes);
-            if (res.size) {                         //如果filesize大于0
+            // if (res.size) {                         //如果filesize大于0
+            if (true) {                         //如果filesize大于0
                 self.fileLength = res.size;
-
+                console.warn(`self.fileLength ${self.fileLength}`);
                 // if (self.useDataChannel) {
                 //     self._pearSignalHandshake();
                 // }
@@ -25037,18 +25049,18 @@ Worker.prototype._getNodes = function (token, cb) {
                     self._debugInfo.totalHTTPS = httpsCount;
                     self._debugInfo.totalHTTP = httpCount;
 
-                    debug('allNodes:'+JSON.stringify(allNodes));
+                    // debug('allNodes:'+JSON.stringify(allNodes));
                     self.nodes = allNodes;
                     if (allNodes.length === 0) cb([{uri: self.src, type: 'server'}]);
                     nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
                         // nodes = [];                                            //test
                         var length = nodes.length;
-                        debug('nodes:'+JSON.stringify(nodes));
+                        // debug('nodes:'+JSON.stringify(nodes));
 
                         self._debugInfo.usefulHTTPAndHTTPS = self._debugInfo.totalHTTPS;
                         if (length) {
                             // self.fileLength = fileLength;
-                            // debug('nodeFilter fileLength:'+fileLength);
+                            debug('nodeFilter fileLength:'+fileLength);
                             // self.nodes = nodes;
                             if (length <= 2) {
                                 // fallBack(nodes[0]);
@@ -25063,7 +25075,7 @@ Worker.prototype._getNodes = function (token, cb) {
                             }
                         } else {
                             // self._fallBack();
-                            cb([{uri: self.src, type: 'server'}]);
+                            // cb([{uri: self.src, type: 'server'}]);
                         }
                     }, {start: 0, end: 30}, self.fileLength);
                 }
@@ -25300,20 +25312,20 @@ Worker.prototype._startPlaying = function (nodes) {
 
     d.on('needmorenodes', function () {
         debug('request more nodes');
-        self._getNodes(self.token, function (nodes) {
-            debug('needmorenodes _getNodes:'+JSON.stringify(nodes));
-            if (nodes) {
-                // d.addNodes(nodes);
-                for (var i=0;i<nodes.length;++i) {
-                    var node = nodes[i];
-                    var hd = new HttpDownloader(node.uri, node.type);
-                    d.addNode(hd);
-                }
-            } else {
-                debug('noMoreNodes');
-                d.noMoreNodes = true;
-            }
-        });
+        // self._getNodes(self.token, function (nodes) {
+        //     debug('needmorenodes _getNodes:'+JSON.stringify(nodes));
+        //     if (nodes) {
+        //         // d.addNodes(nodes);
+        //         for (var i=0;i<nodes.length;++i) {
+        //             var node = nodes[i];
+        //             var hd = new HttpDownloader(node.uri, node.type);
+        //             d.addNode(hd);
+        //         }
+        //     } else {
+        //         debug('noMoreNodes');
+        //         d.noMoreNodes = true;
+        //     }
+        // });
 
     });
     d.on('needsource', function () {
@@ -25360,8 +25372,17 @@ Worker.prototype._startPlaying = function (nodes) {
     });
     d.on('downloaded', function (downloaded) {
 
-        var progress = downloaded > 1.0 ? 1.0 : downloaded;
-        self.emit('progress', progress);
+        // var progress = downloaded > 1.0 ? 1.0 : downloaded;
+        // if (progress > self.progress) {
+        self.downloaded += downloaded;
+        if (self.downloaded >= self.fileLength) {
+            self.emit('progress', 1.0);
+        } else {
+            self.emit('progress', self.downloaded/self.fileLength);
+        }
+
+        //     self.progress = progress;
+        // }
     });
     d.on('meanspeed', function (meanSpeed) {
 

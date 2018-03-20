@@ -45,7 +45,11 @@ function NodeFilter(nodesArray, cb, range, expectedSize) {
             doneCount ++;
             if (this.status >= 200 && this.status<300) {
                 usefulNodes.push(node);
-                fileLength = xhr.getResponseHeader('content-length');
+                var size = xhr.getResponseHeader('content-length');
+                if (size > 0) {
+                    fileLength = size
+                }
+                console.warn(`connectTest fileLength ${fileLength}`);
                 node.fileLength = fileLength;
             }
             chenkDone();

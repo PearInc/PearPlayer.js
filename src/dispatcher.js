@@ -325,7 +325,7 @@ Dispatcher.prototype._checkDone = function () {
         // debug('dispatcher done');
         self.emit('done');
         if (self.useMonitor) {
-            self.emit('downloaded', 1.0);
+            // self.emit('downloaded', 1.0);
         }
         for (var k=0;k<self.downloaders.length;++k) {
             if (self.downloaders[k].type === 2) {               //datachannel
@@ -481,7 +481,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
             self._checkDone();
             if (self.useMonitor) {
                 self.downloaded += size;
-                self.emit('downloaded', self.downloaded/self.fileSize);
+                self.emit('downloaded', size);
                 // hd.downloaded += size;
                 self.emit('traffic', hd.mac, size, hd.type === 1 ? 'HTTP_Node' : 'HTTP_Server', hd.meanSpeed);
                 debug('ondata hd.type:' + hd.type +' index:' + index);
@@ -492,12 +492,12 @@ Dispatcher.prototype._setupHttp = function (hd) {
                         self.emit('fograte', fogRatio);
                     }
                     self.emit('fogspeed', self.downloaders.getCurrentSpeed([1]));
-                    // hd.type === 1 ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
-                    hd.type === 1 ? self.bufferSources[index] = hd.id : self.bufferSources[index] = 'b';     //test
+                    hd.type === 1 ? self.bufferSources[index] = 'n' : self.bufferSources[index] = 'b';
+                    // hd.type === 1 ? self.bufferSources[index] = hd.id : self.bufferSources[index] = 'b';     //test
                 } else {
                     self.emit('cloudspeed', self.downloaders.getCurrentSpeed([0]));
-                    // self.bufferSources[index] = 's'
-                    self.bufferSources[index] = hd.id;                                   //test
+                    self.bufferSources[index] = 's'
+                    // self.bufferSources[index] = hd.id;                                   //test
                 }
                 self.emit('buffersources', self.bufferSources);
                 self.emit('sourcemap', hd.type === 1 ? 'n' : 's', index);
@@ -534,7 +534,7 @@ Dispatcher.prototype._setupDC = function (jd) {
                 self.downloaded += size;
                 self.fogDownloaded += size;
                 debug('downloaded:'+self.downloaded+' fogDownloaded:'+self.fogDownloaded);
-                self.emit('downloaded', self.downloaded/self.fileSize);
+                self.emit('downloaded', size);
                 var fogRatio = self.fogDownloaded/self.downloaded;
                 if (fogRatio >= self.fogRatio) {
                     self.emit('fograte', fogRatio);
@@ -599,7 +599,7 @@ Dispatcher.prototype.addTorrent = function (torrent) {
             self.downloaded += self.pieceLength;
             self.fogDownloaded += self.pieceLength;
             torrent.pear_downloaded += self.pieceLength;
-            self.emit('downloaded', self.downloaded/self.fileSize);
+            self.emit('downloaded', self.downloaded);
             var fogRatio = self.fogDownloaded/self.downloaded;
             if (fogRatio >= self.fogRatio) {
                 self.emit('fograte', fogRatio);
