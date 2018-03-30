@@ -106,8 +106,8 @@ PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/)]** 是完全�
 
 ## 演讲与媒体报道
 
-- 2018.02.07 （36氪） - [「Pear梨享」让雾计算落地，百万边缘节点的背后是提高效率和成本控制](http://36kr.com/p/5118296.html) 
-- 2017.11.24 （金色财经） - [谛听科技正式进军区块链领域，战略投资梨享计算](http://www.jinse.com/blockchain/99767.html)
+- `2018.02.07` （36氪） - [「Pear梨享」让雾计算落地，百万边缘节点的背后是提高效率和成本控制](http://36kr.com/p/5118296.html) 
+- `2017.11.24` （金色财经） - [谛听科技正式进军区块链领域，战略投资梨享计算](http://www.jinse.com/blockchain/99767.html)
 - 2017.09.01 （未来网络开放社区联盟） - [继云计算之后，雾计算再起 —— 谈谈 P2P CDN](https://mp.weixin.qq.com/s/39dfSA6cTj2eoo-KqsC3AQ)  
 - 2017.08.18 （IT大咖说） - [WebRTC会成主流吗？众包CDN时代到了！](http://mp.weixin.qq.com/s/cx_ljl2sexE0XkgliZfnmQ)
 - 2017.07.11 （OSChina开源中国） - [PearPlayer.js —— 混合P2P-CDN的流媒体播放器](https://www.oschina.net/p/PearPlayerjs)
