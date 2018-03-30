@@ -77,7 +77,7 @@ PearPlayer can be bound to the video tag using only the codes below:
 Congratulations! NOW your player has P2P ability and no plug-ins!
 
 ### How to accelerate your videos?
-The video above has already been dispatched. So how to speed up other videos? Just add your video URL into [Pear Fog Content Delivery Operating System](https://oss.webrtc.win/). And then you can feel free to use Pear's massive fog nodes to accelerate your videos! Please click [here](https://manual.webrtc.win/oss/) for detailed guide. (Currently, newly-registered users can distribute three MP4/TS files, each under 100MB, free of charge. Prefix `Pear-Demo-` prefix needs to be added in front of the video file name, such as `Pear-Demo-movie.mp4`)
+The video above has already been dispatched. So how to speed up other videos? Just add your video URL into [Pear Fog Content Delivery Operating System](https://oss.webrtc.win/). And then you can feel free to use Pear's massive fog nodes to accelerate your videos! Please click [here](https://manual.webrtc.win/oss/) for detailed guide. (Currently, newly-registered users can distribute three `MP4`/TS files, each under 100MB, free of charge. Prefix `Pear-Demo-` prefix needs to be added in front of the video file name, such as `Pear-Demo-movie.mp4`)
 
 ## Who's using PearPlayer today？
 
