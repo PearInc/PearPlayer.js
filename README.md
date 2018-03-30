@@ -81,7 +81,7 @@ PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/)]** 是完全�
 恭喜您，您的播放器已经具备P2P能力了，而且无须任何插件！
 
 ### 如何为自己的视频加速？
-示例中的视频是已经分发过的，那么如何为任意视频加速呢？很简单，只需在[视频分发系统](https://oss.webrtc.win/)中添加您的视频URL，即可利用Pear的海量节点为您的视频加速！具体教程请点击[这里](https://manual.webrtc.win/oss/)（目前仅支持分发`MP4`格式，视频名字需添加`Pear-Demo`前缀，如`Pear-Demo-movie.mp4`）
+示例中的视频是已经分发过的，那么如何为任意视频加速呢？很简单，只需在[视频分发系统](https://oss.webrtc.win/)中添加您的视频URL，即可利用Pear的海量节点为您的视频加速！具体教程请点击[这里](https://manual.webrtc.win/oss/)（目前新注册用户可以免费分发3个大小不超过100MB的MP4或TS格式的文件，视频名字需添加`Pear-Demo`前缀，如`Pear-Demo-movie.mp4`）
 
 ## 谁在使用我们的产品？
 
