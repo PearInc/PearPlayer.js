@@ -23202,7 +23202,7 @@ function NodeFilter(nodesArray, cb, range, expectedSize) {
                 if (size > 0) {
                     fileLength = size
                 }
-                console.warn(`connectTest fileLength ${fileLength}`);
+                // console.warn(`connectTest fileLength ${fileLength}`);
                 node.fileLength = fileLength;
             }
             chenkDone();
@@ -24903,7 +24903,7 @@ Worker.prototype._start = function () {
     } else {
 
         self._getNodes(self.token, function (nodes) {
-            debug('debug _getNodes: %j', nodes);
+            debug('debug _getNodes: %j', JSON.stringify(nodes, null, 1));
             if (nodes) {
                 self._startPlaying(nodes);
                 // if (self.useDataChannel) {
@@ -24950,7 +24950,7 @@ Worker.prototype._getNodes = function (token, cb) {
     var self = this;
 
     var postData = {
-        client_ip:'116.77.208.118',
+        client_ip:'127.0.0.1',
         host: self.urlObj.host,
         uri: self.urlObj.path
     };
@@ -25053,7 +25053,9 @@ Worker.prototype._getNodes = function (token, cb) {
                     self.nodes = allNodes;
                     if (allNodes.length === 0) cb([{uri: self.src, type: 'server'}]);
                     nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
-                        // nodes = [];                                            //test
+                        // nodes = [];
+                        // test
+
                         var length = nodes.length;
                         // debug('nodes:'+JSON.stringify(nodes));
 

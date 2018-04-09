@@ -49,7 +49,7 @@ function NodeFilter(nodesArray, cb, range, expectedSize) {
                 if (size > 0) {
                     fileLength = size
                 }
-                console.warn(`connectTest fileLength ${fileLength}`);
+                // console.warn(`connectTest fileLength ${fileLength}`);
                 node.fileLength = fileLength;
             }
             chenkDone();
