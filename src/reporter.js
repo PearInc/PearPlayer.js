@@ -28,12 +28,12 @@ function reportTraffic(uuid, fileSize, traffics) {
             url: '/traffic',
             data: body
         })
-        .then(function(response) {
-            // debug('reportTraffic response:'+JSON.stringify(response)+' temp:'+temp+' totalReportTraffic:'+totalReportTraffic);
-            if (response.status == 200) {
-                totalReportTraffic = temp;
-            }
-        });
+            .then(function(response) {
+                // debug('reportTraffic response:'+JSON.stringify(response)+' temp:'+temp+' totalReportTraffic:'+totalReportTraffic);
+                if (response.status == 200) {
+                    totalReportTraffic = temp;
+                }
+            });
     }
 }
 
@@ -48,11 +48,11 @@ function finalyReportTraffic(uuid, fileSize, traffics) {
         url: '/traffic',
         data: body
     })
-    .then(function(response) {
-        if (response.status == 200) {
-            debug('finalyReportTraffic');
-        }
-    });
+        .then(function(response) {
+            if (response.status == 200) {
+                debug('finalyReportTraffic');
+            }
+        });
 }
 
 function reportAbilities(abilities) {
@@ -71,9 +71,9 @@ function reportAbilities(abilities) {
         url: abilitiesURL,
         data: normalizeAbilities
     })
-    .then(function(response) {
-        debug('reportAbilities response:'+JSON.stringify(response));
-    });
+        .then(function(response) {
+            debug('reportAbilities response:'+JSON.stringify(response));
+        });
 }
 
 module.exports = {
@@ -86,7 +86,7 @@ module.exports = {
     },
     reportAbilities: function () {
 
-}
+    }
 };
 
 

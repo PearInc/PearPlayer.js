@@ -38,4 +38,9 @@ PearDownloader.isWebRTCSupported = function () {
     return Worker.isRTCSupported();
 };
 
+// PearDownloader.prototype.request = function (start, end, cb) {
+//     // console.warn('66666666:'+this.dispatcher.downloaders.length)
+//     this.dispatcher.downloaders[0].select(0,12345);
+// }
+
 

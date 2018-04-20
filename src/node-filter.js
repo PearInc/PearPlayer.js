@@ -12,9 +12,9 @@ module.exports = NodeFilter;
 
 var debug = require('debug')('pear:node-filter');
 
-function NodeFilter(nodesArray, cb, range, expectedSize) {
+function NodeFilter(nodesArray, cb, range) {
 
-    cb(nodesArray, 0);
+    // cb(nodesArray, 0);
     var doneCount = 0;
     var usefulNodes = [];
     var fileLength = 0;
@@ -26,6 +26,9 @@ function NodeFilter(nodesArray, cb, range, expectedSize) {
     } else if (range.end > nodesArray.length) {
         range.end = nodesArray.length;
     }
+
+    //计时
+    var timeStart = performance.now();
 
     for (var i=range.start;i<range.end;++i) {
 
@@ -39,18 +42,15 @@ function NodeFilter(nodesArray, cb, range, expectedSize) {
     function connectTest(node) {
 
         var xhr = new XMLHttpRequest;
-        xhr.timeout = 6000;
+        xhr.timeout = 1500;
         xhr.open('head', node.uri);
         xhr.onload = function () {
             doneCount ++;
+            node.time = performance.now() - timeStart;
+            // console.warn(`node.time ${node.time}`);
             if (this.status >= 200 && this.status<300) {
                 usefulNodes.push(node);
-                var size = xhr.getResponseHeader('content-length');
-                if (size > 0) {
-                    fileLength = size
-                }
-                // console.warn(`connectTest fileLength ${fileLength}`);
-                node.fileLength = fileLength;
+                fileLength = xhr.getResponseHeader('content-length');
             }
             chenkDone();
         };
@@ -76,23 +76,21 @@ function NodeFilter(nodesArray, cb, range, expectedSize) {
         if (doneCount === (range.end-range.start)) {
 
             //根据capacity对节点进行排序
-            usefulNodes.sort(function (a, b) {          //按能力值从大到小排序
-                return b.capacity - a.capacity;
+            // usefulNodes.sort(function (a, b) {          //按能力值从大到小排序
+            //     return b.capacity - a.capacity;
+            // });
+
+            //根据响应时间排序
+            usefulNodes.sort(function (a, b) {          //按响应时间从小到大排序
+                return a.time - b.time;
             });
 
-            // for(var i = 0; i < usefulNodes.length; i++) {
-            //     debug('node ' + i + ' capacity ' + usefulNodes[i].capacity);
-            // }
-            // debug('length: ' + usefulNodes.filter(function (node) {
-            //         return node.capacity >= 5;
-            //     }).length);
-
-            //过滤掉长度不符的节点
-            if (expectedSize) {
-                usefulNodes = usefulNodes.filter(function (node) {
-                    node.fileLength === expectedSize;
-                });
+            for(var i = 0; i < usefulNodes.length; i++) {
+                debug('node ' + i + ' capacity ' + usefulNodes[i].capacity);
             }
+            debug('length: ' + usefulNodes.filter(function (node) {
+                    return node.capacity >= 5;
+                }).length);
 
             cb(usefulNodes, fileLength);
         }

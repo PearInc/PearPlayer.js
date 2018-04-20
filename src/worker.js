@@ -19,12 +19,15 @@ var Set = require('./set');
 var PearTorrent = require('./pear-torrent');
 var Scheduler = require('./node-scheduler');
 var Reporter = require('./reporter');
+var RangeLoader = require('./range-loader');
+
+var PieceValidator = require('./piece-validator');
 
 // var WEBSOCKET_ADDR = 'ws://signal.webrtc.win:9600/ws';             //test
 var WEBSOCKET_ADDR = 'wss://signal.webrtc.win:7601/wss';
 var GETNODES_ADDR = 'https://api.webrtc.win:6601/v1/customer/nodes';
 var GETGEONODES_ADDR = 'https://api.webrtc.win/v1/customer/geo_nodes';
-
+var md5 = require('blueimp-md5')
 var BLOCK_LENGTH = 32 * 1024;
 
 inherits(Worker, EventEmitter);
@@ -47,6 +50,7 @@ function Worker(urlStr, token, opts) {
     self.selector = opts.selector;
     self.autoplay = opts.autoplay === false ? false : true;
 
+    self.auto = opts.auto;
     self.src = urlStr;
     self.urlObj = url.parse(self.src);
     self.scheduler = opts.scheduler || 'IdleFirst';
@@ -111,6 +115,8 @@ function Worker(urlStr, token, opts) {
     self.getNodesUrl = opts.geoEnabled === true ? GETGEONODES_ADDR : GETNODES_ADDR;
 
     self._start();
+
+
 }
 
 Worker.isRTCSupported = function () {
@@ -121,7 +127,6 @@ Worker.isRTCSupported = function () {
 Object.defineProperty(Worker.prototype, 'debugInfo', {
     get: function () { return this._debugInfo }
 });
-
 
 
 Worker.prototype._start = function () {
@@ -142,10 +147,15 @@ Worker.prototype._start = function () {
             debug('nodes:'+JSON.stringify(nodes));
 
             if (length) {
-                // self.fileLength = fileLength;
+
                 debug('nodeFilter fileLength:'+fileLength);
-                // nodes = [{uri: self.src, type: 'server'}];                   //test
-                self._startPlaying(nodes);
+
+                if (self.auto) {
+                    self._startPlaying(nodes);
+                } else {
+                    self._initRangeLoader(nodes);
+                }
+
             } else {
 
                 self._fallBack();
@@ -154,9 +164,27 @@ Worker.prototype._start = function () {
     } else {
 
         self._getNodes(self.token, function (nodes) {
-            debug('debug _getNodes: %j', JSON.stringify(nodes, null, 1));
+            debug('debug _getNodes: %j', nodes);
             if (nodes) {
-                self._startPlaying(nodes);
+
+                var xhr = new XMLHttpRequest();
+                xhr.responseType = "arraybuffer";
+                xhr.open("GET", self.torrentUrl);
+                xhr.onload = function () {
+                    var response = this.response;
+                    // console.warn(response);
+                    self.validator = new PieceValidator(response);
+
+                    if (self.auto) {
+                        self._startPlaying(nodes);
+                    } else {
+                        self._initRangeLoader(nodes);
+                    }
+                }
+                xhr.send();
+
+
+
                 // if (self.useDataChannel) {
                 //     self._pearSignalHandshake();
                 // }
@@ -201,7 +229,7 @@ Worker.prototype._getNodes = function (token, cb) {
     var self = this;
 
     var postData = {
-        client_ip:'127.0.0.1',
+        // client_ip:'116.77.208.118',
         host: self.urlObj.host,
         uri: self.urlObj.path
     };
@@ -232,13 +260,11 @@ Worker.prototype._getNodes = function (token, cb) {
 
             var res = JSON.parse(this.response);
             // debug(res.nodes);
-            // if (res.size) {                         //如果filesize大于0
-            if (true) {                         //如果filesize大于0
+            if (res.size) {                         //如果filesize大于0
                 self.fileLength = res.size;
-                console.warn(`self.fileLength ${self.fileLength}`);
-                // if (self.useDataChannel) {
-                //     self._pearSignalHandshake();
-                // }
+
+                self.torrentUrl = res.torrents['512'];
+
 
                 if (!res.nodes){                            //如果没有可用节点则切换到纯webrtc模式
                     // cb(null);
@@ -304,16 +330,14 @@ Worker.prototype._getNodes = function (token, cb) {
                     self.nodes = allNodes;
                     if (allNodes.length === 0) cb([{uri: self.src, type: 'server'}]);
                     nodeFilter(allNodes, function (nodes, fileLength) {            //筛选出可用的节点,以及回调文件大小
-                        // nodes = [];
-                        // test
-
+                        // nodes = [];                                            //test
                         var length = nodes.length;
                         // debug('nodes:'+JSON.stringify(nodes));
 
                         self._debugInfo.usefulHTTPAndHTTPS = self._debugInfo.totalHTTPS;
                         if (length) {
                             // self.fileLength = fileLength;
-                            debug('nodeFilter fileLength:'+fileLength);
+                            // debug('nodeFilter fileLength:'+fileLength);
                             // self.nodes = nodes;
                             if (length <= 2) {
                                 // fallBack(nodes[0]);
@@ -474,7 +498,7 @@ Worker.prototype._startPlaying = function (nodes) {
 
     var d = new Dispatcher(self.dispatcherConfig);
     self.dispatcher = d;
-
+    d.validator = self.validator;
     while (self.tempDCQueue.length) {
         var jd = self.tempDCQueue.shift();
         self.dispatcher.addDataChannel(jd);
@@ -692,6 +716,25 @@ Worker.prototype._startPlaying = function (nodes) {
     d.on('httperror', function () {
         self._debugInfo.usefulHTTPAndHTTPS --;
     })
+};
+
+Worker.prototype._initRangeLoader = function (nodes) {
+    debug('_initRangeLoader');
+    var initialDownloaders = [];
+    for (var i=0;i<nodes.length;++i) {
+        var node = nodes[i];
+        var hd = new HttpDownloader(node.uri, node.type);
+        hd.id = i;                                                 //test
+        initialDownloaders.push(hd);
+    }
+
+    this.loader = new RangeLoader({initialDownloaders:initialDownloaders})
+
+    this.emit('begin');
+};
+
+Worker.prototype.select = function (start, end, cb) {
+    this.loader.select(start, end, cb);
 };
 
 function getBrowserRTC () {

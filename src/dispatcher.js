@@ -107,16 +107,18 @@ Dispatcher.prototype._init = function () {
     // debug('self.path:'+self.path);
     self.bitfield = new BitField(self.chunks);       //记录哪个块已经下好
 
-    if (self.algorithm === 'push') {
-        while (self._windowEnd !== self.chunks) {
-            self._createPushStream();
-        }
-        self._windowEnd = 0;
-    }
     // self._checkDone();
 
     // self._slide();
     if (self.auto) {
+
+        if (self.algorithm === 'push') {
+            while (self._windowEnd !== self.chunks) {
+                self._createPushStream();
+            }
+            self._windowEnd = 0;
+        }
+
         self.select(0, self.chunks-1, true);
         self.autoSlide();
         self.slide = noop;
@@ -459,10 +461,7 @@ Dispatcher.prototype._setupHttp = function (hd) {
 
         console.warn('http' + hd.uri + 'error!');
 
-        if (self.downloaders.length > self._windowLength) {
-            self.downloaders.removeObj(hd);
-            if (self._windowLength > 3) self._windowLength --;
-        }
+        self.downloaders.removeObj(hd);
         self.checkoutDownloaders();
         self.emit('httperror');
     });
@@ -470,6 +469,13 @@ Dispatcher.prototype._setupHttp = function (hd) {
 
         var index = self._calIndex(start);
         debug('httpDownloader' + hd.uri +' ondata range:'+start+'-'+end+' at index:'+index+' speed:'+hd.meanSpeed);
+
+        //校验哈希值
+        if (self.validator && !self.validator.validate(buffer, index)) {
+            hd.emit('error');
+            return;
+        }
+
         var size = end - start + 1;
         if (!self.bitfield.get(index)){
             self.bitfield.set(index,true);
