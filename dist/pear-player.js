@@ -21172,7 +21172,7 @@ module.exports = function zeroFill (width, number, pad) {
 },{}],146:[function(require,module,exports){
 module.exports={
   "name": "pearplayer",
-  "version": "2.5.6",
+  "version": "2.5.7",
   "description": "",
   "main": "./dist/pear-player.js",
   "dependencies": {
@@ -25229,7 +25229,7 @@ Validator.prototype.validate = function (data, index) {
     var hash = sha1.sync(data);
     var equal = hash === this.piecesHash[index];
     if (!equal) {
-        console.warn(`buffer validate fail ${index} hash ${hash} ref ${this.piecesHash[index]}`);
+        console.warn(`[HashValidateError] buffer validate fail ${index} hash ${hash} ref ${this.piecesHash[index]}`);
     }
 
     return equal;
@@ -26368,7 +26368,9 @@ Worker.prototype._getNodes = function (token, cb) {
                         var length = nodes.length;
                         // debug('nodes:'+JSON.stringify(nodes));
 
-                        self._debugInfo.usefulHTTPAndHTTPS = self._debugInfo.totalHTTPS;
+                        // self._debugInfo.usefulHTTPAndHTTPS = self._debugInfo.totalHTTPS;
+                        self._debugInfo.usefulHTTPAndHTTPS = length;
+                        // console.warn('totalHTTPS:' + self._debugInfo.totalHTTPS + ' usefulHTTPAndHTTPS:' + length);
                         if (length) {
                             // self.fileLength = fileLength;
                             // debug('nodeFilter fileLength:'+fileLength);

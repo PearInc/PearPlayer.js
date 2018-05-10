@@ -334,7 +334,9 @@ Worker.prototype._getNodes = function (token, cb) {
                         var length = nodes.length;
                         // debug('nodes:'+JSON.stringify(nodes));
 
-                        self._debugInfo.usefulHTTPAndHTTPS = self._debugInfo.totalHTTPS;
+                        // self._debugInfo.usefulHTTPAndHTTPS = self._debugInfo.totalHTTPS;
+                        self._debugInfo.usefulHTTPAndHTTPS = length;
+                        // console.warn('totalHTTPS:' + self._debugInfo.totalHTTPS + ' usefulHTTPAndHTTPS:' + length);
                         if (length) {
                             // self.fileLength = fileLength;
                             // debug('nodeFilter fileLength:'+fileLength);
