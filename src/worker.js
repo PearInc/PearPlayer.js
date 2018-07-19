@@ -403,7 +403,8 @@ Worker.prototype._pearSignalHandshake = function () {
         var message = JSON.parse(e.data);
         // debug("[simpleRTC] websocket message is: " + JSON.stringify(message));
         // message = message.nodes[1];
-        if (message.action === 'candidate' && message.type === 'end') {
+        //字段错误 message -> message.candidates
+        if (message.action === 'candidate' && message.candidates.type === 'end') {
 
             for (var peerId in self.candidateMap) {
                 if (message.peer_id === peerId) {
