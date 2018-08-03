@@ -116,7 +116,6 @@ PearPlayer（梨享播放器）**[[Demo](https://demo.webrtc.win/)]** 是完全�
 
 ## License
 
-MIT. Copyright (c) [Pear Limited](https://pear.hk) and [snowinszu](https://github.com/snowinszu).
-
+MIT. Copyright (c) [Pear Limited](https://pear.hk) 
 ## 帮助与支持
 E-mail: <service@pear.hk>；用户QQ群：`373594967`；[CP/CDN接入、OEM与其他商务合作](https://github.com/PearInc/FogVDN)
