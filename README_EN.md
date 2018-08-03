@@ -83,7 +83,6 @@ The video above has already been dispatched. So how to speed up other videos? Ju
 
 + [Pear Limited](https://pear.hk)
 + [Lenovo China](https://www.lenovo.com.cn/)
-+ [Newifi xCloud](http://www.newifi.com/)
 + [FastWeb](http://fastweb.com.cn/)
 + [UCloud](https://www.ucloud.cn)
 + [Tencent Cloud](https://qcloud.com)
@@ -103,7 +102,6 @@ Special thanks goes to the following projects that provide some inspirations and
 ## Speech and Media Reports
 
 - Feb 7th, 2018 (36Kr) - [「Pear Share」practises fog computing, behind millions of fringe nodes are efficiency promotion and cost control](http://36kr.com/p/5118.html) 
-- Nov 24th, 2017 (CoinTime) - [DITING Technologies Inc. officially enters the blockchain domain and invests Pear Limited](http://www.jinse.com/blockchain/99767.html)
 - Sep 1st, 2017 (Future Network and Open Community Alliance) - [Fog Computing rises after Cloud Computing - Have a discuss on P2P-CDN](https://mp.weixin.qq.com/s/39dfSA6cTj2eoo-KqsC3AQ) 
 - Aug 18th, 2017 (IT Biggie Talks) - [Will WebRTC be the mainstream? Here comes the era of CDN crowdsourcing!](http://mp.weixin.qq.com/s/cx_ljl2sexE0XkgliZfnmQ)
 - Jul 11st, 2017 (OSChina) - [PearPlayer.js - A streaming media player supports Mixed P2P-CDN](https://www.oschina.net/p/PearPlayerjs)
