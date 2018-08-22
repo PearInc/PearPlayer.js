@@ -5,7 +5,8 @@ var Buffer = require('safe-buffer').Buffer
 var debug = require('debug')('webtorrent:webconn')
 var get = require('simple-get')
 var inherits = require('inherits')
-var sha1 = require('simple-sha1')
+var Rusha = require('rusha')
+
 var Wire = require('bittorrent-protocol')
 
 var VERSION = require('../package.json').version
@@ -21,7 +22,7 @@ function WebConn (url, torrent) {
   Wire.call(this)
 
   this.url = url
-  this.webPeerId = sha1.sync(url)
+  this.webPeerId = Rusha.createHash().update(url).digest('hex')
   this._torrent = torrent
 
   this._init()

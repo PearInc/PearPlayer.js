@@ -25,7 +25,8 @@ var path = require('path')
 var Piece = require('torrent-piece')
 var pump = require('pump')
 var randomIterate = require('random-iterate')
-var sha1 = require('simple-sha1')
+var Rusha = require('rusha')
+
 var speedometer = require('speedometer')
 var uniq = require('uniq')
 var utMetadata = require('ut_metadata')
@@ -593,18 +594,19 @@ Torrent.prototype._verifyPieces = function () {
         if (self.destroyed) return cb(new Error('torrent is destroyed'))
 
         if (err) return process.nextTick(cb, null) // ignore error
-        sha1(buf, function (hash) {
-          if (self.destroyed) return cb(new Error('torrent is destroyed'))
 
-          if (hash === self._hashes[index]) {
-            if (!self.pieces[index]) return
-            self._debug('piece verified %s', index)
-            self._markVerified(index)
-          } else {
-            self._debug('piece invalid %s', index)
-          }
-          cb(null)
-        })
+        var hexHash = Rusha.createHash().update(buf).digest('hex'); 
+        if (self.destroyed) return cb(new Error('torrent is destroyed'))
+
+        if (hexHash === self._hashes[index]) {
+          if (!self.pieces[index]) return
+          self._debug('piece verified %s', index)
+          self._markVerified(index)
+        } else {
+          self._debug('piece invalid %s', index)
+        }
+        cb(null)
+
       })
     }
   }), FILESYSTEM_CONCURRENCY, function (err) {
@@ -1531,36 +1533,34 @@ Torrent.prototype._request = function (wire, index, hotswap) {
 
     var buf = piece.flush()
 
-    // TODO: might need to set self.pieces[index] = null here since sha1 is async
+    var hexHash = Rusha.createHash().update(buf).digest('hex');
+    if (self.destroyed) return
 
-    sha1(buf, function (hash) {
-      if (self.destroyed) return
+    if (hexHash === self._hashes[index]) {
+      if (!self.pieces[index]) return
+      self._debug('piece verified %s', index)
 
-      if (hash === self._hashes[index]) {
-        if (!self.pieces[index]) return
-        self._debug('piece verified %s', index)
-
-        self.pieces[index] = null
-        self._reservations[index] = null
-        if (!self.bitfield.get(index)) {                      //pear modified
-            self.emit('piecefromtorrent', index);
-        }
-        self.bitfield.set(index, true)
-        self.store.put(index, buf)
-        // console.log('self.store.put:'+index);
-        self.wires.forEach(function (wire) {
-          wire.have(index)
-        })
-
-        // We also check `self.destroyed` since `torrent.destroy()` could have been
-        // called in the `torrent.on('done')` handler, triggered by `_checkDone()`.
-        if (self._checkDone() && !self.destroyed) self.discovery.complete()
-      } else {
-        self.pieces[index] = new Piece(piece.length)
-        self.emit('warning', new Error('Piece ' + index + ' failed verification'))
+      self.pieces[index] = null
+      self._reservations[index] = null
+      if (!self.bitfield.get(index)) {                      //pear modified
+          self.emit('piecefromtorrent', index);
       }
-      onUpdateTick()
-    })
+      self.bitfield.set(index, true)
+      self.store.put(index, buf)
+      // console.log('self.store.put:'+index);
+      self.wires.forEach(function (wire) {
+        wire.have(index)
+      })
+
+      // We also check `self.destroyed` since `torrent.destroy()` could have been
+      // called in the `torrent.on('done')` handler, triggered by `_checkDone()`.
+      if (self._checkDone() && !self.destroyed) self.discovery.complete()
+    } else {
+      self.pieces[index] = new Piece(piece.length)
+      self.emit('warning', new Error('Piece ' + index + ' failed verification'))
+    }
+    onUpdateTick()
+
   })
 
   function onUpdateTick () {
